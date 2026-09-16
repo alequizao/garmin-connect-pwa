@@ -22,6 +22,10 @@ Visual inspirado no app oficial (tela "Meu dia"), com layout de celular e de com
 |:---:|:---:|:---:|
 | <img src="docs/telas/relatorios.png" width="260"> | <img src="docs/telas/mapa.png" width="260"> | <img src="docs/telas/walkie.png" width="260"> |
 
+| ME MIMEI | | |
+|:---:|:---:|:---:|
+| <img src="docs/telas/mimei.png" width="260"> | | |
+
 <details>
 <summary><b>Mais telas (celular e computador)</b></summary>
 
@@ -65,6 +69,9 @@ Forma × fadiga (modelo de Banister), **risco de lesão (ACWR)**, eficiência ae
 - Chat no site com **microfone** (a fala do celular vira texto) e **notificações Web Push** — o Garmin Connect espelha a notificação do celular no relógio.
 - Chave de integração por canal para outros sistemas publicarem avisos (ex.: lembretes).
 
+### 🍺 ME MIMEI
+Inspirado no CheersCore: mostra no relógio **quantos lanches cabem nas calorias ativas do dia** (coxinha, pastel, acarajé, tapioca, cuscuz, cerveja long neck…), cada um com **ícone 3D**. A lista é editada no site (inserir, editar, reordenar, apagar) e o relógio atualiza sozinho. Busca de calorias estilo YAZIO na **tabela TACO**, numa base de lanches populares e no **Open Food Facts**; ícones em estilo Fluent Emoji 3D (MIT) e gerados por IA para pratos regionais.
+
 ### Apps do relógio gerados sob medida
 Na aba **Apps**, cada pessoa digita o nome do dispositivo e o modelo do relógio (lista com 159 modelos Garmin), e o servidor **compila o `.prg` com a chave dela embutida** em cerca de 30 s.
 
@@ -91,6 +98,7 @@ Login com limite de tentativas, sessão renovada no login, **"Esqueci minha senh
 │   └── conf_garmin.py, systemd/, cron/, requirements.txt, package.json
 ├── relogio-connectiq/                                   # fonte do app Rastreador (Monkey C)
 ├── walkie-connectiq/                                    # fonte do app Walkie-Talkie (Monkey C)
+├── mimei-connectiq/                                     # fonte do app ME MIMEI (Monkey C)
 │   (servicos/strava_upload.py envia os treinos ao Strava)
 └── docs/                                                # schema.sql, exemplo do .ini, instalação, telas
 ```

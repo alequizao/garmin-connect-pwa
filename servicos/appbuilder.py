@@ -9,6 +9,8 @@ SAIDA = conf.get('compilador', 'saida', '/www/wwwroot/alequizao.com/garmin/app/b
 SDK_MANAGER = conf.get('compilador', 'sdk_manager', '/opt/ciq/connect-iq-sdk-manager')
 CHAVE = conf.get('compilador', 'chave', '/opt/ciq/dev.der')
 FONTE_WALKIE = conf.get('compilador', 'fonte_walkie', '/opt/ciq/walkie')
+FONTE_MIMEI = conf.get('compilador', 'fonte_mimei', '/opt/ciq/mimei')
+URL_MIMEI = conf.get('app', 'url_mimei', 'https://alequizao.com/garmin/mimei.php')
 URL_WALKIE = conf.get('app', 'url_walkie', 'https://alequizao.com/garmin/walkie.php')
 TRACCAR = conf.get('traccar', 'api', 'http://127.0.0.1:8082/api')
 AUTH = (conf.get('traccar', 'usuario'), conf.get('traccar', 'senha'))
@@ -27,15 +29,15 @@ def traccar_device(nome, unico):
 
 def compilar(p):
     tmp = f'/tmp/ciq-build-{p["id"]}'
-    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree(FONTE_WALKIE if p.get('tipo') == 'walkie' else FONTE, tmp)
+    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree({'walkie': FONTE_WALKIE, 'mimei': FONTE_MIMEI}.get(p.get('tipo'), FONTE), tmp)
     modelo = p['modelo'] or 'fr165'
     if not os.path.isfile(f'/root/.Garmin/ConnectIQ/Devices/{modelo}/compiler.json'): raise Exception(f'Modelo {modelo} não encontrado')
     mf = f'{tmp}/manifest.xml'; m = open(mf).read()
     m = re.sub(r'<iq:products>.*?</iq:products>', f'<iq:products><iq:product id="{modelo}"/></iq:products>', m, flags=re.S)
     m = re.sub(r'minApiLevel="[0-9.]+"', 'minApiLevel="2.4.0"', m); open(mf, 'w').write(m)
-    mc = f'{tmp}/source/' + ('RadioApp.mc' if p.get('tipo') == 'walkie' else 'RastreadorApp.mc'); s = open(mc).read()
+    mc = f'{tmp}/source/' + {'walkie': 'RadioApp.mc', 'mimei': 'MeMimeiApp.mc'}.get(p.get('tipo'), 'RastreadorApp.mc'); s = open(mc).read()
     s = re.sub(r'const TOKEN = "[^"]*";', f'const TOKEN = "{p["token"]}";', s)
-    s = re.sub(r'const URL = "[^"]*";', 'const URL = "' + (URL_WALKIE if p.get('tipo') == 'walkie' else conf.get('app', 'url_relogio', 'https://alequizao.com/garmin/relogio.php')) + '";', s); open(mc, 'w').write(s)
+    s = re.sub(r'const URL = "[^"]*";', 'const URL = "' + {'walkie': URL_WALKIE, 'mimei': URL_MIMEI}.get(p.get('tipo'), conf.get('app', 'url_relogio', 'https://alequizao.com/garmin/relogio.php')) + '";', s); open(mc, 'w').write(s)
     os.makedirs(SAIDA, exist_ok=True)
     out = f'{SAIDA}/{p["token"]}.prg'
     r = subprocess.run(['java', '-Xms512m', '-Dfile.encoding=UTF-8', '-jar', f'{sdk()}/bin/monkeybrains.jar', '-o', out, '-f', f'{tmp}/monkey.jungle', '-y', CHAVE, '-d', modelo],
@@ -54,7 +56,7 @@ def main():
             if not p: time.sleep(3); continue
             cur.execute("UPDATE relogio_apps SET status='compilando', erro=NULL WHERE id=%s", (p['id'],))
             try:
-                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') != 'walkie' else (None, False)
+                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') not in ('walkie', 'mimei') else (None, False)
                 compilar(p)
                 cur.execute("UPDATE relogio_apps SET status='pronto', traccar_id=%s, pronto_em=NOW() WHERE id=%s", (did, p['id']))
                 log.info(f"app {p['id']} ({p['device']}) pronto; traccar {did} {'criado' if novo else 'existente'}")

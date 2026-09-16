@@ -494,6 +494,103 @@ case 'walkie_app': {
   out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
 }
 
+case 'mimei_estado': {
+  exigeLogin(); require_once __DIR__ . '/lib_mimei.php'; mimeiSemear(uid());
+  $st = db()->prepare("SELECT id, nome, qtd, kcal, origem, DATE_FORMAT(criado, '%H:%i') hora FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC"); $st->execute([uid()]);
+  $apps = db()->prepare("SELECT id, nome, modelo, status, erro, visto FROM relogio_apps WHERE usuario_id=? AND tipo='mimei' ORDER BY id DESC"); $apps->execute([uid()]);
+  out(['ok' => true, 'resumo' => mimeiResumo(uid()), 'lanches' => mimeiLanches(uid()), 'consumo' => $st->fetchAll(), 'apps' => $apps->fetchAll(), 'biblioteca' => mimeiBiblioteca()]);
+}
+case 'mimei_buscar': {
+  // busca de calorias estilo YAZIO: TACO (tabela brasileira, por 100 g) + Open Food Facts (produtos de marca)
+  exigeLogin();
+  $q = trim(mb_substr((string)($_GET['q'] ?? ''), 0, 60)); if (mb_strlen($q) < 2) out(['ok' => true, 'itens' => []]);
+  $norm = fn($s) => preg_replace('/[^a-z0-9 ]/', '', strtolower(iconv('UTF-8', 'ASCII//TRANSLIT', $s)));
+  $termos = array_filter(explode(' ', $norm($q)));
+  $itens = [];
+  foreach (json_decode((string)@file_get_contents(__DIR__ . '/dados/taco.json'), true) ?: [] as $t) {
+    $n = $norm($t['n']); $ok = true; foreach ($termos as $te) if (!str_contains($n, $te)) { $ok = false; break; }
+    if ($ok) $itens[] = ['nome' => $t['n'], 'fonte' => 'TACO', 'kcal100' => (float)$t['k'], 'porcao_g' => null, 'porcao' => null, 'marca' => null, 'img' => null, 'rel' => str_starts_with($n, $termos[array_key_first($termos)] ?? '') ? 0 : 1];
+  }
+  foreach (json_decode((string)@file_get_contents(__DIR__ . '/dados/populares.json'), true) ?: [] as $t) {
+    $n = $norm($t['n']); $ok = true; foreach ($termos as $te) if (!str_contains($n, $te)) { $ok = false; break; }
+    if ($ok) $itens[] = ['nome' => $t['n'], 'fonte' => 'Populares', 'kcal100' => (float)$t['k'], 'porcao_g' => (float)$t['pg'], 'porcao' => $t['p'], 'marca' => null, 'img' => null, 'rel' => -1];
+  }
+  usort($itens, fn($a, $b) => [$a['rel'], mb_strlen($a['nome'])] <=> [$b['rel'], mb_strlen($b['nome'])]);
+  $itens = array_slice($itens, 0, 12);
+  $cache = sys_get_temp_dir() . '/garmin-off-' . md5($norm($q)) . '.json';
+  $off = is_file($cache) && filemtime($cache) > time() - 86400 ? @file_get_contents($cache) : false;
+  if ($off === false) {
+    $url = 'https://world.openfoodfacts.org/cgi/search.pl?' . http_build_query(['search_terms' => $q, 'search_simple' => 1, 'json' => 1, 'page_size' => 15, 'fields' => 'product_name,brands,nutriments,serving_size,serving_quantity,image_front_small_url', 'sort_by' => 'unique_scans_n']);
+    for ($tentativa = 0; $tentativa < 2; $tentativa++) {
+      $off = @file_get_contents($url, false, stream_context_create(['http' => ['timeout' => 8, 'header' => "User-Agent: GarminConnectAlequizao/2.3 (alequizao.dev@gmail.com)\r\n"]]));
+      if ($off !== false && isset(json_decode($off, true)['products'])) { @file_put_contents($cache, $off); break; }
+      $off = false; usleep(400000);
+    }
+  }
+  foreach ((json_decode((string)$off, true)['products'] ?? []) as $p) {
+    $k = $p['nutriments']['energy-kcal_100g'] ?? null; if (!$k || empty($p['product_name'])) continue;
+    $itens[] = ['nome' => trim($p['product_name']), 'fonte' => 'Open Food Facts', 'kcal100' => round((float)$k, 1), 'porcao_g' => isset($p['serving_quantity']) && is_numeric($p['serving_quantity']) ? (float)$p['serving_quantity'] : null,
+      'porcao' => $p['serving_size'] ?? null, 'marca' => $p['brands'] ?? null, 'img' => $p['image_front_small_url'] ?? null];
+  }
+  out(['ok' => true, 'itens' => array_slice($itens, 0, 25)]);
+}
+
+case 'mimei_salvar': {
+  exigeLogin(); require_once __DIR__ . '/lib_mimei.php';
+  $nome = trim(mb_substr(strip_tags((string)($in['nome'] ?? '')), 0, 40)); $kcal = (int)($in['kcal'] ?? 0);
+  if (mb_strlen($nome) < 2) erro('Dê um nome ao lanche'); if ($kcal < 1 || $kcal > 5000) erro('Informe as calorias (1 a 5000)');
+  $porcao = trim(mb_substr(strip_tags((string)($in['porcao'] ?? '')), 0, 40)) ?: null;
+  $emoji = trim(mb_substr((string)($in['emoji'] ?? ''), 0, 8)) ?: null;
+  $id = (int)($in['id'] ?? 0);
+  if ($id) {
+    $st = db()->prepare("SELECT emoji FROM mimei_lanches WHERE id=? AND usuario_id=?"); $st->execute([$id, uid()]); $atual = $st->fetch() ?: erro('Lanche não encontrado', 404);
+    db()->prepare("UPDATE mimei_lanches SET nome=?, porcao=?, kcal=?, emoji=? WHERE id=? AND usuario_id=?")->execute([$nome, $porcao, $kcal, $emoji, $id, uid()]);
+    $emojiMudou = $emoji && $emoji !== $atual['emoji'];
+  } else {
+    $st = db()->prepare("SELECT COALESCE(MAX(ordem),0)+1 FROM mimei_lanches WHERE usuario_id=?"); $st->execute([uid()]);
+    db()->prepare("INSERT INTO mimei_lanches (usuario_id, nome, porcao, kcal, emoji, ordem) VALUES (?,?,?,?,?,?)")->execute([uid(), $nome, $porcao, $kcal, $emoji, (int)$st->fetchColumn()]);
+    $id = (int)db()->lastInsertId(); $emojiMudou = (bool)$emoji;
+  }
+  // ícone: imagem enviada > ícone da biblioteca > emoji
+  if (!empty($in['biblioteca']) && empty($in['imagem'])) {
+    if (!mimeiIconeBiblioteca(uid(), $id, (string)$in['biblioteca'])) erro('Ícone da biblioteca não encontrado');
+    db()->prepare("UPDATE mimei_lanches SET emoji=NULL WHERE id=?")->execute([$id]);
+  } elseif (!empty($in['imagem']) && preg_match('~^data:image/(png|jpe?g|webp|gif);base64,~', $in['imagem'])) {
+    $bin = base64_decode(substr($in['imagem'], strpos($in['imagem'], ',') + 1));
+    if (strlen($bin) > 3 * 1024 * 1024) erro('Imagem muito grande (máx. 3 MB)');
+    if (!mimeiSalvarPng(uid(), $id, $bin)) erro('Não consegui ler a imagem');
+  } elseif ($emojiMudou) {
+    if (!mimeiIconeEmoji(uid(), $id, $emoji)) erro('Salvo, mas não achei ícone para esse emoji — envie uma imagem');
+  }
+  out(['ok' => true, 'id' => $id]);
+}
+case 'mimei_excluir': {
+  exigeLogin(); require_once __DIR__ . '/lib_mimei.php'; $id = (int)($in['id'] ?? 0);
+  foreach (glob(mimeiPasta(uid()) . "/$id-*.png") ?: [] as $f) @unlink($f);
+  db()->prepare("DELETE FROM mimei_lanches WHERE id=? AND usuario_id=?")->execute([$id, uid()]); out(['ok' => true]);
+}
+case 'mimei_ordem': {
+  exigeLogin(); $st = db()->prepare("UPDATE mimei_lanches SET ordem=? WHERE id=? AND usuario_id=?");
+  foreach (array_values((array)($in['ids'] ?? [])) as $i => $id) $st->execute([$i, (int)$id, uid()]);
+  out(['ok' => true]);
+}
+case 'mimei_comi': {
+  exigeLogin(); $st = db()->prepare("SELECT id, nome, kcal FROM mimei_lanches WHERE id=? AND usuario_id=?"); $st->execute([(int)($in['id'] ?? 0), uid()]);
+  $l = $st->fetch() ?: erro('Lanche não encontrado', 404); $q = in_array((float)($in['qtd'] ?? 1), [0.5, 1.0, 2.0], true) ? (float)$in['qtd'] : 1.0;
+  db()->prepare("INSERT INTO mimei_consumo (usuario_id, lanche_id, nome, qtd, kcal, origem, data) VALUES (?,?,?,?,?, 'site', CURDATE())")->execute([uid(), $l['id'], $l['nome'], $q, (int)round($l['kcal'] * $q)]);
+  out(['ok' => true]);
+}
+case 'mimei_consumo_excluir': {
+  exigeLogin(); db()->prepare("DELETE FROM mimei_consumo WHERE id=? AND usuario_id=?")->execute([(int)($in['id'] ?? 0), uid()]); out(['ok' => true]);
+}
+case 'mimei_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Me Mimei', NULL, ?, ?, 'pendente', 'mimei')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+
 case 'apps_listar': {
   exigeLogin(); relogioAppsTabela();
   $st = db()->prepare("SELECT a.id, a.nome, a.device, a.modelo, a.status, a.erro, a.criado, a.pronto_em, a.tipo, (SELECT nome FROM walkie_canais c WHERE c.id=a.canal_id) canal, (SELECT MAX(recebido) FROM relogio_leituras r WHERE r.app_id=a.id) ultimo, (SELECT COUNT(*) FROM relogio_leituras r WHERE r.app_id=a.id) envios FROM relogio_apps a WHERE a.usuario_id=? ORDER BY a.id DESC");
@@ -531,7 +628,7 @@ case 'app_baixar': {
   $r = $st->fetch() ?: erro('App ainda não está pronto', 404);
   $arq = __DIR__ . '/app/builds/' . $r['token'] . '.prg'; if (!is_file($arq)) erro('Arquivo não encontrado', 404);
   header('Content-Type: application/octet-stream'); header('Content-Length: ' . filesize($arq));
-  header('Content-Disposition: attachment; filename="' . ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome'])) . '.prg"');
+  header('Content-Disposition: attachment; filename="' . ($r['tipo'] === 'mimei' ? 'MeMimei' : ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome']))) . '.prg"');
   readfile($arq); exit;
 }
 

@@ -57,7 +57,9 @@ function iniciarApp() {
   store.set('usuario', S.usuario); store.set('metas', S.metas);
   const q = new URLSearchParams(location.search);
   if (Gravador.retomar()) return;
-  navegar(q.get('tela') || 'inicio', q.get('arg') || undefined);
+  const rota = rotaAtual();
+  if (q.get('tela')) { history.replaceState(null, '', location.pathname + (q.get('acao') ? '?acao=' + q.get('acao') : '')); navegar(q.get('tela'), q.get('arg') || undefined, { substituir: true }); }
+  else navegar(rota ? rota.tela : 'inicio', rota ? rota.arg : undefined, { substituir: true });
   if (q.get('acao') === 'agua') setTimeout(() => modalAgua(), 300);
   Podometro.iniciar();
   sincronizarPendentes();
@@ -99,11 +101,27 @@ function renderLogin(registro = false) {
 }
 
 /* ---------- navegação ---------- */
-function navegar(tela, arg) {
-  S.tela = tela; window.scrollTo(0, 0);
-  const r = { inicio: renderInicio, atividades: renderAtividades, gravar: renderGravar, saude: renderSaude, perfil: renderPerfil, atividade: renderAtividadeDetalhe, estatisticas: renderEstatisticas, treinos: renderTreinos, metrica: renderMetricaHistorico, mapa: renderMapa, app: renderApp, dispositivo: renderDispositivo, relatorios: renderRelatorios }[tela];
-  r && r(arg);
+/* ---------- rotas web: cada tela tem endereço próprio (#/tela/arg) — refresh e "voltar" mantêm o lugar ---------- */
+const TITULOS = { inicio: 'Meu dia', atividades: 'Atividades', atividade: 'Atividade', mapa: 'Mapa', gravar: 'Gravar', saude: 'Saúde', app: 'Apps', mais: 'Mais', perfil: 'Perfil',
+  estatisticas: 'Desempenho', relatorios: 'Relatórios', treinos: 'Treinos', metrica: 'Histórico', dispositivo: 'Relógio' };
+const TELAS = () => ({ inicio: renderInicio, atividades: renderAtividades, gravar: renderGravar, saude: renderSaude, perfil: renderPerfil, atividade: renderAtividadeDetalhe, estatisticas: renderEstatisticas,
+  treinos: renderTreinos, metrica: renderMetricaHistorico, mapa: renderMapa, app: renderApp, dispositivo: renderDispositivo, relatorios: renderRelatorios, mais: renderMais });
+function rotaAtual() {
+  const m = location.hash.match(/^#\/([a-z_]+)(?:\/([^?#]*))?/);
+  return m && TELAS()[m[1]] ? { tela: m[1], arg: m[2] ? decodeURIComponent(m[2]) : undefined } : null;
 }
+function navegar(tela, arg, opcoes = {}) {
+  if (!TELAS()[tela]) tela = 'inicio';
+  if (arg === '' || arg === null) arg = undefined;
+  S.tela = tela; S.arg = arg;
+  const hash = '#/' + tela + (arg !== undefined ? '/' + encodeURIComponent(arg) : '');
+  if (!opcoes.historico && location.hash !== hash) history[opcoes.substituir ? 'replaceState' : 'pushState']({ tela, arg }, '', location.pathname + hash);
+  document.title = (TITULOS[tela] || 'Garmin Connect') + ' · Garmin Connect';
+  if (!opcoes.manterRolagem) window.scrollTo(0, 0);
+  clearTimeout(typeof WK !== 'undefined' ? WK.timer : 0);
+  TELAS()[tela](arg);
+}
+window.addEventListener('popstate', () => { if (!S.usuario || $('#fLogin') || Gravador.a) return; const r = rotaAtual() || { tela: 'inicio' }; fecharModal(); navegar(r.tela, r.arg, { historico: true }); });
 document.addEventListener('click', e => { const b = e.target.closest('[data-tela]'); if (b) navegar(b.dataset.tela, b.dataset.arg); });
 
 /* ---------- ÍCONES (linha, estilo Garmin Connect) ---------- */
@@ -130,6 +148,8 @@ const ICO = {
   calorias: svg('<path d="M12 21c4 0 6.5-2.8 6.5-6.4 0-4.4-4.2-6.2-4.6-10.6-2.6 1.6-4 4.2-3.7 7-1.2-.7-2-1.9-2.2-3.3C6.4 9.3 5.5 11.4 5.5 14.6 5.5 18.2 8 21 12 21z"/>'),
   semana: svg('<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/>'),
   medalha: svg('<circle cx="12" cy="14.5" r="5.5"/><path d="M8.5 10.2L6 3.5h4l2 5 2-5h4l-2.5 6.7"/>'),
+  mais: svg('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
+  perfilUser: svg('<circle cx="12" cy="8.5" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
   relogio: svg('<rect x="7" y="2.5" width="10" height="4" rx="1"/><rect x="7" y="17.5" width="10" height="4" rx="1"/><circle cx="12" cy="12" r="6"/><path d="M12 9.5V12l1.8 1.2"/>'),
 };
 
@@ -202,8 +222,13 @@ async function renderInicio(silencioso) {
 }
 
 function tabbar(ativa) {
-  const t = [['inicio', 'Meu dia'], ['atividades', 'Atividades'], ['mapa', 'Mapa'], ['gravar', 'Gravar'], ['saude', 'Saúde'], ['app', 'Apps'], ['perfil', 'Mais']];
-  return `<nav class="tabbar">${t.map(([k, n]) => `<button class="${k === ativa ? 'ativo' : ''} ${k === 'gravar' ? 'gravar' : ''}" data-tela="${k}"><span class="i">${ICO[k] || ICO.app}</span><span class="n">${n}</span></button>`).join('')}</nav>`;
+  const grupo = { relatorios: 'mais', estatisticas: 'mais', treinos: 'mais', perfil: 'mais', dispositivo: 'mais', metrica: 'saude', atividade: 'atividades' };
+  const marcada = grupo[S.tela] || ativa;
+  const t = [['inicio', 'Meu dia'], ['atividades', 'Atividades'], ['mapa', 'Mapa'], ['gravar', 'Gravar'], ['saude', 'Saúde'], ['app', 'Apps'], ['mais', 'Mais']];
+  // no computador a barra lateral também mostra os atalhos do menu Mais
+  const extras = [['relatorios', 'Relatórios', ICO.relatorios], ['estatisticas', 'Desempenho', ICO.barras], ['treinos', 'Treinos', ICO.semana], ['dispositivo', 'Relógio', ICO.relogio], ['perfil', 'Perfil', ICO.perfilUser]];
+  return `<nav class="tabbar">${t.map(([k, n]) => `<button class="${k === marcada ? 'ativo' : ''} ${k === 'gravar' ? 'gravar' : ''} ${k === 'mais' ? 'so-celular' : ''}" data-tela="${k}"><span class="i">${ICO[k] || ICO.app}</span><span class="n">${n}</span></button>`).join('')}
+    <div class="so-desktop lateral-sep">Mais</div>${extras.map(([k, n, ic]) => `<button class="so-desktop ${S.tela === k ? 'ativo' : ''}" data-tela="${k}"><span class="i">${ic}</span><span class="n">${n}</span></button>`).join('')}</nav>`;
 }
 
 function cardRelogio(r, seg) {
@@ -787,6 +812,7 @@ let appTimer = null;
 async function renderApp(arg) {
   clearTimeout(appTimer); clearTimeout(WK.timer);
   if (arg === 'walkie') return renderWalkie();
+  if (arg === 'mimei') return renderMimei();
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}
   <div class="card"><h3>📍 Rastreador — gerar app com dispositivo próprio</h3>
    <div class="mini" style="margin-bottom:10px">Cada pessoa gera o seu app. Ele já sai configurado para enviar bateria, GPS, frequência cardíaca, passos, Body Battery e estresse para o dispositivo escolhido no Traccar.</div>
@@ -863,7 +889,7 @@ async function renderDispositivo() {
 }
 
 /* ---------- APPS › WALKIE-TALKIE ALEQUIZÃO ---------- */
-const segApps = ativo => `<div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button></div>`;
+const segApps = ativo => `<div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button></div>`;
 const WK = { canal: null, ultimo: 0, timer: null, canais: [] };
 async function renderWalkie() {
   clearTimeout(WK.timer);
@@ -992,4 +1018,103 @@ async function pushDiagnostico() {
   else if (perm === 'denied') st.innerHTML = '❌ Notificações bloqueadas. ' + (ios ? 'Ajustes → Notificações → Connect → Permitir.' : 'Libere nas configurações do navegador para este site.');
   else st.innerHTML = '🔕 Ainda não ativado neste aparelho.';
   guia.innerHTML = `<ol class="passos">${celular ? '' : '<li><b>Faça isto no celular</b> (o relógio só repassa notificações do celular).</li>'}<li>Toque em <b>🔔 Ativar neste aparelho</b> e permita.</li>${passoGarmin}<li>Toque em <b>Enviar teste</b>.</li></ol>`;
+}
+
+/* ---------- APPS › ME MIMEI (lanches que cabem nas calorias do dia) ---------- */
+const EMOJIS_MIMEI = ['🍗', '🥟', '🍰', '🥧', '🥔', '🧀', '🔺', '🧆', '🫓', '🍺', '🍕', '🍔', '🌭', '🍟', '🍩', '🍪', '🍫', '🍬', '🍦', '🍨', '🍧', '🍇', '🍌', '🥤', '🧋', '☕', '🍷', '🥃', '🍹', '🍿', '🥐', '🥖', '🧁', '🍮', '🍭', '🌮', '🌯', '🥪', '🍝', '🍣', '🍤', '🥗', '🍳', '🥞', '🧇', '🥓', '🍖', '🥩', '🍜', '🍛', '🥜', '🍓', '🍉', '🍍', '🥭', '🥥'];
+async function renderMimei() {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('mimei')}<div id="mm"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('app')}</div>`;
+  const j = await apiGet('mimei_estado').catch(() => null); if (!j || !j.ok) { $('#mm').innerHTML = '<div class="vazio">Sem conexão</div>'; return; }
+  window.MIMEI_BIB = j.biblioteca || [];
+  const r = j.resumo, fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  $('#mm').innerHTML = `
+  <section class="w w-mimei"><header class="w-top"><span class="w-ico">🍺</span><span class="w-tit">ME MIMEI — hoje</span></header>
+   <div class="w-corpo"><div class="lado"><div><div class="num">${fmt(r.saldo)}<span class="suf">KCAL LIVRES</span></div><div class="mini">queimadas ${r.queimado} kcal · comidas ${r.comido} kcal</div></div></div>
+   <div class="mimei-grade">${j.lanches.map(l => `<div class="mimei-card"><img src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><b>${fmt(r.saldo / l.kcal)}</b><span>${esc(l.nome)}</span><small>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</small><button class="btn sec peq" data-comi="${l.id}">Comi 1</button></div>`).join('')}</div></div></section>
+  ${j.consumo.length ? widget({ ico: '🧾', cor: '#f5c23b', titulo: 'Comidos hoje', corpo: `<div class="lista">${j.consumo.map(c => `<div class="item"><div class="info"><b>${fmt(+c.qtd)}× ${esc(c.nome)}</b><span>${c.hora} · ${c.origem === 'relogio' ? '⌚ relógio' : '📱 site'}</span></div><div class="dir"><b>${c.kcal} kcal</b></div><button class="ico-btn" data-desfaz="${c.id}" title="Desfazer">↺</button></div>`).join('')}</div>` }) : ''}
+  ${widget({ ico: '✏️', cor: '#f0506e', titulo: 'Meus lanches', corpo: `<div class="mini" style="margin-bottom:8px">Tudo o que mudar aqui aparece no relógio na próxima vez que o app abrir (ou em até 1 minuto com ele aberto).</div>
+    <div class="lista" id="mmLista">${j.lanches.map((l, i) => `<div class="item mimei-item"><img class="mimei-ic" src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(l.nome)}</b><span>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</span></div><button class="ico-btn" data-sobe="${i}" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="ico-btn" data-edita="${l.id}" title="Editar">✎</button><button class="ico-btn" data-apaga="${l.id}" title="Apagar">🗑</button></div>`).join('')}</div>
+    <button class="btn" id="mmNovo" style="margin-top:12px">+ Novo lanche</button>` })}
+  ${widget({ ico: '⌚', cor: '#1fa3e3', titulo: 'Instalar no relógio', corpo: `<div class="mini" style="margin-bottom:10px">O app mostra quantos de cada lanche cabem nas suas calorias ativas do dia, com o ícone de cada um. Toque em START no relógio para registrar o que comeu.</div>
+    <form id="mmApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="mmModelo" list="mmModelos" value="Forerunner® 165 (fr165)" required autocomplete="off"><datalist id="mmModelos"></datalist></div><button class="btn" id="mmAppBt">⬇ Gerar e baixar ME MIMEI</button></form><div id="mmProg" class="mini" style="margin-top:10px"></div>
+    ${j.apps.length ? `<div class="lista" style="margin-top:10px">${j.apps.map(a => `<div class="item"><div class="ic">🍺</div><div class="info"><b>ME MIMEI · ${esc(a.modelo)}</b><span>${a.status === 'pronto' ? (a.visto ? 'último uso ' + fmtData(a.visto) : 'ainda não abriu no relógio') : a.status}</span></div>${a.status === 'pronto' ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : ''}<button class="ico-btn" data-rmapp="${a.id}">🗑</button></div>`).join('')}</div>` : ''}` })}`;
+
+  const lista = j.lanches;
+  document.querySelectorAll('[data-comi]').forEach(b => b.onclick = async () => { await api('mimei_comi', { id: +b.dataset.comi, qtd: 1 }); toast('Registrado 😋'); renderMimei(); });
+  document.querySelectorAll('[data-desfaz]').forEach(b => b.onclick = async () => { await api('mimei_consumo_excluir', { id: +b.dataset.desfaz }); renderMimei(); });
+  document.querySelectorAll('[data-apaga]').forEach(b => b.onclick = async () => { const l = lista.find(x => x.id == b.dataset.apaga); if (confirm(`Apagar "${l.nome}"?`)) { await api('mimei_excluir', { id: l.id }); renderMimei(); } });
+  document.querySelectorAll('[data-sobe]').forEach(b => b.onclick = async () => { const ids = lista.map(l => l.id), i = +b.dataset.sobe; [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; await api('mimei_ordem', { ids }); renderMimei(); });
+  document.querySelectorAll('[data-rmapp]').forEach(b => b.onclick = async () => { if (confirm('Excluir este app? O relógio com ele instalado para de atualizar.')) { await api('app_excluir', { id: +b.dataset.rmapp }); renderMimei(); } });
+  document.querySelectorAll('[data-edita]').forEach(b => b.onclick = () => editarLanche(lista.find(x => x.id == b.dataset.edita)));
+  $('#mmNovo').onclick = () => editarLanche(null);
+  // gerar app
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#mmModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)) || ((l) => l.length === 1 ? l[0] : null)(modelos.filter(m => n(m.nome).startsWith(q))); };
+  $('#mmApp').onsubmit = async e => {
+    e.preventDefault(); const m = achar($('#mmModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    $('#mmAppBt').disabled = true; $('#mmProg').textContent = '⚙️ Compilando o ME MIMEI (cerca de 30 s)…';
+    try {
+      const a = await api('mimei_app', { modelo: m.id });
+      const esperar = async (n = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#mmProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS no relógio. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; $('#mmAppBt').disabled = false; return; }
+        if (s.status === 'erro' || n > 90) { $('#mmProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); $('#mmAppBt').disabled = false; return; }
+        setTimeout(() => esperar(n + 1), 2000); };
+      esperar();
+    } catch (x) { $('#mmProg').textContent = '❌ ' + x.message; $('#mmAppBt').disabled = false; }
+  };
+}
+function editarLanche(l) {
+  let imagem = null, emoji = l?.emoji || '', bib = null;
+  modal(`<h2>${l ? 'Editar lanche' : 'Novo lanche'}</h2><form id="fLanche">
+    <div class="mimei-prev" ${l?.icone ? '' : 'style="height:0;margin:0"'} id="lcPrevBox"><img id="lcPrev" src="${esc(l?.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><span id="lcEmojiAtual">${esc(emoji)}</span></div>
+    <div class="campo"><label>🔎 Buscar calorias (tabela TACO + Open Food Facts)</label><input id="lcBusca" autocomplete="off" placeholder="Ex.: coxinha, pastel de queijo, doritos"><div id="lcResultados" class="busca-res"></div></div>
+    <div class="campo"><label>Nome</label><input name="nome" maxlength="40" required value="${esc(l?.nome || '')}" placeholder="Ex.: Coxinha"></div>
+    <div class="linha"><div class="campo"><label>Gramas da porção</label><input id="lcGramas" type="number" min="1" max="3000" placeholder="opcional"></div><div class="campo"><label>Calorias (kcal)</label><input name="kcal" type="number" min="1" max="5000" required value="${l?.kcal || ''}"></div></div>
+    <div class="campo"><label>Porção (texto)</label><input name="porcao" maxlength="40" value="${esc(l?.porcao || '')}" placeholder="1 unidade"></div>
+    <div class="mini" id="lcBase" style="margin:-6px 0 12px"></div>
+    <div class="campo"><label>Ícone 3D da biblioteca…</label><div class="emojis bib" id="lcBib">${(window.MIMEI_BIB || []).map(b => `<button type="button" data-bib="${b}" title="${b.replace(/_/g, ' ')}"><img src="app/mimei/biblioteca/${b}.png" alt=""></button>`).join('')}</div></div>
+    <div class="campo"><label>…ou um emoji…</label><div class="emojis">${EMOJIS_MIMEI.map(e => `<button type="button" class="${e === emoji ? 'on' : ''}" data-emoji="${e}">${e}</button>`).join('')}</div></div>
+    <div class="campo"><label>…ou envie uma imagem (PNG/JPG, fundo transparente fica melhor)</label><input type="file" id="lcImg" accept="image/*"></div>
+    <button class="btn" id="lcOk">Salvar</button></form>`, () => {
+    document.querySelectorAll('[data-bib]').forEach(b => b.onclick = () => { bib = b.dataset.bib; emoji = ''; imagem = null; $('#lcImg').value = ''; document.querySelectorAll('[data-bib],[data-emoji]').forEach(x => x.classList.toggle('on', x === b)); $('#lcPrevBox').removeAttribute('style'); $('#lcPrev').src = b.querySelector('img').src; $('#lcPrev').style.visibility = 'visible'; $('#lcEmojiAtual').textContent = ''; });
+    document.querySelectorAll('[data-emoji]').forEach(b => b.onclick = () => { emoji = b.dataset.emoji; imagem = null; bib = null; $('#lcImg').value = ''; document.querySelectorAll('[data-emoji]').forEach(x => x.classList.toggle('on', x === b)); $('#lcEmojiAtual').textContent = emoji; $('#lcPrev').style.visibility = 'hidden'; });
+    // busca de calorias
+    let kcal100 = null, tBusca = null, achados = [];
+    const fmt1 = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+    const recalcular = () => { const g = +$('#lcGramas').value; if (kcal100 && g) { document.querySelector('[name=kcal]').value = Math.round(kcal100 * g / 100); if (!document.querySelector('[name=porcao]').dataset.manual) document.querySelector('[name=porcao]').value = g + ' g'; } };
+    $('#lcGramas').oninput = recalcular;
+    document.querySelector('[name=porcao]').oninput = e => { e.target.dataset.manual = 1; };
+    $('#lcBusca').oninput = e => { clearTimeout(tBusca); const q = e.target.value.trim(); if (q.length < 2) { $('#lcResultados').innerHTML = ''; return; }
+      tBusca = setTimeout(async () => { $('#lcResultados').innerHTML = '<div class="mini">Buscando…</div>';
+        const r = await apiGet('mimei_buscar', { q }).catch(() => null); achados = r?.itens || [];
+        $('#lcResultados').innerHTML = achados.length ? achados.map((a, i) => `<button type="button" class="busca-item" data-i="${i}">${a.img ? `<img src="${esc(a.img)}" alt="">` : '<span class="busca-sem">🍽️</span>'}<span><b>${esc(a.nome)}</b><small>${a.marca ? esc(a.marca) + ' · ' : ''}${fmt1(a.kcal100)} kcal/100 g${a.porcao_g ? ' · porção ' + (a.porcao ? esc(a.porcao) : a.porcao_g + ' g') + ' = ' + Math.round(a.kcal100 * a.porcao_g / 100) + ' kcal' : ''} · ${a.fonte}</small></span></button>`).join('') : '<div class="mini">Nada encontrado — preencha à mão.</div>';
+        document.querySelectorAll('.busca-item').forEach(b => b.onclick = () => { const a = achados[+b.dataset.i]; kcal100 = a.kcal100;
+          document.querySelector('[name=nome]').value = a.nome.split(',')[0].slice(0, 40);
+          $('#lcGramas').value = a.porcao_g || 100; delete document.querySelector('[name=porcao]').dataset.manual;
+          document.querySelector('[name=porcao]').value = a.porcao ? String(a.porcao).slice(0, 40) : (a.porcao_g || 100) + ' g'; if (a.porcao) document.querySelector('[name=porcao]').dataset.manual = 1;
+          recalcular(); $('#lcBase').textContent = `Base: ${fmt1(a.kcal100)} kcal a cada 100 g (${a.fonte}). Ajuste as gramas da sua porção.`; $('#lcResultados').innerHTML = ''; $('#lcBusca').value = ''; });
+      }, 350); };
+    $('#lcImg').onchange = e => { const f = e.target.files[0]; if (!f) return; if (f.size > 3e6) return toast('Imagem muito grande (máx. 3 MB)'); const rd = new FileReader(); rd.onload = () => { imagem = rd.result; $('#lcPrev').src = imagem; $('#lcPrev').style.visibility = 'visible'; $('#lcEmojiAtual').textContent = ''; }; rd.readAsDataURL(f); };
+    $('#fLanche').onsubmit = async e => {
+      e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); $('#lcOk').disabled = true; $('#lcOk').textContent = 'Salvando…';
+      try { await api('mimei_salvar', { id: l?.id, nome: f.nome, kcal: +f.kcal, porcao: f.porcao, emoji, imagem, biblioteca: bib }); fecharModal(); toast('Lanche salvo — o relógio atualiza sozinho'); renderMimei(); }
+      catch (x) { toast(x.message, 4000); $('#lcOk').disabled = false; $('#lcOk').textContent = 'Salvar'; }
+    };
+  });
+}
+
+/* ---------- MAIS: menu organizado ---------- */
+function renderMais() {
+  const u = S.usuario || {};
+  const grupos = [
+    ['Seus dados', [['perfil', ICO.perfilUser, 'Perfil e metas', 'Dados pessoais, metas diárias e zonas de FC'], ['perfil', ICO.sync, 'Integrações', 'Garmin, Strava e sincronização', 'integracoes'], ['dispositivo', ICO.relogio, 'Relógio', 'Bateria, sensores e recursos do aparelho']]],
+    ['Análises', [['relatorios', ICO.relatorios, 'Relatórios', 'Forma × fadiga, risco de lesão, sono, correlações'], ['estatisticas', ICO.barras, 'Desempenho', 'Totais, recordes e medalhas'], ['treinos', ICO.semana, 'Treinos e calendário', 'Planeje e marque treinos concluídos']]],
+    ['Apps do relógio', [['app', ICO.app, 'Rastreador', 'GPS, bateria e FC ao vivo no Traccar'], ['app', '📻', 'Walkie-Talkie', 'Canais, mensagens rápidas e SOS', 'walkie'], ['app', '🍺', 'ME MIMEI', 'Quantos lanches cabem nas calorias do dia', 'mimei']]],
+  ];
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Mais</h1></div>
+  <section class="w mais-perfil click" data-tela="perfil"><div class="w-corpo"><div class="avatar">${esc((u.nome || '?')[0].toUpperCase())}</div><div><b>${esc(u.nome || '')}</b><span>${esc(u.email || '')}</span></div><span class="seta">›</span></div></section>
+  ${grupos.map(([titulo, itens]) => `<div class="mais-grupo">${titulo}</div><section class="w"><div class="lista mais-lista">${itens.map(([tela, ic, nome, desc, arg]) => `<div class="item" data-tela="${tela}"${arg ? ` data-arg="${arg}"` : ''}><div class="ic">${ic}</div><div class="info"><b>${nome}</b><span>${desc}</span></div><span class="seta">›</span></div>`).join('')}</div></section>`).join('')}
+  <section class="w"><div class="lista mais-lista"><div class="item" id="maisSair"><div class="ic verm">⏻</div><div class="info"><b>Sair</b><span>Desconectar desta conta</span></div></div></div></section>
+  <div class="mini centro" style="margin:10px 0">Garmin Connect (clone) v${window.APP_VERSAO}</div>${tabbar('mais')}</div>`;
+  $('#maisSair').onclick = async () => { if (confirm('Sair da conta?')) { await api('sair', {}); store.del('usuario'); store.del('dash'); history.replaceState(null, '', location.pathname); renderLogin(); } };
 }

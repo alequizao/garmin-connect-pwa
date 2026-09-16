@@ -1,4 +1,4 @@
-const VERSAO = 'garmin-v12';
+const VERSAO = 'garmin-v15';
 const SHELL = ['/garmin/', '/garmin/index.php', '/garmin/app.js', '/garmin/style.css', '/garmin/manifest.json', '/garmin/icons/icon-192.png', '/garmin/icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSAO).then(c => c.addAll(SHELL).catch(() => {})).then(() => self.skipWaiting())); });

@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+  <iq:application id="5634d85c325a40d4ada04eaccd96dbb5" type="watch-app" name="@Strings.AppName" entry="MeMimeiApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.2.0">
+    <iq:products><iq:product id="fr165"/></iq:products>
+    <iq:permissions>
+      <iq:uses-permission id="Communications"/>
+      <iq:uses-permission id="UserProfile"/>
+    </iq:permissions>
+    <iq:languages><iq:language>por</iq:language><iq:language>eng</iq:language></iq:languages>
+    <iq:barrels/>
+  </iq:application>
+</iq:manifest>

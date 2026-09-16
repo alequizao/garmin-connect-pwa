@@ -311,3 +311,37 @@ canvas.graf{width:100%;height:120px;display:block;margin:6px 0}
 .strava-envio{margin-top:6px}
 
 .push-status{background:#1f1f21;border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:8px;line-height:1.45}
+
+/* Me Mimei */
+.seg button{font-size:13px;padding:10px 4px}
+.mimei-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-top:14px}
+.mimei-card{background:#1f1f21;border-radius:14px;padding:10px 6px;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center}
+.mimei-card img{width:40px;height:40px;object-fit:contain}
+.mimei-card b{font-size:26px;font-weight:300;color:var(--amarelo);line-height:1.1}
+.mimei-card span{font-size:13px;color:#fff}.mimei-card small{font-size:10.5px;color:var(--txt2);min-height:26px}
+.mimei-card .btn{margin-top:4px;padding:6px 10px;font-size:12px}
+.mimei-ic{width:36px;height:36px;object-fit:contain;flex-shrink:0}
+.mimei-item .ico-btn{width:34px;height:34px;font-size:15px}.mimei-item .ico-btn:disabled{opacity:.3}
+.mimei-prev{display:flex;justify-content:center;align-items:center;height:70px;margin-bottom:8px;font-size:48px}.mimei-prev img{width:64px;height:64px;object-fit:contain}
+.emojis{display:flex;flex-wrap:wrap;gap:4px;max-height:132px;overflow-y:auto;background:#1c1c1e;border-radius:12px;padding:6px}
+.emojis button{width:38px;height:38px;font-size:22px;border-radius:10px}.emojis button.on{background:var(--azul)}
+.busca-res{display:flex;flex-direction:column;gap:4px;max-height:260px;overflow-y:auto;margin-top:6px}
+.busca-item{display:flex;gap:10px;align-items:center;text-align:left;background:#1c1c1e;border-radius:12px;padding:8px}
+.busca-item img,.busca-sem{width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px}
+.busca-sem{background:#2a2a2c}.busca-item b{display:block;font-size:14px;font-weight:500}.busca-item small{color:var(--txt2);font-size:12px}
+
+/* menu Mais e barra lateral */
+.so-desktop{display:none!important}
+@media (min-width:960px){.so-desktop{display:flex!important}.so-celular{display:none!important}
+  .lateral-sep{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:var(--txt3);padding:16px 12px 6px;border-top:1px solid #2c2c2e;margin-top:10px}}
+.mais-grupo{font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--txt2);margin:18px 4px 8px}
+.mais-lista{padding:0 14px}
+.mais-lista .item{cursor:pointer}
+.mais-lista .ic{background:#1f1f21;color:var(--azul)}
+.mais-lista .ic svg{width:24px;height:24px}
+.mais-lista .seta,.mais-perfil .seta{color:var(--txt3);font-size:24px;margin-left:auto}
+.mais-perfil .w-corpo{display:flex;align-items:center;gap:14px}
+.mais-perfil .avatar{width:56px;height:56px;font-size:22px;flex-shrink:0}
+.mais-perfil b{display:block;font-size:18px;font-weight:500}.mais-perfil span{font-size:13px;color:var(--txt2)}
+
+.emojis.bib{max-height:170px}.emojis.bib button{width:52px;height:52px;padding:3px}.emojis.bib img{width:100%;height:100%;object-fit:contain}
