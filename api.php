@@ -580,6 +580,11 @@ case 'mimei_comi': {
   db()->prepare("INSERT INTO mimei_consumo (usuario_id, lanche_id, nome, qtd, kcal, origem, data) VALUES (?,?,?,?,?, 'site', CURDATE())")->execute([uid(), $l['id'], $l['nome'], $q, (int)round($l['kcal'] * $q)]);
   out(['ok' => true]);
 }
+case 'mimei_desfazer': {
+  exigeLogin(); $st = db()->prepare("SELECT id FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC LIMIT 1"); $st->execute([uid()]);
+  if ($id = $st->fetchColumn()) db()->prepare("DELETE FROM mimei_consumo WHERE id=?")->execute([$id]);
+  out(['ok' => true]);
+}
 case 'mimei_consumo_excluir': {
   exigeLogin(); db()->prepare("DELETE FROM mimei_consumo WHERE id=? AND usuario_id=?")->execute([(int)($in['id'] ?? 0), uid()]); out(['ok' => true]);
 }

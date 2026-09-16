@@ -11,6 +11,7 @@ import Toybox.Application;
 import Toybox.Communications;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Math;
 import Toybox.System;
 import Toybox.Time;
 import Toybox.Time.Gregorian;
@@ -21,7 +22,7 @@ import Toybox.WatchUi;
 module Mimei {
     const URL = "__URL__";     // gravado pelo compilador (appbuilder.py)
     const TOKEN = "__TOKEN__"; // gravado pelo compilador (appbuilder.py)
-    const VERSAO = "1.1.0";
+    const VERSAO = "1.4.0";
 
     function pedir(dados, cb) {
         dados["token"] = TOKEN;
@@ -49,7 +50,9 @@ var baixandoIcone = false;
 var saldo = null;          // kcal disponíveis (ativas - já comidas)
 var queimado = null;
 var comido = 0;
+var ultimoComido = null; // texto do último registro de hoje (para desfazer)
 var sel = 0;
+var tamIcone = null;   // calculado pela tela; os ícones são pedidos nesse tamanho
 var estado = "Atualizando...";
 var aguardando = false;
 var timerAtualiza = null;
@@ -85,7 +88,7 @@ function recebido(code, data) {
         WatchUi.requestUpdate(); return;
     }
     var r = data["resumo"];
-    if (r != null) { $.saldo = r["saldo"]; $.queimado = r["queimado"]; $.comido = r["comido"]; }
+    if (r != null) { $.saldo = r["saldo"]; $.queimado = r["queimado"]; $.comido = r["comido"]; $.ultimoComido = r["ultimo"]; }
     $.lanches = data["lanches"];
     Application.Storage.setValue("lanches", $.lanches);
     Application.Storage.setValue("resumo", r);
@@ -106,7 +109,7 @@ function baixarProximoIcone() {
     if ($.baixandoIcone || $.filaIcones.size() == 0) { return; }
     $.baixandoIcone = true;
     var l = $.filaIcones[0];
-    var tam = (System.getDeviceSettings().screenWidth * 0.26).toNumber();
+    var tam = $.tamIcone != null ? $.tamIcone : (System.getDeviceSettings().screenWidth * 0.24).toNumber();
     Communications.makeImageRequest(l["icone"], null, { :maxWidth => tam, :maxHeight => tam }, new Method($, :iconeRecebido));
 }
 
@@ -155,92 +158,123 @@ class MimeiView extends WatchUi.View {
     function onUpdate(dc) {
         var w = dc.getWidth(), h = dc.getHeight(), cx = w / 2, cy = h / 2;
         var redondo = System.getDeviceSettings().screenShape == System.SCREEN_SHAPE_ROUND;
-        var f = Graphics.FONT_XTINY, fh = dc.getFontHeight(f);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK); dc.clear();
 
-        // anel: fundo cinza + progresso (comido / queimado), com ponta arredondada
-        var esp = (w * 0.035).toNumber(); if (esp < 5) { esp = 5; }
-        var raio = (w < h ? w : h) / 2 - esp / 2 - 2;
+        // anel discreto: trilho cinza fino + arco âmbar só do que já foi comido
         var pct = 0.0;
         if ($.queimado != null && $.queimado > 0 && $.comido != null) { pct = $.comido.toFloat() / $.queimado; }
         if (pct > 1.0) { pct = 1.0; }
-        if (dc has :setPenWidth) {
+        if (redondo && (dc has :setPenWidth)) {
+            var esp = (w * 0.012).toNumber(); if (esp < 2) { esp = 2; }
+            var raio = w / 2 - esp - 1;
             dc.setPenWidth(esp);
-            dc.setColor(0x2A2A2C, Graphics.COLOR_TRANSPARENT);
-            dc.drawArc(cx, cy, raio, Graphics.ARC_CLOCKWISE, 90, 90.01);
-            // restante (livre) em verde-azulado para o anel ficar bonito mesmo sem nada comido
-            var livre = 1.0 - pct;
-            if (livre > 0.002) {
-                dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
-                dc.drawArc(cx, cy, raio, Graphics.ARC_CLOCKWISE, 90 - 360 * pct, 90 - 360 * pct - 360 * livre + 0.5);
-            }
-            if (pct > 0.002) {
-                var passos = (pct * 40).toNumber() + 1;
-                for (var k = 0; k < passos; k++) {
-                    var a0 = 90 - 360 * pct * k / passos, a1 = 90 - 360 * pct * (k + 1) / passos;
-                    dc.setColor(corDoAnel(pct * (k + 1) / passos), Graphics.COLOR_TRANSPARENT);
-                    dc.drawArc(cx, cy, raio, Graphics.ARC_CLOCKWISE, a0, a1 - 0.5);
-                }
+            dc.setColor(0x26262A, Graphics.COLOR_TRANSPARENT);
+            dc.drawCircle(cx, cy, raio);
+            if (pct > 0.01) {
+                dc.setColor(0xF5A623, Graphics.COLOR_TRANSPARENT);
+                dc.drawArc(cx, cy, raio, Graphics.ARC_CLOCKWISE, 90, 90 - 360 * pct);
             }
             dc.setPenWidth(1);
         }
 
-        // topo: nome do app e calorias livres
-        var yTopo = h * (redondo ? 0.12 : 0.06);
-        dc.setColor(0xF5C23B, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yTopo, f, "ME MIMEI", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yTopo + fh - 2, f, ($.saldo == null ? "--" : $.saldo.format("%d")) + " kcal livres", Graphics.TEXT_JUSTIFY_CENTER);
-
+        var fT = Graphics.FONT_XTINY, hT = dc.getFontHeight(fT);
+        var fNum = Graphics.FONT_LARGE, hNum = dc.getFontHeight(fNum);
+        var fNome = Graphics.FONT_SMALL, hNome = dc.getFontHeight(fNome);
         var n = $.lanches.size();
+        var yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97);
+
         if (n == 0) {
+            dc.setColor(0xF5C23B, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(cx, cy - hT - hNome / 2, fT, "ME MIMEI", Graphics.TEXT_JUSTIFY_CENTER);
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, cy - fh / 2, Graphics.FONT_SMALL, $.estado == "" ? "Nenhum lanche" : $.estado, Graphics.TEXT_JUSTIFY_CENTER);
+            texto(dc, cx, cy - hNome / 2, fNome, $.estado == "" ? "Nenhum lanche" : $.estado, redondo);
             return;
         }
         if ($.sel >= n) { $.sel = 0; }
         var l = $.lanches[$.sel];
 
-        // ícone grande
-        var tamIcone = (w * 0.26).toNumber();
-        var yIcone = yTopo + fh * 2 + 2;
+        // altura total e ícone o maior possível; sobra dividida em espaços iguais entre as 6 linhas
+        var linhasTexto = hT + hT + hNome + hT + hT;          // título, kcal livres, nome, detalhe, rodapé
+        var disponivel = yFim - yIni;
+        var tam = (w * 0.36).toNumber();
+        if (tam > disponivel - linhasTexto - 7 * 3) { tam = (disponivel - linhasTexto - 21).toNumber(); }
+        if (tam < 24) { tam = 24; }
+        var altBloco = tam > hNum ? tam : hNum;
+        var espaco = (disponivel - linhasTexto - altBloco) / 7.0;
+        var y = yIni + espaco;
+
+        dc.setColor(0xF5C23B, Graphics.COLOR_TRANSPARENT);
+        texto(dc, cx, y, fT, "ME MIMEI", redondo); y += hT + espaco;
+        dc.setColor(0x9A9AA0, Graphics.COLOR_TRANSPARENT);
+        texto(dc, cx, y, fT, ($.saldo == null ? "--" : $.saldo.format("%d")) + " kcal livres", redondo); y += hT + espaco;
+
+        // bloco [ícone][número]: encolhe o ícone se não couber na largura da tela nessa altura
+        var txt = formatar(l["pode"]) + "x";
+        var largNum = dc.getTextWidthInPixels(txt, fNum);
+        var gap = (w * 0.03).toNumber();
+        var larg = corda(y, y + altBloco, w, h, redondo);
+        if (tam + gap + largNum > larg) { tam = (larg - gap - largNum).toNumber(); if (tam < 20) { tam = 20; } }
+        $.tamIcone = tam;
+        var x0 = cx - (tam + gap + largNum) / 2;
         var img = $.icones.get(l["id"] + ":" + l["icone"]);
         if (img != null) {
-            dc.drawBitmap(cx - img.getWidth() / 2, yIcone, img);
+            dc.drawBitmap(x0 + (tam - img.getWidth()) / 2, y + (altBloco - img.getHeight()) / 2, img);
         } else {
             dc.setColor(0x2A2A2C, Graphics.COLOR_TRANSPARENT);
-            dc.fillCircle(cx, yIcone + tamIcone / 2, tamIcone / 2);
+            dc.fillCircle(x0 + tam / 2, y + altBloco / 2, tam / 2);
         }
-
-        // número em destaque
-        var fNum = Graphics.FONT_NUMBER_MEDIUM;
-        var yNum = yIcone + tamIcone - 2;
-        var txt = formatar(l["pode"]);
         dc.setColor(0xF5C23B, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yNum, fNum, txt, Graphics.TEXT_JUSTIFY_CENTER);
-        var yNome = yNum + dc.getFontHeight(fNum) - 6;
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yNome, Graphics.FONT_SMALL, l["nome"], Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        var detalhe = l["kcal"] + " kcal" + (l["porcao"] != null ? " · " + l["porcao"] : "");
-        if (Graphics has :fitTextToArea) { detalhe = Graphics.fitTextToArea(detalhe, f, w * 0.7, fh, true); }
-        dc.drawText(cx, yNome + dc.getFontHeight(Graphics.FONT_SMALL) - 2, f, detalhe, Graphics.TEXT_JUSTIFY_CENTER);
+        dc.drawText(x0 + tam + gap, y + (altBloco - hNum) / 2, fNum, txt, Graphics.TEXT_JUSTIFY_LEFT);
+        y += altBloco + espaco;
 
-        // pontinhos de página (até 9) ou "3/15"
-        var yPts = h * (redondo ? 0.9 : 0.94);
-        if (n <= 9) {
-            var gap = (w * 0.04).toNumber(), x0 = cx - (n - 1) * gap / 2;
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        textoAjustado(dc, cx, y, [Graphics.FONT_SMALL, Graphics.FONT_TINY, Graphics.FONT_XTINY], hNome, l["nome"], redondo); y += hNome + espaco;
+        dc.setColor(0x9A9AA0, Graphics.COLOR_TRANSPARENT);
+        var det = l["kcal"] + " kcal" + (l["porcao"] != null ? " · " + l["porcao"] : "");
+        if (dc.getTextWidthInPixels(det, fT) > corda(y, y + hT, w, h, redondo)) { det = l["kcal"] + " kcal"; }
+        texto(dc, cx, y, fT, det, redondo); y += hT + espaco;
+
+        if ($.estado != "") {
+            dc.setColor(0x9A9AA0, Graphics.COLOR_TRANSPARENT);
+            texto(dc, cx, y, fT, $.estado, redondo);
+        } else if (n <= 9) {
+            var passo = (w * 0.035).toNumber(), xp = cx - (n - 1) * passo / 2, yp = y + hT / 2;
             for (var p = 0; p < n; p++) {
-                dc.setColor(p == $.sel ? 0xF5C23B : 0x55555A, Graphics.COLOR_TRANSPARENT);
-                dc.fillCircle(x0 + p * gap, yPts, p == $.sel ? 3 : 2);
+                dc.setColor(p == $.sel ? 0xF5C23B : 0x4A4A50, Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(xp + p * passo, yp, p == $.sel ? 3 : 2);
             }
         } else {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yPts - fh / 2, f, ($.sel + 1) + "/" + n, Graphics.TEXT_JUSTIFY_CENTER);
+            dc.setColor(0x6A6A70, Graphics.COLOR_TRANSPARENT);
+            texto(dc, cx, y, fT, ($.sel + 1) + " / " + n, redondo);
         }
-        if ($.estado != "") {
-            dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, yPts - fh * 1.4, f, $.estado, Graphics.TEXT_JUSTIFY_CENTER);
+    }
+}
+
+/* largura útil da tela entre as alturas y1 e y2 (em tela redonda é a corda do círculo), com margem de 8% */
+function corda(y1, y2, w, h, redondo) {
+    if (!redondo) { return w * 0.92; }
+    var r = w / 2.0, cy = h / 2.0;
+    var d = (y1 - cy).abs() > (y2 - cy).abs() ? (y1 - cy).abs() : (y2 - cy).abs();
+    if (d >= r) { return 0; }
+    return 2 * Math.sqrt(r * r - d * d) * 0.92;
+}
+
+/* texto centralizado que nunca ultrapassa a borda: encurta com reticências se precisar */
+function texto(dc, cx, y, fonte, t, redondo) {
+    var larg = corda(y, y + dc.getFontHeight(fonte), dc.getWidth(), dc.getHeight(), redondo);
+    if (Graphics has :fitTextToArea) { t = Graphics.fitTextToArea(t, fonte, larg, dc.getFontHeight(fonte), true); }
+    else { while (t.length() > 2 && dc.getTextWidthInPixels(t, fonte) > larg) { t = t.substring(0, t.length() - 2) + "."; } }
+    dc.drawText(cx, y, fonte, t, Graphics.TEXT_JUSTIFY_CENTER);
+}
+
+/* tenta fontes cada vez menores até caber; só corta com reticências na menor. Centraliza na altura reservada. */
+function textoAjustado(dc, cx, y, fontes, altura, t, redondo) {
+    var larg = corda(y, y + altura, dc.getWidth(), dc.getHeight(), redondo);
+    for (var i = 0; i < fontes.size(); i++) {
+        if (dc.getTextWidthInPixels(t, fontes[i]) <= larg || i == fontes.size() - 1) {
+            var yy = y + (altura - dc.getFontHeight(fontes[i])) / 2;
+            texto(dc, cx, yy, fontes[i], t, redondo);
+            return;
         }
     }
 }
@@ -251,6 +285,12 @@ class MimeiDelegate extends WatchUi.BehaviorDelegate {
     function initialize() { BehaviorDelegate.initialize(); }
     function onNextPage() { if ($.lanches.size() > 0) { $.sel = ($.sel + 1) % $.lanches.size(); WatchUi.requestUpdate(); } return true; }
     function onPreviousPage() { if ($.lanches.size() > 0) { $.sel = ($.sel - 1 + $.lanches.size()) % $.lanches.size(); WatchUi.requestUpdate(); } return true; }
+    function onSwipe(ev) {
+        var d = ev.getDirection();
+        if (d == WatchUi.SWIPE_LEFT || d == WatchUi.SWIPE_UP) { return onNextPage(); }
+        if (d == WatchUi.SWIPE_RIGHT || d == WatchUi.SWIPE_DOWN) { return onPreviousPage(); }
+        return false;
+    }
     function onSelect() { menu(); return true; }
     function onMenu() { menu(); return true; }
     function menu() {
@@ -260,6 +300,7 @@ class MimeiDelegate extends WatchUi.BehaviorDelegate {
         m.addItem(new WatchUi.MenuItem("Comi 1", l["porcao"] == null ? (l["kcal"] + " kcal") : l["porcao"], 1.0, null));
         m.addItem(new WatchUi.MenuItem("Comi meia", (l["kcal"] / 2) + " kcal", 0.5, null));
         m.addItem(new WatchUi.MenuItem("Comi 2", (l["kcal"] * 2) + " kcal", 2.0, null));
+        if ($.ultimoComido != null) { m.addItem(new WatchUi.MenuItem("Desfazer ultimo", $.ultimoComido, "desfazer", null)); }
         m.addItem(new WatchUi.MenuItem("Atualizar", "v" + Mimei.VERSAO, "atualizar", null));
         WatchUi.pushView(m, new MimeiMenuDelegate(), WatchUi.SLIDE_UP);
     }
@@ -270,6 +311,7 @@ class MimeiMenuDelegate extends WatchUi.Menu2InputDelegate {
     function onSelect(item) {
         var id = item.getId();
         WatchUi.popView(WatchUi.SLIDE_DOWN);
+        if (id instanceof Lang.String && id.equals("desfazer")) { $.estado = "Desfazendo..."; atualizar({ "acao" => "desfazer" }); WatchUi.requestUpdate(); return; }
         if (id instanceof Lang.String) { $.estado = "Atualizando..."; atualizar({ "acao" => "lanches" }); return; }
         $.estado = "Registrando...";
         atualizar({ "acao" => "comi", "lanche" => $.lanches[$.sel]["id"], "qtd" => id });

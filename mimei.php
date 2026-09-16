@@ -20,6 +20,10 @@ db()->prepare("UPDATE relogio_apps SET visto=NOW() WHERE id=?")->execute([$app['
 mimeiSemear($uid);
 $kcalRelogio = isset($d['kcal']) && is_numeric($d['kcal']) ? max(0, min(20000, (int)$d['kcal'])) : null;
 
+if (($d['acao'] ?? '') === 'desfazer') {
+  $st = db()->prepare("SELECT id FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC LIMIT 1"); $st->execute([$uid]);
+  if ($idc = $st->fetchColumn()) db()->prepare("DELETE FROM mimei_consumo WHERE id=?")->execute([$idc]);
+}
 if (($d['acao'] ?? '') === 'comi') {
   $st = db()->prepare("SELECT id, nome, kcal FROM mimei_lanches WHERE id=? AND usuario_id=?"); $st->execute([(int)($d['lanche'] ?? 0), $uid]);
   $l = $st->fetch(); if (!$l) { echo '{"ok":false}'; exit; }
@@ -30,6 +34,8 @@ if (($d['acao'] ?? '') === 'comi') {
 
 $base = rtrim(defined('APP_URL') ? APP_URL : 'https://' . $_SERVER['HTTP_HOST'] . '/garmin', '/') . '/';
 $r = mimeiResumo($uid, $kcalRelogio);
+$st = db()->prepare("SELECT nome, qtd FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC LIMIT 1"); $st->execute([$uid]);
+$u = $st->fetch(); $r['ultimo'] = $u ? rtrim(rtrim(number_format((float)$u['qtd'], 1, ',', ''), '0'), ',') . 'x ' . $u['nome'] : null;
 $lanches = array_map(function ($l) use ($r) {
   $l['pode'] = $l['kcal'] > 0 ? round($r['saldo'] / $l['kcal'], 1) : 0;
   unset($l['emoji']); return $l;

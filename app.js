@@ -813,6 +813,7 @@ async function renderApp(arg) {
   clearTimeout(appTimer); clearTimeout(WK.timer);
   if (arg === 'walkie') return renderWalkie();
   if (arg === 'mimei') return renderMimei();
+  if (arg && String(arg).startsWith('sim')) return renderSimulador(String(arg).split('-')[1]);
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}
   <div class="card"><h3>📍 Rastreador — gerar app com dispositivo próprio</h3>
    <div class="mini" style="margin-bottom:10px">Cada pessoa gera o seu app. Ele já sai configurado para enviar bateria, GPS, frequência cardíaca, passos, Body Battery e estresse para o dispositivo escolhido no Traccar.</div>
@@ -889,7 +890,7 @@ async function renderDispositivo() {
 }
 
 /* ---------- APPS › WALKIE-TALKIE ALEQUIZÃO ---------- */
-const segApps = ativo => `<div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button></div>`;
+const segApps = ativo => `<div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button><button class="${ativo === 'sim' ? 'ativo' : ''}" data-tela="app" data-arg="sim">🖥️ Simulador</button></div>`;
 const WK = { canal: null, ultimo: 0, timer: null, canais: [] };
 async function renderWalkie() {
   clearTimeout(WK.timer);
@@ -1117,4 +1118,147 @@ function renderMais() {
   <section class="w"><div class="lista mais-lista"><div class="item" id="maisSair"><div class="ic verm">⏻</div><div class="info"><b>Sair</b><span>Desconectar desta conta</span></div></div></div></section>
   <div class="mini centro" style="margin:10px 0">Garmin Connect (clone) v${window.APP_VERSAO}</div>${tabbar('mais')}</div>`;
   $('#maisSair').onclick = async () => { if (confirm('Sair da conta?')) { await api('sair', {}); store.del('usuario'); store.del('dash'); history.replaceState(null, '', location.pathname); renderLogin(); } };
+}
+
+/* ---------- APPS › SIMULADOR (relógio real desenhado com as medidas do Connect IQ SDK) ---------- */
+const SIM = { dev: null, img: null, icones: {}, dados: null, sel: 0, menu: null, estado: '', canvas: null, escala: 1 };
+async function renderSimulador(modelo) {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sim')}
+  <section class="w"><header class="w-top"><span class="w-ico">🖥️</span><span class="w-tit">Simulador do relógio</span></header><div class="w-corpo">
+    <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist>
+    <select id="simApp"><option value="mimei">🍺 ME MIMEI</option></select><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
+    <div class="sim-palco"><canvas id="simCanvas"></canvas></div>
+    <div class="mini centro">Use os botões do relógio (clique neles), deslize na tela ou o teclado: ↑ ↓ ← → trocam, Enter = START, Esc = voltar. Os dados e ações são os seus de verdade.</div>
+  </div></section>${tabbar('app')}</div>`;
+  SIM.canvas = $('#simCanvas');
+  const modelos = await fetch('app/modelos.json?v=2').then(r => r.json()).catch(() => []);
+  $('#simModelos').innerHTML = modelos.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join('');
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)); };
+  const carregarModelo = async id => {
+    SIM.dev = await fetch(`app/sim/${id}.json`).then(r => r.json());
+    SIM.img = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = `app/sim/${SIM.dev.imagem}`; });
+    SIM.icones = {}; simDesenhar(); simCarregarIcones();
+  };
+  $('#simModelo').onchange = () => { const m = achar($('#simModelo').value); if (m) { carregarModelo(m.id); history.replaceState(null, '', '#/app/sim-' + m.id); } };
+  $('#simFoto').onclick = () => { const a = document.createElement('a'); a.download = `me-mimei-${SIM.dev?.id || 'relogio'}.png`; a.href = SIM.canvas.toDataURL('image/png'); a.click(); };
+  await simAtualizarDados();
+  const inicial = (modelo && modelos.find(m => m.id === modelo)) || modelos.find(m => m.id === 'fr165') || modelos[0];
+  $('#simModelo').value = `${inicial.nome} (${inicial.id})`;
+  await carregarModelo(inicial.id);
+  // interação: clique nas teclas, deslizar na tela e teclado
+  let ini = null;
+  SIM.canvas.onpointerdown = e => { ini = simPonto(e); };
+  SIM.canvas.onpointerup = e => {
+    const p = simPonto(e); if (!ini) return; const dx = p.x - ini.x, dy = p.y - ini.y; ini = null;
+    const t = SIM.dev.tela;
+    if (Math.hypot(dx, dy) > 30 && p.x > t.x - 20 && p.x < t.x + t.width + 20) return simTecla(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'next' : 'prev') : (dy < 0 ? 'next' : 'prev'));
+    for (const [k, r] of Object.entries(SIM.dev.teclas || {})) if (p.x >= r.x - 10 && p.x <= r.x + r.width + 10 && p.y >= r.y - 10 && p.y <= r.y + r.height + 10) return simTecla(k === 'enter' ? 'start' : k === 'esc' ? 'back' : k === 'up' ? 'prev' : k === 'down' ? 'next' : k);
+    if (SIM.dev.toque && p.x > t.x && p.x < t.x + t.width && p.y > t.y && p.y < t.y + t.height) simToque(p.y - t.y);
+  };
+  document.onkeydown = e => { if (S.tela !== 'app' || !$('#simCanvas') || /input|select|textarea/i.test(document.activeElement?.tagName)) return;
+    const m = { ArrowDown: 'next', ArrowRight: 'next', ArrowUp: 'prev', ArrowLeft: 'prev', Enter: 'start', Escape: 'back', Backspace: 'back' }[e.key]; if (m) { e.preventDefault(); simTecla(m); } };
+}
+function simPonto(e) { const r = SIM.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / SIM.escala, y: (e.clientY - r.top) / SIM.escala }; }
+async function simAtualizarDados() {
+  const j = await apiGet('mimei_estado').catch(() => null); if (!j?.ok) return;
+  const r = j.resumo; j.lanches.forEach(l => l.pode = l.kcal > 0 ? Math.round(r.saldo / l.kcal * 10) / 10 : 0);
+  const ult = j.consumo[0]; r.ultimo = ult ? `${String(+ult.qtd).replace('.', ',')}x ${ult.nome}` : null;
+  SIM.dados = j; if (SIM.sel >= j.lanches.length) SIM.sel = 0; SIM.estado = ''; simCarregarIcones(); simDesenhar();
+}
+function simCarregarIcones() {
+  (SIM.dados?.lanches || []).forEach(l => { if (!l.icone || SIM.icones[l.id]) return; const i = new Image(); i.onload = () => { SIM.icones[l.id] = i; simDesenhar(); }; i.src = l.icone; SIM.icones[l.id] = null; });
+}
+function simTecla(t) {
+  const n = SIM.dados?.lanches.length || 0;
+  if (SIM.menu) {
+    if (t === 'next') SIM.menu.i = (SIM.menu.i + 1) % SIM.menu.itens.length;
+    else if (t === 'prev') SIM.menu.i = (SIM.menu.i - 1 + SIM.menu.itens.length) % SIM.menu.itens.length;
+    else if (t === 'back') SIM.menu = null;
+    else if (t === 'start') simEscolher(SIM.menu.itens[SIM.menu.i]);
+  } else {
+    if (t === 'next' && n) SIM.sel = (SIM.sel + 1) % n;
+    else if (t === 'prev' && n) SIM.sel = (SIM.sel - 1 + n) % n;
+    else if ((t === 'start' || t === 'menu') && n) simAbrirMenu();
+  }
+  simDesenhar();
+}
+function simToque(yTela) { if (SIM.menu) { const alt = SIM.dev.tela.height / 5; const i = Math.floor((yTela - alt) / alt) + SIM.menu.topo; if (i >= 0 && i < SIM.menu.itens.length) { SIM.menu.i = i; simEscolher(SIM.menu.itens[i]); } } else simAbrirMenu(); simDesenhar(); }
+function simAbrirMenu() {
+  const l = SIM.dados.lanches[SIM.sel], r = SIM.dados.resumo;
+  const itens = [{ t: 'Comi 1', s: l.porcao || `${l.kcal} kcal`, q: 1 }, { t: 'Comi meia', s: `${Math.round(l.kcal / 2)} kcal`, q: 0.5 }, { t: 'Comi 2', s: `${l.kcal * 2} kcal`, q: 2 }];
+  if (r.ultimo) itens.push({ t: 'Desfazer ultimo', s: r.ultimo, a: 'desfazer' });
+  itens.push({ t: 'Atualizar', s: 'v1.4.0', a: 'atualizar' });
+  SIM.menu = { titulo: l.nome, itens, i: 0, topo: 0 };
+}
+async function simEscolher(it) {
+  const l = SIM.dados.lanches[SIM.sel]; SIM.menu = null; SIM.estado = it.a === 'desfazer' ? 'Desfazendo...' : it.a === 'atualizar' ? 'Atualizando...' : 'Registrando...'; simDesenhar();
+  try { if (it.q) await api('mimei_comi', { id: l.id, qtd: it.q }); else if (it.a === 'desfazer') await api('mimei_desfazer', {}); } catch (x) { toast(x.message); }
+  await simAtualizarDados();
+}
+/* réplica do onUpdate do app (MeMimeiApp.mc v1.3) em canvas */
+function simDesenhar() {
+  const d = SIM.dev, cv = SIM.canvas; if (!d || !cv) return;
+  const larguraFoto = SIM.img ? SIM.img.width : d.tela.width + 2 * d.tela.x, alturaFoto = SIM.img ? SIM.img.height : d.tela.height + 2 * d.tela.y;
+  const max = Math.min(460, cv.parentElement.clientWidth); SIM.escala = max / larguraFoto;
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = larguraFoto * SIM.escala * dpr; cv.height = alturaFoto * SIM.escala * dpr; cv.style.width = larguraFoto * SIM.escala + 'px'; cv.style.height = alturaFoto * SIM.escala + 'px';
+  const c = cv.getContext('2d'); c.setTransform(SIM.escala * dpr, 0, 0, SIM.escala * dpr, 0, 0);
+  c.clearRect(0, 0, larguraFoto, alturaFoto);
+  if (SIM.img) c.drawImage(SIM.img, 0, 0);
+  const { x: tx, y: ty, width: w, height: h } = d.tela, cx = w / 2, cy = h / 2, redondo = d.forma === 'round';
+  c.save(); c.translate(tx, ty); c.beginPath(); redondo ? c.arc(cx, cy, w / 2, 0, Math.PI * 2) : c.rect(0, 0, w, h); c.clip();
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  const fonte = nome => { const f = d.fontes[nome] || { px: 16, peso: 400 }; return { css: `${f.peso >= 700 ? 700 : 400} ${f.px}px Roboto, Arial, sans-serif`, h: Math.round(f.px * 1.17) }; };
+  const texto = (t, x, y, f, cor, alinhar = 'center', largMax) => { c.font = f.css; c.fillStyle = cor; c.textAlign = alinhar; c.textBaseline = 'top';
+    if (largMax) { while (c.measureText(t).width > largMax && t.length > 3) t = t.slice(0, -2).replace(/…$/, '') + '…'; } c.fillText(t, x, y + (f.h - f.h / 1.17) / 2); };
+  const cor = x => '#' + x.toString(16).padStart(6, '0');
+  const dados = SIM.dados; const r = dados?.resumo || {};
+  // anel discreto
+  let pct = r.queimado > 0 ? Math.min(1, (r.comido || 0) / r.queimado) : 0;
+  if (redondo) { const esp = Math.max(2, Math.floor(w * 0.012)), raio = w / 2 - esp - 1; c.lineWidth = esp; c.strokeStyle = cor(0x26262A); c.beginPath(); c.arc(cx, cy, raio, 0, Math.PI * 2); c.stroke();
+    if (pct > 0.01) { c.strokeStyle = cor(0xF5A623); c.beginPath(); c.arc(cx, cy, raio, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct); c.stroke(); } }
+  const fT = fonte('xtiny'), fNum = fonte('large'), fNome = fonte('small');
+  if (SIM.menu) { simDesenharMenu(c, w, h, fonte, texto, cor); c.restore(); return; }
+  // mesma regra do relógio: cada linha cabe na largura da tela naquela altura (corda do círculo)
+  const corda = (y1, y2) => { if (!redondo) return w * 0.92; const rr = w / 2, dd = Math.max(Math.abs(y1 - cy), Math.abs(y2 - cy)); return dd >= rr ? 0 : 2 * Math.sqrt(rr * rr - dd * dd) * 0.92; };
+  const linha = (t, y, f, corTxt) => texto(t, cx, y, f, corTxt, 'center', corda(y, y + f.h));
+  const n = dados?.lanches.length || 0;
+  const yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97);
+  if (!n) { linha('ME MIMEI', cy - fT.h - fNome.h / 2, fT, cor(0xF5C23B)); linha(SIM.estado || 'Nenhum lanche', cy - fNome.h / 2, fNome, '#fff'); c.restore(); return; }
+  const l = dados.lanches[SIM.sel];
+  const linhasTexto = fT.h * 4 + fNome.h, disponivel = yFim - yIni;
+  let tam = Math.floor(w * 0.36); if (tam > disponivel - linhasTexto - 21) tam = Math.floor(disponivel - linhasTexto - 21); if (tam < 24) tam = 24;
+  const altBloco = Math.max(tam, fNum.h), espaco = (disponivel - linhasTexto - altBloco) / 7;
+  let y = yIni + espaco;
+  linha('ME MIMEI', y, fT, cor(0xF5C23B)); y += fT.h + espaco;
+  linha(`${r.saldo ?? '--'} kcal livres`, y, fT, cor(0x9A9AA0)); y += fT.h + espaco;
+  const fmt = v => { const s2 = Math.round(v * 10) / 10; return (Math.abs(s2 - Math.trunc(s2)) < 0.05 ? Math.trunc(s2) : s2.toFixed(1)).toString().replace('.', ','); };
+  const txt = fmt(l.pode) + 'x'; c.font = fNum.css; const largNum = c.measureText(txt).width, gap = Math.floor(w * 0.03);
+  const larg = corda(y, y + altBloco); if (tam + gap + largNum > larg) tam = Math.max(20, Math.floor(larg - gap - largNum));
+  const x0 = cx - (tam + gap + largNum) / 2, ic = SIM.icones[l.id];
+  if (ic) { const sc = Math.min(tam / ic.width, tam / ic.height); c.drawImage(ic, x0 + (tam - ic.width * sc) / 2, y + (altBloco - ic.height * sc) / 2, ic.width * sc, ic.height * sc); }
+  else { c.fillStyle = cor(0x2A2A2C); c.beginPath(); c.arc(x0 + tam / 2, y + altBloco / 2, tam / 2, 0, Math.PI * 2); c.fill(); }
+  texto(txt, x0 + tam + gap, y + (altBloco - fNum.h) / 2, fNum, cor(0xF5C23B), 'left');
+  y += altBloco + espaco;
+  { const larg = corda(y, y + fNome.h); let f = fNome; for (const nomeF of ['small', 'tiny', 'xtiny']) { f = fonte(nomeF); c.font = f.css; if (c.measureText(l.nome).width <= larg) break; }
+    texto(l.nome, cx, y + (fNome.h - f.h) / 2, f, '#fff', 'center', larg); } y += fNome.h + espaco;
+  { let det = `${l.kcal} kcal${l.porcao ? ' · ' + l.porcao : ''}`; c.font = fT.css; if (c.measureText(det).width > corda(y, y + fT.h)) det = `${l.kcal} kcal`; linha(det, y, fT, cor(0x9A9AA0)); } y += fT.h + espaco;
+  if (SIM.estado) linha(SIM.estado, y, fT, cor(0x9A9AA0));
+  else if (n <= 9) { const passo = Math.floor(w * 0.035), xp = cx - (n - 1) * passo / 2; for (let q = 0; q < n; q++) { c.fillStyle = q === SIM.sel ? cor(0xF5C23B) : cor(0x4A4A50); c.beginPath(); c.arc(xp + q * passo, y + fT.h / 2, q === SIM.sel ? 3 : 2, 0, Math.PI * 2); c.fill(); } }
+  else linha(`${SIM.sel + 1} / ${n}`, y, fT, cor(0x6A6A70));
+  c.restore();
+}
+/* menu no estilo Menu2 da Garmin: título em cima, item selecionado grande no meio */
+function simDesenharMenu(c, w, h, fonte, texto, cor) {
+  const m = SIM.menu, fTit = fonte('small'), fItem = fonte('medium'), fSub = fonte('xtiny');
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  texto(m.titulo, w / 2, h * 0.1, fTit, '#fff', 'center', w * 0.6);
+  c.fillStyle = cor(0x1FA3E3); c.fillRect(w * 0.2, h * 0.1 + fTit.h + 4, w * 0.6, 2);
+  const alt = h / 5; m.topo = Math.max(0, Math.min(m.i - 1, m.itens.length - 3));
+  for (let k = 0; k < 3 && m.topo + k < m.itens.length; k++) {
+    const idx = m.topo + k, it = m.itens[idx], yy = alt * (k + 1) + alt * 0.35, sel = idx === m.i;
+    if (sel) { c.fillStyle = cor(0x1C1C1E); c.fillRect(0, yy - 6, w, alt); }
+    texto(it.t, w / 2, yy, sel ? fItem : fTit, sel ? '#fff' : cor(0x8A8A90), 'center', w * 0.8);
+    if (it.s) texto(it.s, w / 2, yy + (sel ? fItem.h : fTit.h), fSub, cor(0x8A8A90), 'center', w * 0.7);
+  }
 }
