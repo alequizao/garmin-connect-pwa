@@ -459,9 +459,7 @@ case 'walkie_editar': {
 }
 case 'walkie_excluir': {
   exigeLogin(); $id = (int)($in['id'] ?? 0); walkieDono($id);
-  $st = db()->prepare("SELECT token FROM relogio_apps WHERE canal_id=? AND tipo='walkie'"); $st->execute([$id]);
-  foreach ($st->fetchAll(PDO::FETCH_COLUMN) as $t) @unlink(__DIR__ . '/app/builds/' . $t . '.prg');
-  foreach (["DELETE FROM walkie_mensagens WHERE canal_id=?", "DELETE FROM walkie_membros WHERE canal_id=?", "DELETE FROM relogio_apps WHERE canal_id=? AND tipo='walkie'", "DELETE FROM walkie_canais WHERE id=?"] as $q) db()->prepare($q)->execute([$id]);
+  foreach (["DELETE FROM walkie_mensagens WHERE canal_id=?", "DELETE FROM walkie_membros WHERE canal_id=?", "UPDATE relogio_apps SET canal_id=NULL WHERE canal_id=? AND tipo='walkie'", "DELETE FROM walkie_canais WHERE id=?"] as $q) db()->prepare($q)->execute([$id]);
   out(['ok' => true]);
 }
 case 'walkie_sair': {

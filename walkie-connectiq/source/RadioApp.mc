@@ -25,7 +25,7 @@ import Toybox.WatchUi;
 module Radio {
     const URL = "__URL__";     // gravado pelo compilador (appbuilder.py)
     const TOKEN = "__TOKEN__"; // gravado pelo compilador (appbuilder.py)
-    const VERSAO = "2.1.0";    // versão deste app (comparada com config.versao_app do servidor)
+    const VERSAO = "2.2.0";    // versão deste app (comparada com config.versao_app do servidor)
 
     function pedir(dados, cb) {
         dados["token"] = TOKEN;
@@ -56,7 +56,8 @@ class RadioApp extends Application.AppBase {
 class RadioFundo extends System.ServiceDelegate {
     function initialize() { ServiceDelegate.initialize(); }
     function onTemporalEvent() {
-        var ult = Application.Storage.getValue("ultimo");
+        var ult = Application.Storage.getValue("vistoGlobal");
+        if (ult == null) { ult = Application.Storage.getValue("ultimo"); }
         Radio.pedir({ "acao" => "receber", "desde" => (ult == null ? 0 : ult), "fundo" => 1 }, method(:resposta));
     }
     function resposta(code, data) {
@@ -80,6 +81,8 @@ class RadioFundo extends System.ServiceDelegate {
 
 // ---------- estado ----------
 const MAX_MSGS = 20;
+var canalId = null;     // canal aberto (null = principal escolhido pelo servidor)
+var canais = [];        // todos os canais da pessoa [{id, nome, ultimo_id, online}]
 var mensagens = [];
 var canal = "Walkie-Talkie";
 var estado = "Conectando...";
@@ -125,13 +128,22 @@ function iniciarTimer() {
 function buscar() {
     if ($.aguardando) { return; }
     $.aguardando = true;
-    Radio.pedir({ "acao" => "receber", "desde" => $.ultimoId, "limite" => MAX_MSGS }, new Method($, :recebido));
+    var d = { "acao" => "receber", "desde" => $.ultimoId, "limite" => MAX_MSGS };
+    if ($.canalId != null) { d["canal"] = $.canalId; }
+    Radio.pedir(d, new Method($, :recebido));
 }
 
 function recebido(code, data) {
     $.aguardando = false;
     if (code != 200 || data == null) { $.estado = "Sem conexao (" + code + ")"; WatchUi.requestUpdate(); return; }
     if (data["canal"] != null) { $.canal = data["canal"]; }
+    if (data["canais"] != null) {
+        $.canais = data["canais"];
+        var maior = 0;
+        for (var c = 0; c < $.canais.size(); c++) { if ($.canais[c]["ultimo_id"] != null && $.canais[c]["ultimo_id"] > maior) { maior = $.canais[c]["ultimo_id"]; } }
+        Application.Storage.setValue("vistoGlobal", maior);
+    }
+    if (data["canal_id"] != null && $.canalId == null) { $.canalId = data["canal_id"]; Application.Storage.setValue("canal", $.canalId); }
     if (data["frases"] != null && data["frases"].size() > 0) { $.frases = data["frases"]; Application.Storage.setValue("frases", data["frases"]); }
     var cfg = data["config"];
     if (cfg != null) {
@@ -193,6 +205,7 @@ function enviarTipo(texto, sos, atencao) {
     if (texto == null || texto.length() == 0) { return; }
     $.estado = "Enviando...";
     var d = { "acao" => "enviar", "texto" => texto, "sos" => (sos ? 1 : 0), "tipo" => (atencao ? "atencao" : "texto") };
+    if ($.canalId != null) { d["canal"] = $.canalId; }
     try {
         var pi = Position.getInfo();
         if (pi != null && pi.position != null && pi.accuracy != null && pi.accuracy != Position.QUALITY_NOT_AVAILABLE) {
@@ -210,12 +223,23 @@ function enviado(code, data) {
     buscar();
 }
 
+function trocarCanal(id) {
+    if (id == $.canalId) { return; }
+    $.canalId = id; Application.Storage.setValue("canal", id);
+    $.mensagens = []; $.ultimoId = 0; $.carregado = false; $.deslocamento = 0; $.frases = null;
+    for (var c = 0; c < $.canais.size(); c++) { if ($.canais[c]["id"] == id) { $.canal = $.canais[c]["nome"]; } }
+    $.estado = "Abrindo canal...";
+    WatchUi.requestUpdate();
+    buscar();
+}
+
 function podeEscrever() { return WatchUi has :TextPicker; }
 
 class RadioView extends WatchUi.View {
     function initialize() { View.initialize(); }
     function onShow() {
         if ($.frases == null) { $.frases = Application.Storage.getValue("frases"); }
+        if ($.canalId == null) { $.canalId = Application.Storage.getValue("canal"); }
         iniciarTimer();
         buscar();
     }
@@ -227,7 +251,11 @@ class RadioView extends WatchUi.View {
         dc.setColor(0xFB8C1E, Graphics.COLOR_TRANSPARENT);
         dc.drawText(w / 2, h * 0.07, f, "WALKIE-TALKIE", Graphics.TEXT_JUSTIFY_CENTER);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(w / 2, h * 0.07 + fh - 2, f, $.canal, Graphics.TEXT_JUSTIFY_CENTER);
+        var nomeCanal = $.canal;
+        if ($.canais.size() > 1) {
+            for (var c = 0; c < $.canais.size(); c++) { if ($.canais[c]["id"] == $.canalId) { nomeCanal = $.canal + " (" + (c + 1) + "/" + $.canais.size() + ")"; } }
+        }
+        dc.drawText(w / 2, h * 0.07 + fh - 2, f, nomeCanal, Graphics.TEXT_JUSTIFY_CENTER);
         var topo = h * 0.07 + fh * 2 + 2;
         dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
         dc.fillRectangle(w * 0.2, topo, w * 0.6, 2);
@@ -303,6 +331,7 @@ class RadioDelegate extends WatchUi.BehaviorDelegate {
             if (m["meu"] != 1) { titulo = "Responder " + m["autor"]; }
         }
         var menu = new WatchUi.Menu2({ :title => titulo });
+        if ($.canais.size() > 1) { menu.addItem(new WatchUi.MenuItem("Canais (" + $.canais.size() + ")", "atual: " + $.canal, "__CANAIS__", null)); }
         if (podeEscrever()) { menu.addItem(new WatchUi.MenuItem("Escrever", "teclado do relogio", "__ESCREVER__", null)); }
         var fr = $.frases;
         if (fr == null) { fr = Application.Storage.getValue("frases"); }
@@ -321,6 +350,8 @@ class RadioMenuDelegate extends WatchUi.Menu2InputDelegate {
         var id = item.getId();
         WatchUi.popView(WatchUi.SLIDE_DOWN);
         if (id.equals("__ATUALIZAR__")) { buscar(); return; }
+        if (id.equals("__CANAIS__")) { abrirCanais(); return; }
+        if (id instanceof Lang.Number) { trocarCanal(id); return; }
         if (id.equals("__SOS__")) { enviar("SOS! Preciso de ajuda", true); return; }
         if (id.equals("__ATENCAO__")) { enviarTipo("Atencao!", false, true); return; }
         if (id.equals("__ESCREVER__")) {
@@ -340,4 +371,15 @@ class RadioTextoDelegate extends WatchUi.TextPickerDelegate {
         return true;
     }
     function onCancel() { return true; }
+}
+
+// lista de todos os canais da pessoa (o principal vem primeiro)
+function abrirCanais() {
+    var menu = new WatchUi.Menu2({ :title => "Canais" });
+    for (var c = 0; c < $.canais.size(); c++) {
+        var k = $.canais[c];
+        var sub = (k["online"] != null ? k["online"] + " on-line" : "") + (c == 0 ? " · principal" : "") + (k["id"] == $.canalId ? " · aberto" : "");
+        menu.addItem(new WatchUi.MenuItem(k["nome"], sub, k["id"], null));
+    }
+    WatchUi.pushView(menu, new RadioMenuDelegate(), WatchUi.SLIDE_UP);
 }
