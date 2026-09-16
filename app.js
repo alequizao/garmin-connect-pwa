@@ -792,10 +792,10 @@ const AoVivo = {
           this.ultimo = { ...j, em: Date.now() }; this.pintar();
           const mudou = this.versao && j.versao !== this.versao; this.versao = j.versao;
           const livre = $('#modal').hidden && !Gravador.a && !document.activeElement?.matches('input,select,textarea');
-          if (mudou && livre && ['inicio', 'saude', 'atividades', 'estatisticas', 'relatorios', 'metrica'].includes(S.tela)) {
+          if (mudou && livre && (['inicio', 'saude', 'atividades', 'estatisticas', 'relatorios', 'metrica', 'dispositivo', 'mais'].includes(S.tela) || (S.tela === 'app' && !/^(sim|walkie)/.test(String(S.arg || ''))))) {
             const y = window.scrollY;
             if (S.tela === 'inicio') await renderInicio(true);
-            else { if (S.tela === 'saude') S.dash = await apiGet('dashboard').catch(() => S.dash); await ({ saude: renderSaude, atividades: renderAtividades, estatisticas: renderEstatisticas, relatorios: renderRelatorios, metrica: renderMetricaHistorico }[S.tela])(S.tela === 'metrica' ? S.arg : undefined); }
+            else { if (S.tela === 'saude') S.dash = await apiGet('dashboard').catch(() => S.dash); await TELAS()[S.tela](S.arg); }
             requestAnimationFrame(() => window.scrollTo(0, y));
           }
         }
@@ -813,7 +813,7 @@ async function renderApp(arg) {
   clearTimeout(appTimer); clearTimeout(WK.timer);
   if (arg === 'walkie') return renderWalkie();
   if (arg === 'mimei') return renderMimei();
-  if (arg && String(arg).startsWith('sim')) return renderSimulador(String(arg).split('-')[1]);
+  if (arg && String(arg).startsWith('sim')) return renderSimulador(arg);
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}
   <div class="card"><h3>📍 Rastreador — gerar app com dispositivo próprio</h3>
    <div class="mini" style="margin-bottom:10px">Cada pessoa gera o seu app. Ele já sai configurado para enviar bateria, GPS, frequência cardíaca, passos, Body Battery e estresse para o dispositivo escolhido no Traccar.</div>
@@ -1116,149 +1116,392 @@ function renderMais() {
   <section class="w mais-perfil click" data-tela="perfil"><div class="w-corpo"><div class="avatar">${esc((u.nome || '?')[0].toUpperCase())}</div><div><b>${esc(u.nome || '')}</b><span>${esc(u.email || '')}</span></div><span class="seta">›</span></div></section>
   ${grupos.map(([titulo, itens]) => `<div class="mais-grupo">${titulo}</div><section class="w"><div class="lista mais-lista">${itens.map(([tela, ic, nome, desc, arg]) => `<div class="item" data-tela="${tela}"${arg ? ` data-arg="${arg}"` : ''}><div class="ic">${ic}</div><div class="info"><b>${nome}</b><span>${desc}</span></div><span class="seta">›</span></div>`).join('')}</div></section>`).join('')}
   <section class="w"><div class="lista mais-lista"><div class="item" id="maisSair"><div class="ic verm">⏻</div><div class="info"><b>Sair</b><span>Desconectar desta conta</span></div></div></div></section>
-  <div class="mini centro" style="margin:10px 0">Garmin Connect (clone) v${window.APP_VERSAO}</div>${tabbar('mais')}</div>`;
+  <div class="mais-grupo">Desenvolvedor</div><section class="w"><div class="lista mais-lista dev">
+    <a class="item" href="https://instagram.com/alequizao" target="_blank" rel="noopener"><div class="ic">📸</div><div class="info"><b>Instagram</b><span>@alequizao</span></div><span class="seta">›</span></a>
+    <a class="item" href="https://wa.me/5582988717072" target="_blank" rel="noopener"><div class="ic">💬</div><div class="info"><b>WhatsApp</b><span>+55 82 98871-7072</span></div><span class="seta">›</span></a>
+    <a class="item" href="mailto:alequizao.dev@gmail.com"><div class="ic">✉️</div><div class="info"><b>E-mail</b><span>alequizao.dev@gmail.com</span></div><span class="seta">›</span></a>
+    <a class="item" href="https://alequizao.com" target="_blank" rel="noopener"><div class="ic">🌐</div><div class="info"><b>Site</b><span>alequizao.com</span></div><span class="seta">›</span></a>
+    <a class="item" href="https://github.com/alequizao" target="_blank" rel="noopener"><div class="ic">🐙</div><div class="info"><b>GitHub</b><span>github.com/alequizao</span></div><span class="seta">›</span></a>
+  </div></section>
+  <div class="mini centro" style="margin:10px 0">Garmin Connect (clone) v${window.APP_VERSAO} · desenvolvido por Alequizao</div>${tabbar('mais')}</div>`;
   $('#maisSair').onclick = async () => { if (confirm('Sair da conta?')) { await api('sair', {}); store.del('usuario'); store.del('dash'); history.replaceState(null, '', location.pathname); renderLogin(); } };
 }
 
 /* ---------- APPS › SIMULADOR (relógio real desenhado com as medidas do Connect IQ SDK) ---------- */
-const SIM = { dev: null, img: null, icones: {}, dados: null, sel: 0, menu: null, estado: '', canvas: null, escala: 1 };
-async function renderSimulador(modelo) {
+// Cada usuário logado conta como um relógio próprio (token "simulador"), então duas pessoas testam o Walkie-Talkie entre si.
+const SIM = { dev: null, img: null, app: 'mimei', canvas: null, escala: 1, menu: null, timer: null,
+  mimei: { dados: null, sel: 0, icones: {}, estado: '' },
+  walkie: { token: null, canal: null, canais: [], mensagens: [], ultimoId: 0, desloc: 0, frases: null, estado: 'Conectando...', cfg: null },
+  rastreador: { ativo: true, leitura: null, estado: '' }, sobre: null };
+async function renderSimulador(arg) {
+  const [modeloArg, appArg] = String(arg || '').split('-').slice(1);
+  if (appArg) SIM.app = appArg;
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sim')}
   <section class="w"><header class="w-top"><span class="w-ico">🖥️</span><span class="w-tit">Simulador do relógio</span></header><div class="w-corpo">
-    <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist>
-    <select id="simApp"><option value="mimei">🍺 ME MIMEI</option></select><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
+    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
+    <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
     <div class="sim-palco"><canvas id="simCanvas"></canvas></div>
-    <div class="mini centro">Use os botões do relógio (clique neles), deslize na tela ou o teclado: ↑ ↓ ← → trocam, Enter = START, Esc = voltar. Os dados e ações são os seus de verdade.</div>
+    <div class="mini centro" id="simDica"></div>
   </div></section>${tabbar('app')}</div>`;
   SIM.canvas = $('#simCanvas');
   const modelos = await fetch('app/modelos.json?v=2').then(r => r.json()).catch(() => []);
   $('#simModelos').innerHTML = modelos.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join('');
   const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)); };
+  const rota = () => history.replaceState(null, '', `#/app/sim-${SIM.dev?.id || 'fr165'}-${SIM.app}`);
   const carregarModelo = async id => {
     SIM.dev = await fetch(`app/sim/${id}.json`).then(r => r.json());
     SIM.img = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => ok(null); i.src = `app/sim/${SIM.dev.imagem}`; });
-    SIM.icones = {}; simDesenhar(); simCarregarIcones();
+    SIM.mimei.icones = {}; rota(); simDesenhar(); simCarregarIcones();
   };
-  $('#simModelo').onchange = () => { const m = achar($('#simModelo').value); if (m) { carregarModelo(m.id); history.replaceState(null, '', '#/app/sim-' + m.id); } };
-  $('#simFoto').onclick = () => { const a = document.createElement('a'); a.download = `me-mimei-${SIM.dev?.id || 'relogio'}.png`; a.href = SIM.canvas.toDataURL('image/png'); a.click(); };
-  await simAtualizarDados();
-  const inicial = (modelo && modelos.find(m => m.id === modelo)) || modelos.find(m => m.id === 'fr165') || modelos[0];
+  document.querySelectorAll('[data-simapp]').forEach(b => b.onclick = () => { SIM.app = b.dataset.simapp; SIM.menu = null; document.querySelectorAll('[data-simapp]').forEach(x => x.classList.toggle('ativo', x === b)); rota(); simIniciarApp(); });
+  $('#simModelo').onchange = () => { const m = achar($('#simModelo').value); if (m) carregarModelo(m.id); };
+  $('#simFoto').onclick = () => { const a = document.createElement('a'); a.download = `${SIM.app}-${SIM.dev?.id || 'relogio'}.png`; a.href = SIM.canvas.toDataURL('image/png'); a.click(); };
+  const inicial = (modeloArg && modelos.find(m => m.id === modeloArg)) || modelos.find(m => m.id === 'fr165') || modelos[0];
   $('#simModelo').value = `${inicial.nome} (${inicial.id})`;
   await carregarModelo(inicial.id);
-  // interação: clique nas teclas, deslizar na tela e teclado
+  simIniciarApp();
   let ini = null;
   SIM.canvas.onpointerdown = e => { ini = simPonto(e); };
   SIM.canvas.onpointerup = e => {
-    const p = simPonto(e); if (!ini) return; const dx = p.x - ini.x, dy = p.y - ini.y; ini = null;
-    const t = SIM.dev.tela;
-    if (Math.hypot(dx, dy) > 30 && p.x > t.x - 20 && p.x < t.x + t.width + 20) return simTecla(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'next' : 'prev') : (dy < 0 ? 'next' : 'prev'));
-    for (const [k, r] of Object.entries(SIM.dev.teclas || {})) if (p.x >= r.x - 10 && p.x <= r.x + r.width + 10 && p.y >= r.y - 10 && p.y <= r.y + r.height + 10) return simTecla(k === 'enter' ? 'start' : k === 'esc' ? 'back' : k === 'up' ? 'prev' : k === 'down' ? 'next' : k);
+    const p = simPonto(e); if (!ini || !SIM.dev) return; const dx = p.x - ini.x, dy = p.y - ini.y; ini = null; const t = SIM.dev.tela;
+    if (Math.hypot(dx, dy) > 30) return simTecla(Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 'next' : 'prev') : (dy < 0 ? 'next' : 'prev'));
+    for (const [k, r] of Object.entries(SIM.dev.teclas || {})) if (p.x >= r.x - 10 && p.x <= r.x + r.width + 10 && p.y >= r.y - 10 && p.y <= r.y + r.height + 10) return simTecla({ enter: 'start', esc: 'back', up: 'prev', down: 'next' }[k] || k);
     if (SIM.dev.toque && p.x > t.x && p.x < t.x + t.width && p.y > t.y && p.y < t.y + t.height) simToque(p.y - t.y);
   };
-  document.onkeydown = e => { if (S.tela !== 'app' || !$('#simCanvas') || /input|select|textarea/i.test(document.activeElement?.tagName)) return;
+  document.onkeydown = e => { if (!$('#simCanvas') || /input|select|textarea/i.test(document.activeElement?.tagName)) return;
     const m = { ArrowDown: 'next', ArrowRight: 'next', ArrowUp: 'prev', ArrowLeft: 'prev', Enter: 'start', Escape: 'back', Backspace: 'back' }[e.key]; if (m) { e.preventDefault(); simTecla(m); } };
 }
 function simPonto(e) { const r = SIM.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / SIM.escala, y: (e.clientY - r.top) / SIM.escala }; }
-async function simAtualizarDados() {
+async function simIniciarApp() {
+  clearTimeout(SIM.timer); SIM.menu = null; SIM.sobre = null;
+  const dicas = { mimei: 'Deslize ou use ↑ ↓ ← → para trocar de lanche; START (Enter) abre "Comi" e "Desfazer". Ações valem de verdade.',
+    walkie: 'Você conta como um relógio próprio: abra o simulador em outra conta (ex.: jeovana) para conversar. START abre mensagens rápidas, escrever, chamar atenção, SOS e canais.',
+    rastreador: 'Mostra a última leitura real do seu relógio. O simulador não envia posição nem bateria (para não criar dados falsos). MENU (segurar UP) abre Sobre.' };
+  $('#simDica') && ($('#simDica').textContent = dicas[SIM.app]);
+  if (SIM.app === 'mimei') await simMimeiDados();
+  if (SIM.app === 'walkie') await simWalkieIniciar();
+  if (SIM.app === 'rastreador') await simRastreadorDados();
+  simDesenhar();
+}
+/* ---- ME MIMEI ---- */
+async function simMimeiDados() {
   const j = await apiGet('mimei_estado').catch(() => null); if (!j?.ok) return;
   const r = j.resumo; j.lanches.forEach(l => l.pode = l.kcal > 0 ? Math.round(r.saldo / l.kcal * 10) / 10 : 0);
   const ult = j.consumo[0]; r.ultimo = ult ? `${String(+ult.qtd).replace('.', ',')}x ${ult.nome}` : null;
-  SIM.dados = j; if (SIM.sel >= j.lanches.length) SIM.sel = 0; SIM.estado = ''; simCarregarIcones(); simDesenhar();
+  const M = SIM.mimei; M.dados = j; if (M.sel >= j.lanches.length) M.sel = 0; M.estado = ''; simCarregarIcones(); simDesenhar();
 }
-function simCarregarIcones() {
-  (SIM.dados?.lanches || []).forEach(l => { if (!l.icone || SIM.icones[l.id]) return; const i = new Image(); i.onload = () => { SIM.icones[l.id] = i; simDesenhar(); }; i.src = l.icone; SIM.icones[l.id] = null; });
+function simCarregarIcones() { const M = SIM.mimei; (M.dados?.lanches || []).forEach(l => { if (!l.icone || l.id in M.icones) return; M.icones[l.id] = null; const i = new Image(); i.onload = () => { M.icones[l.id] = i; simDesenhar(); }; i.src = l.icone; }); }
+/* ---- WALKIE-TALKIE (fala com walkie.php como um relógio de verdade) ---- */
+async function simWalkiePedir(dados) {
+  const W = SIM.walkie; if (!W.token) W.token = (await api('sim_token', { tipo: 'walkie' })).token;
+  const r = await fetch('walkie.php', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: W.token, versao: 'simulador', ...dados }) });
+  return r.ok ? r.json() : { ok: false, status: r.status };
 }
-function simTecla(t) {
-  const n = SIM.dados?.lanches.length || 0;
-  if (SIM.menu) {
-    if (t === 'next') SIM.menu.i = (SIM.menu.i + 1) % SIM.menu.itens.length;
-    else if (t === 'prev') SIM.menu.i = (SIM.menu.i - 1 + SIM.menu.itens.length) % SIM.menu.itens.length;
-    else if (t === 'back') SIM.menu = null;
-    else if (t === 'start') simEscolher(SIM.menu.itens[SIM.menu.i]);
-  } else {
-    if (t === 'next' && n) SIM.sel = (SIM.sel + 1) % n;
-    else if (t === 'prev' && n) SIM.sel = (SIM.sel - 1 + n) % n;
-    else if ((t === 'start' || t === 'menu') && n) simAbrirMenu();
+async function simWalkieIniciar() { const W = SIM.walkie; W.mensagens = []; W.ultimoId = 0; W.desloc = 0; await simWalkieBuscar(); }
+async function simWalkieBuscar() {
+  if (SIM.app !== 'walkie' || !$('#simCanvas')) return; const W = SIM.walkie; clearTimeout(SIM.timer);
+  const d = { acao: 'receber', desde: W.ultimoId, limite: 20 }; if (W.canal) d.canal = W.canal;
+  const j = await simWalkiePedir(d).catch(() => null);
+  if (!j?.ok) W.estado = 'Sem conexao';
+  else {
+    W.canais = j.canais || []; if (!W.canal && j.canal_id) W.canal = j.canal_id; W.nomeCanal = j.canal; W.frases = j.frases; W.cfg = j.config;
+    W.estado = j.online != null ? `${j.online} no canal` : 'Online';
+    const novas = (j.mensagens || []).filter(m => m.id > W.ultimoId);
+    if (novas.length) { W.mensagens.push(...novas); W.mensagens = W.mensagens.slice(-20); W.ultimoId = novas[novas.length - 1].id; W.desloc = 0;
+      if (W.carregado && novas.some(m => !m.meu)) { const u = novas[novas.length - 1]; simVibrar(u.atencao || u.sos ? 10 : 1); } }
+    W.carregado = true;
   }
+  simDesenhar(); SIM.timer = setTimeout(simWalkieBuscar, ((W.cfg?.intervalo_s) || 8) * 1000);
+}
+function simVibrar(seg) { const cv = SIM.canvas; if (!cv) return; cv.classList.add('sim-vibra'); navigator.vibrate?.(seg > 1 ? Array(10).fill([700, 300]).flat() : [200, 100, 200]); setTimeout(() => cv.classList.remove('sim-vibra'), seg * 1000); }
+async function simWalkieEnviar(texto, tipo = 'texto') {
+  const W = SIM.walkie; W.estado = 'Enviando...'; simDesenhar();
+  const d = { acao: 'enviar', texto, tipo, sos: tipo === 'sos' ? 1 : 0 }; if (W.canal) d.canal = W.canal;
+  const r = await simWalkiePedir(d).catch(() => null); W.estado = r?.ok ? 'Enviado' : 'Falha no envio'; simWalkieBuscar();
+}
+/* ---- RASTREADOR (somente exibição da última leitura real) ---- */
+async function simRastreadorDados() {
+  const j = await apiGet('ao_vivo').catch(() => null); const R = SIM.rastreador; R.leitura = j?.relogio || null;
+  R.estado = R.leitura ? `Ultima leitura real ha ${Math.max(0, Math.round((j.segundos || 0) / 60))} min` : 'Sem leituras do relogio';
+  simDesenhar(); clearTimeout(SIM.timer); SIM.timer = setTimeout(() => SIM.app === 'rastreador' && simRastreadorDados(), 20000);
+}
+/* ---- teclas e menus ---- */
+function simTecla(t) {
+  if (SIM.sobre) { if (t === 'next') SIM.sobre.deslocamento++; else if (t === 'prev') SIM.sobre.deslocamento = Math.max(0, SIM.sobre.deslocamento - 1); else if (t === 'back') SIM.sobre = null; return simDesenhar(); }
+  if (SIM.app === 'rastreador' && t === 'menu') { SIM.sobre = { app: 'Rastreador', versao: '', deslocamento: 0 }; return simDesenhar(); }
+  if (SIM.menu) {
+    const m = SIM.menu;
+    if (t === 'next') m.i = (m.i + 1) % m.itens.length; else if (t === 'prev') m.i = (m.i - 1 + m.itens.length) % m.itens.length;
+    else if (t === 'back') SIM.menu = m.pai || null; else if (t === 'start') simEscolher(m.itens[m.i]);
+    return simDesenhar();
+  }
+  if (SIM.app === 'mimei') { const M = SIM.mimei, n = M.dados?.lanches.length || 0;
+    if (t === 'next' && n) M.sel = (M.sel + 1) % n; else if (t === 'prev' && n) M.sel = (M.sel - 1 + n) % n; else if ((t === 'start' || t === 'menu') && n) simMenuMimei(); }
+  if (SIM.app === 'walkie') { const W = SIM.walkie;
+    if (t === 'prev') W.desloc = Math.min(W.desloc + 1, Math.max(0, W.mensagens.length - 1)); else if (t === 'next') W.desloc = Math.max(0, W.desloc - 1); else if (t === 'start' || t === 'menu') simMenuWalkie(); }
+  if (SIM.app === 'rastreador' && t === 'start') { SIM.rastreador.ativo = !SIM.rastreador.ativo; }
   simDesenhar();
 }
-function simToque(yTela) { if (SIM.menu) { const alt = SIM.dev.tela.height / 5; const i = Math.floor((yTela - alt) / alt) + SIM.menu.topo; if (i >= 0 && i < SIM.menu.itens.length) { SIM.menu.i = i; simEscolher(SIM.menu.itens[i]); } } else simAbrirMenu(); simDesenhar(); }
-function simAbrirMenu() {
-  const l = SIM.dados.lanches[SIM.sel], r = SIM.dados.resumo;
+function simToque(yTela) {
+  if (!SIM.menu) { if (SIM.app !== 'rastreador') simTecla('start'); return; }
+  const m = SIM.menu, alt = SIM.dev.tela.height / 5, i = Math.floor((yTela - alt) / alt) + m.topo;
+  if (i >= 0 && i < m.itens.length) { m.i = i; simEscolher(m.itens[i]); }
+}
+function simMenuMimei() {
+  const M = SIM.mimei, l = M.dados.lanches[M.sel], r = M.dados.resumo;
   const itens = [{ t: 'Comi 1', s: l.porcao || `${l.kcal} kcal`, q: 1 }, { t: 'Comi meia', s: `${Math.round(l.kcal / 2)} kcal`, q: 0.5 }, { t: 'Comi 2', s: `${l.kcal * 2} kcal`, q: 2 }];
   if (r.ultimo) itens.push({ t: 'Desfazer ultimo', s: r.ultimo, a: 'desfazer' });
-  itens.push({ t: 'Atualizar', s: 'v1.4.0', a: 'atualizar' });
+  itens.push({ t: 'Atualizar', s: 'v1.8.0', a: 'atualizar' }, { t: 'Sobre', s: 'desenvolvedor', a: 'sobre' });
   SIM.menu = { titulo: l.nome, itens, i: 0, topo: 0 };
 }
-async function simEscolher(it) {
-  const l = SIM.dados.lanches[SIM.sel]; SIM.menu = null; SIM.estado = it.a === 'desfazer' ? 'Desfazendo...' : it.a === 'atualizar' ? 'Atualizando...' : 'Registrando...'; simDesenhar();
-  try { if (it.q) await api('mimei_comi', { id: l.id, qtd: it.q }); else if (it.a === 'desfazer') await api('mimei_desfazer', {}); } catch (x) { toast(x.message); }
-  await simAtualizarDados();
+function simMenuWalkie() {
+  const W = SIM.walkie, itens = [];
+  if (W.canais.length > 1) itens.push({ t: `Canais (${W.canais.length})`, s: `atual: ${W.nomeCanal || ''}`, a: 'canais' });
+  itens.push({ t: 'Escrever', s: 'teclado do relogio', a: 'escrever' });
+  (W.frases || ['OK', 'Chegando', 'Me espera', 'Estou bem']).forEach(f => itens.push({ t: f, a: 'frase' }));
+  itens.push({ t: 'Chamar atencao', s: 'vibra 10 s nos outros', a: 'atencao' }, { t: 'SOS', s: 'envia sua localizacao', a: 'sos' }, { t: 'Atualizar', s: 'simulador', a: 'atualizar' }, { t: 'Sobre', s: 'desenvolvedor', a: 'sobre' });
+  SIM.menu = { titulo: 'Enviar', itens, i: 0, topo: 0 };
 }
-/* réplica do onUpdate do app (MeMimeiApp.mc v1.3) em canvas */
+async function simEscolher(it) {
+  const pai = SIM.menu; SIM.menu = null;
+  if (it.a === 'sobre') { SIM.sobre = { app: SIM.app === 'mimei' ? 'ME MIMEI' : 'Walkie-Talkie', versao: SIM.app === 'mimei' ? '1.8.0' : '2.3.2', deslocamento: 0 }; return simDesenhar(); }
+  if (SIM.app === 'mimei') {
+    const M = SIM.mimei, l = M.dados.lanches[M.sel]; M.estado = it.a === 'desfazer' ? 'Desfazendo...' : it.a === 'atualizar' ? 'Atualizando...' : 'Registrando...'; simDesenhar();
+    try { if (it.q) await api('mimei_comi', { id: l.id, qtd: it.q }); else if (it.a === 'desfazer') await api('mimei_desfazer', {}); } catch (x) { toast(x.message); }
+    return simMimeiDados();
+  }
+  if (SIM.app === 'walkie') {
+    const W = SIM.walkie;
+    if (it.a === 'canais') { SIM.menu = { titulo: 'Canais', pai, i: 0, topo: 0, itens: W.canais.map((c, i) => ({ t: c.nome, s: `${c.online} on-line${i === 0 ? ' · principal' : ''}${c.id == W.canal ? ' · aberto' : ''}`, a: 'abrircanal', id: c.id })) }; return simDesenhar(); }
+    if (it.a === 'abrircanal') { W.canal = it.id; return simWalkieIniciar(); }
+    if (it.a === 'escrever') { const t = prompt('Mensagem (até 120 letras):'); if (t && t.trim()) simWalkieEnviar(t.trim().slice(0, 120)); return; }
+    if (it.a === 'frase') return simWalkieEnviar(it.t);
+    if (it.a === 'atencao') return simWalkieEnviar('Atencao!', 'atencao');
+    if (it.a === 'sos') return simWalkieEnviar('SOS! Preciso de ajuda', 'sos');
+    return simWalkieBuscar();
+  }
+}
+/* ---- desenho ---- */
 function simDesenhar() {
   const d = SIM.dev, cv = SIM.canvas; if (!d || !cv) return;
   const larguraFoto = SIM.img ? SIM.img.width : d.tela.width + 2 * d.tela.x, alturaFoto = SIM.img ? SIM.img.height : d.tela.height + 2 * d.tela.y;
-  const max = Math.min(460, cv.parentElement.clientWidth); SIM.escala = max / larguraFoto;
+  SIM.escala = Math.min(460, cv.parentElement.clientWidth) / larguraFoto;
   const dpr = window.devicePixelRatio || 1;
   cv.width = larguraFoto * SIM.escala * dpr; cv.height = alturaFoto * SIM.escala * dpr; cv.style.width = larguraFoto * SIM.escala + 'px'; cv.style.height = alturaFoto * SIM.escala + 'px';
-  const c = cv.getContext('2d'); c.setTransform(SIM.escala * dpr, 0, 0, SIM.escala * dpr, 0, 0);
-  c.clearRect(0, 0, larguraFoto, alturaFoto);
+  const c = cv.getContext('2d'); c.setTransform(SIM.escala * dpr, 0, 0, SIM.escala * dpr, 0, 0); c.clearRect(0, 0, larguraFoto, alturaFoto);
   if (SIM.img) c.drawImage(SIM.img, 0, 0);
-  const { x: tx, y: ty, width: w, height: h } = d.tela, cx = w / 2, cy = h / 2, redondo = d.forma === 'round';
-  c.save(); c.translate(tx, ty); c.beginPath(); redondo ? c.arc(cx, cy, w / 2, 0, Math.PI * 2) : c.rect(0, 0, w, h); c.clip();
+  const { x: tx, y: ty, width: w, height: h } = d.tela, redondo = d.forma === 'round';
+  c.save(); c.translate(tx, ty); c.beginPath(); redondo ? c.arc(w / 2, h / 2, w / 2, 0, Math.PI * 2) : c.rect(0, 0, w, h); c.clip();
   c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
   const fonte = nome => { const f = d.fontes[nome] || { px: 16, peso: 400 }; return { css: `${f.peso >= 700 ? 700 : 400} ${f.px}px Roboto, Arial, sans-serif`, h: Math.round(f.px * 1.17) }; };
-  const texto = (t, x, y, f, cor, alinhar = 'center', largMax) => { c.font = f.css; c.fillStyle = cor; c.textAlign = alinhar; c.textBaseline = 'top';
-    if (largMax) { while (c.measureText(t).width > largMax && t.length > 3) t = t.slice(0, -2).replace(/…$/, '') + '…'; } c.fillText(t, x, y + (f.h - f.h / 1.17) / 2); };
   const cor = x => '#' + x.toString(16).padStart(6, '0');
-  const dados = SIM.dados; const r = dados?.resumo || {};
-  // anel discreto
-  let pct = r.queimado > 0 ? Math.min(1, (r.comido || 0) / r.queimado) : 0;
-  if (redondo) { const esp = Math.max(2, Math.floor(w * 0.012)), raio = w / 2 - esp - 1; c.lineWidth = esp; c.strokeStyle = cor(0x26262A); c.beginPath(); c.arc(cx, cy, raio, 0, Math.PI * 2); c.stroke();
-    if (pct > 0.01) { c.strokeStyle = cor(0xF5A623); c.beginPath(); c.arc(cx, cy, raio, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct); c.stroke(); } }
-  const fT = fonte('xtiny'), fNum = fonte('large'), fNome = fonte('small');
-  if (SIM.menu) { simDesenharMenu(c, w, h, fonte, texto, cor); c.restore(); return; }
-  // mesma regra do relógio: cada linha cabe na largura da tela naquela altura (corda do círculo)
-  const corda = (y1, y2) => { if (!redondo) return w * 0.92; const rr = w / 2, dd = Math.max(Math.abs(y1 - cy), Math.abs(y2 - cy)); return dd >= rr ? 0 : 2 * Math.sqrt(rr * rr - dd * dd) * 0.92; };
-  const linha = (t, y, f, corTxt) => texto(t, cx, y, f, corTxt, 'center', corda(y, y + f.h));
-  const n = dados?.lanches.length || 0;
-  const yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97);
-  if (!n) { linha('ME MIMEI', cy - fT.h - fNome.h / 2, fT, cor(0xF5C23B)); linha(SIM.estado || 'Nenhum lanche', cy - fNome.h / 2, fNome, '#fff'); c.restore(); return; }
-  const l = dados.lanches[SIM.sel];
-  const linhasTexto = fT.h * 4 + fNome.h, disponivel = yFim - yIni;
-  let tam = Math.floor(w * 0.36); if (tam > disponivel - linhasTexto - 21) tam = Math.floor(disponivel - linhasTexto - 21); if (tam < 24) tam = 24;
-  const altBloco = Math.max(tam, fNum.h), espaco = (disponivel - linhasTexto - altBloco) / 7;
-  let y = yIni + espaco;
-  linha('ME MIMEI', y, fT, cor(0xF5C23B)); y += fT.h + espaco;
-  linha(`${r.saldo ?? '--'} kcal livres`, y, fT, cor(0x9A9AA0)); y += fT.h + espaco;
-  const fmt = v => { const s2 = Math.round(v * 10) / 10; return (Math.abs(s2 - Math.trunc(s2)) < 0.05 ? Math.trunc(s2) : s2.toFixed(1)).toString().replace('.', ','); };
-  const txt = fmt(l.pode) + 'x'; c.font = fNum.css; const largNum = c.measureText(txt).width, gap = Math.floor(w * 0.03);
-  const larg = corda(y, y + altBloco); if (tam + gap + largNum > larg) tam = Math.max(20, Math.floor(larg - gap - largNum));
-  const x0 = cx - (tam + gap + largNum) / 2, ic = SIM.icones[l.id];
-  if (ic) { const sc = Math.min(tam / ic.width, tam / ic.height); c.drawImage(ic, x0 + (tam - ic.width * sc) / 2, y + (altBloco - ic.height * sc) / 2, ic.width * sc, ic.height * sc); }
-  else { c.fillStyle = cor(0x2A2A2C); c.beginPath(); c.arc(x0 + tam / 2, y + altBloco / 2, tam / 2, 0, Math.PI * 2); c.fill(); }
-  texto(txt, x0 + tam + gap, y + (altBloco - fNum.h) / 2, fNum, cor(0xF5C23B), 'left');
-  y += altBloco + espaco;
-  { const larg = corda(y, y + fNome.h); let f = fNome; for (const nomeF of ['small', 'tiny', 'xtiny']) { f = fonte(nomeF); c.font = f.css; if (c.measureText(l.nome).width <= larg) break; }
-    texto(l.nome, cx, y + (fNome.h - f.h) / 2, f, '#fff', 'center', larg); } y += fNome.h + espaco;
-  { let det = `${l.kcal} kcal${l.porcao ? ' · ' + l.porcao : ''}`; c.font = fT.css; if (c.measureText(det).width > corda(y, y + fT.h)) det = `${l.kcal} kcal`; linha(det, y, fT, cor(0x9A9AA0)); } y += fT.h + espaco;
-  if (SIM.estado) linha(SIM.estado, y, fT, cor(0x9A9AA0));
-  else if (n <= 9) { const passo = Math.floor(w * 0.035), xp = cx - (n - 1) * passo / 2; for (let q = 0; q < n; q++) { c.fillStyle = q === SIM.sel ? cor(0xF5C23B) : cor(0x4A4A50); c.beginPath(); c.arc(xp + q * passo, y + fT.h / 2, q === SIM.sel ? 3 : 2, 0, Math.PI * 2); c.fill(); } }
-  else linha(`${SIM.sel + 1} / ${n}`, y, fT, cor(0x6A6A70));
+  if (SIM.sobre && typeof simDesenharSobre === 'function') simDesenharSobre(c, w, h, redondo, fonte, cor, SIM.sobre);
+  else if (SIM.menu) simDesenharMenu(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'mimei') simDesenharMimei(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'walkie' && typeof simDesenharWalkie === 'function') { const W = SIM.walkie, pos = W.canais.findIndex(x => x.id == W.canal);
+    simDesenharWalkie(c, w, h, redondo, fonte, cor, { canal: W.nomeCanal || 'Walkie-Talkie', posCanal: pos + 1, totalCanais: W.canais.length, mensagens: W.mensagens, deslocamento: W.desloc, estado: W.estado, atualizacao: false, aviso: W.cfg?.aviso || '' }); }
+  else if (SIM.app === 'rastreador' && typeof simDesenharRastreador === 'function') { const R = SIM.rastreador, l = R.leitura;
+    simDesenharRastreador(c, w, h, redondo, fonte, cor, { ativo: R.ativo, bateria: l ? Math.round(l.bateria) : '--', gps: l?.precisao >= 3 ? 'bom' : l?.precisao == 2 ? 'fraco' : l ? 'procurando' : 'sem sinal', enviados: 0, ultimoEnvio: l ? l.recebido.slice(11, 19) : null, ultimoOk: true, estado: R.estado }); }
   c.restore();
 }
-/* menu no estilo Menu2 da Garmin: título em cima, item selecionado grande no meio */
-function simDesenharMenu(c, w, h, fonte, texto, cor) {
-  const m = SIM.menu, fTit = fonte('small'), fItem = fonte('medium'), fSub = fonte('xtiny');
-  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
-  texto(m.titulo, w / 2, h * 0.1, fTit, '#fff', 'center', w * 0.6);
-  c.fillStyle = cor(0x1FA3E3); c.fillRect(w * 0.2, h * 0.1 + fTit.h + 4, w * 0.6, 2);
-  const alt = h / 5; m.topo = Math.max(0, Math.min(m.i - 1, m.itens.length - 3));
-  for (let k = 0; k < 3 && m.topo + k < m.itens.length; k++) {
-    const idx = m.topo + k, it = m.itens[idx], yy = alt * (k + 1) + alt * 0.35, sel = idx === m.i;
-    if (sel) { c.fillStyle = cor(0x1C1C1E); c.fillRect(0, yy - 6, w, alt); }
-    texto(it.t, w / 2, yy, sel ? fItem : fTit, sel ? '#fff' : cor(0x8A8A90), 'center', w * 0.8);
-    if (it.s) texto(it.s, w / 2, yy + (sel ? fItem.h : fTit.h), fSub, cor(0x8A8A90), 'center', w * 0.7);
+const simCorda = (w, h, redondo, y1, y2) => { if (!redondo) return w * 0.92; const r = w / 2, cy = h / 2, dd = Math.max(Math.abs(y1 - cy), Math.abs(y2 - cy)); return dd >= r ? 0 : 2 * Math.sqrt(r * r - dd * dd) * 0.92; };
+function simTexto(c, t, x, y, f, corTxt, alinhar = 'center', largMax) { c.font = f.css; c.fillStyle = corTxt; c.textAlign = alinhar; c.textBaseline = 'top'; t = String(t);
+  c.fillText(t, x, y); }
+/* réplica do onUpdate do ME MIMEI (MeMimeiApp.mc v1.6): nada abreviado — fonte diminui e texto quebra em linhas */
+function simQuebrar(c, t, f, larg) {
+  c.font = f.css; const linhas = []; let atual = '';
+  for (let p of String(t).split(' ')) {
+    const tent = atual ? atual + ' ' + p : p;
+    if (c.measureText(tent).width <= larg) { atual = tent; continue; }
+    if (atual) linhas.push(atual);
+    while (p.length > 1 && c.measureText(p).width > larg) { let k = p.length - 1; while (k > 1 && c.measureText(p.slice(0, k)).width > larg) k--; linhas.push(p.slice(0, k)); p = p.slice(k); }
+    atual = p;
   }
+  if (atual) linhas.push(atual); return linhas;
+}
+function simMedir(c, t, fontes, larg) { for (const f of fontes) { c.font = f.css; if (c.measureText(t).width <= larg) return [f, [t]]; } const f = fontes[fontes.length - 1]; return [f, simQuebrar(c, t, f, larg)]; }
+function simDesenharMimei(c, w, h, redondo, fonte, cor) {
+  const M = SIM.mimei, dados = M.dados, r = dados?.resumo || {}, cx = w / 2, cy = h / 2;
+  const fT = fonte('xtiny'), corda = (y1, y2) => simCorda(w, h, redondo, y1, y2);
+  const pct = r.queimado > 0 ? Math.min(1, (r.comido || 0) / r.queimado) : 0;
+  if (redondo) { const esp = Math.max(2, Math.floor(w * 0.012)), raio = w / 2 - esp - 1; c.lineWidth = esp; c.strokeStyle = cor(0x26262A); c.beginPath(); c.arc(cx, cy, raio, 0, Math.PI * 2); c.stroke();
+    if (pct > 0.01) { c.strokeStyle = cor(0xF5A623); c.beginPath(); c.arc(cx, cy, raio, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct); c.stroke(); } }
+  const n = dados?.lanches.length || 0, yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97);
+  const desenharLinhas = (med, y, corTxt) => { const [f, linhas] = med; linhas.forEach((ln, i) => simTexto(c, ln, cx, y + i * f.h, f, corTxt)); };
+  if (!n) { desenharLinhas(simMedir(c, M.estado || 'Nenhum lanche', [fonte('small'), fT], w * 0.7), cy - fT.h, '#fff'); return; }
+  const l = dados.lanches[M.sel], fmt = v => { const s2 = Math.round(v * 10) / 10; return (Math.abs(s2 - Math.trunc(s2)) < 0.05 ? Math.trunc(s2) : s2.toFixed(1)).toString().replace('.', ','); };
+  const telaGrande = w >= 360, base = telaGrande ? 0.40 : 0.34;
+  const numTxt = fmt(l.pode) + 'x', kcalTxt = String(l.kcal);
+  const itens = [{ t: 'ME MIMEI', f: [fT], cor: 0xF5C23B }, { t: `${r.saldo ?? '--'} kcal livres`, f: [fT], cor: 0x9A9AA0 }, { bloco: true }, { t: l.nome, f: telaGrande ? [fonte('medium'), fonte('small'), fonte('tiny'), fT] : [fonte('small'), fonte('tiny'), fT], cor: 0xFFFFFF }];
+  if (l.porcao) itens.push({ t: l.porcao, f: [fT], cor: 0x9A9AA0 });
+  itens.push({ rodape: true, t: n <= 9 ? '' : `${M.sel + 1} / ${n}`, f: [fT], cor: 0x6A6A70 });
+  const disponivel = yFim - yIni; let tam = Math.floor(w * base), espaco = 0;
+  const larguras = itens.map(() => w * (redondo ? 0.78 : 0.92)), medidas = [], alturas = [], ys = [];
+  for (let passada = 0; passada < 2; passada++) {
+    let soma = 0;
+    itens.forEach((it, k) => { if (it.bloco) return; if (it.rodape && n <= 9 && !M.estado) { medidas[k] = null; alturas[k] = fT.h; soma += fT.h; return; }
+      medidas[k] = simMedir(c, it.rodape && M.estado ? M.estado : it.t, it.f, larguras[k]); alturas[k] = medidas[k][0].h * medidas[k][1].length; soma += alturas[k]; });
+    tam = Math.floor(w * base); if (tam > disponivel - soma - 4 * (itens.length + 1)) tam = Math.floor(disponivel - soma - 4 * (itens.length + 1)); if (tam < 24) tam = 24;
+    espaco = Math.max(0, (disponivel - soma - tam) / (itens.length + 1));
+    let yy = yIni + espaco; itens.forEach((it, k) => { const hk = it.bloco ? tam : alturas[k]; ys[k] = yy; larguras[k] = corda(yy, yy + hk); yy += hk + espaco; });
+  }
+  itens.forEach((it, k) => {
+    const y = ys[k];
+    if (it.bloco) {
+      const larg = corda(y, y + tam), fontesLado = ['large', 'medium', 'small', 'tiny', 'xtiny'].map(fonte); let fLado = fT, precisa = 0;
+      for (const f of fontesLado) { c.font = f.css; const a = Math.max(c.measureText(numTxt).width, c.measureText(kcalTxt).width); c.font = fT.css; const b = Math.max(c.measureText('cabem').width, c.measureText('kcal').width);
+        fLado = f; precisa = Math.max(a, b); if (precisa <= (larg - tam) / 2 - 6) break; }
+      let t2 = tam; if (precisa > (larg - t2) / 2 - 6) t2 = Math.max(16, Math.floor(larg - 2 * precisa - 12));
+      const ic = M.icones[l.id];
+      if (ic) { const s = Math.min(t2 / ic.width, t2 / ic.height); c.drawImage(ic, cx - ic.width * s / 2, y + (tam - ic.height * s) / 2, ic.width * s, ic.height * s); }
+      else { c.fillStyle = cor(0x2A2A2C); c.beginPath(); c.arc(cx, y + tam / 2, t2 / 2, 0, Math.PI * 2); c.fill(); }
+      const yL = y + (tam - fLado.h - fT.h) / 2, xE = cx - t2 / 2 - 6 - precisa / 2, xD = cx + t2 / 2 + 6 + precisa / 2;
+      simTexto(c, numTxt, xE, yL, fLado, cor(0xF5C23B)); simTexto(c, 'cabem', xE, yL + fLado.h, fT, cor(0x9A9AA0));
+      simTexto(c, kcalTxt, xD, yL, fLado, '#fff'); simTexto(c, 'kcal', xD, yL + fLado.h, fT, cor(0x9A9AA0));
+    } else if (medidas[k] === null) {
+      const passo = Math.floor(w * 0.035), xp = cx - (n - 1) * passo / 2; for (let q = 0; q < n; q++) { c.fillStyle = q === M.sel ? cor(0xF5C23B) : cor(0x4A4A50); c.beginPath(); c.arc(xp + q * passo, y + fT.h / 2, q === M.sel ? 3 : 2, 0, Math.PI * 2); c.fill(); }
+    } else desenharLinhas(medidas[k], y, it.rodape && M.estado ? cor(0x9A9AA0) : cor(it.cor));
+  });
+}
+/* menu no estilo Menu2 da Garmin, respeitando as bordas */
+function simDesenharMenu(c, w, h, redondo, fonte, cor) {
+  const m = SIM.menu, fTit = fonte('small'), fItem = fonte('medium'), fSub = fonte('xtiny'), corda = (y1, y2) => simCorda(w, h, redondo, y1, y2);
+  const yTit = h * 0.1; { const [f, ls] = simMedir(c, m.titulo, [fTit, fonte('tiny'), fonte('xtiny')], corda(yTit, yTit + fTit.h)); simTexto(c, ls.join(' '), w / 2, yTit + (fTit.h - f.h) / 2, f, '#fff'); }
+  c.fillStyle = cor(0x1FA3E3); c.fillRect(w * 0.25, yTit + fTit.h + 4, w * 0.5, 2);
+  const topoLista = yTit + fTit.h + 12, alt = (h * 0.92 - topoLista) / 3; m.topo = Math.max(0, Math.min(m.i - 1, m.itens.length - 3));
+  for (let k = 0; k < 3 && m.topo + k < m.itens.length; k++) {
+    const idx = m.topo + k, it = m.itens[idx], sel = idx === m.i, fT = sel ? fItem : fTit, y0 = topoLista + alt * k;
+    const bloco = fT.h + (it.s ? fSub.h : 0), yy = y0 + (alt - bloco) / 2;
+    if (sel) { c.fillStyle = cor(0x1C1C1E); c.fillRect(0, y0 + 2, w, alt - 4); }
+    simTexto(c, it.t, w / 2, yy, fT, sel ? '#fff' : cor(0x8A8A90), 'center', corda(yy, yy + fT.h));
+    if (it.s) simTexto(c, it.s, w / 2, yy + fT.h, fSub, cor(0x8A8A90), 'center', corda(yy + fT.h, yy + fT.h + fSub.h));
+  }
+}
+
+
+/* ---------- simulador: réplicas SEM cortes do Walkie-Talkie (RadioApp.mc v2.3.1) e do Rastreador (PrincipalView.mc) ---------- */
+function simLayoutHelpers(c, w, h, redondo, fonte) {
+  const cy = h / 2;
+  const corda = (y1, y2) => { if (!redondo) return w * 0.92; const r = w / 2, d = Math.max(Math.abs(y1 - cy), Math.abs(y2 - cy)); return d >= r ? 1 : 2 * Math.sqrt(r * r - d * d) * 0.92; };
+  const largura = (t, f) => { c.font = f.css; return c.measureText(t).width; };
+  /* quebra por palavra; palavra maior que a linha quebra por caracteres */
+  const quebrar = (t, f, larg) => {
+    const linhas = []; let atual = '';
+    for (let pal of String(t ?? '').split(' ').filter(Boolean)) {
+      const teste = atual ? atual + ' ' + pal : pal;
+      if (largura(teste, f) <= larg) { atual = teste; continue; }
+      if (atual) { linhas.push(atual); atual = ''; }
+      while (largura(pal, f) > larg && pal.length > 1) { let n = pal.length - 1; while (n > 1 && largura(pal.slice(0, n), f) > larg) n--; linhas.push(pal.slice(0, n)); pal = pal.slice(n); }
+      atual = pal;
+    }
+    if (atual || !linhas.length) linhas.push(atual);
+    return linhas;
+  };
+  /* [fonte, linhas]: primeira fonte que cabe inteira; senão a menor, quebrada (largura da corda na altura real) */
+  const medir = (t, nomes, y) => {
+    t = String(t ?? '');
+    for (const nome of nomes) { const f = fonte(nome); if (largura(t, f) <= corda(y, y + f.h)) return { f, linhas: [t] }; }
+    const f = fonte(nomes[nomes.length - 1]); let linhas = quebrar(t, f, corda(y, y + f.h));
+    for (let i = 0; i < 4; i++) { const novas = quebrar(t, f, corda(y, y + f.h * linhas.length)); if (novas.length === linhas.length) return { f, linhas: novas }; linhas = novas; }
+    return { f, linhas };
+  };
+  /* bloco que termina em yBase: quebra na corda da altura final, até estabilizar */
+  const medirAcima = (t, nome, yBase) => { t = String(t ?? ''); const f = fonte(nome); let linhas = [t];
+    for (let i = 0; i < 6; i++) { const novas = quebrar(t, f, corda(yBase - f.h * linhas.length, yBase)); if (novas.length === linhas.length) return { f, linhas: novas }; linhas = novas; }
+    return { f, linhas: quebrar(t, f, corda(yBase - f.h * linhas.length, yBase)) }; };
+  const altura = m => m.f.h * m.linhas.length;
+  const desenhar = (m, cx, y, corCss, ini = 0, fim = m.linhas.length) => { c.font = m.f.css; c.fillStyle = corCss; c.textAlign = 'center'; c.textBaseline = 'top'; for (let i = ini; i < fim && i < m.linhas.length; i++) c.fillText(m.linhas[i], cx, y + (i - ini) * m.f.h); };
+  /* pilha de blocos [texto, nomesFontes, cor] com sobra em espaços iguais */
+  const pilha = (itens, yIni, yFim) => {
+    let alt = itens.map(i => fonte(i[1][0]).h), med = [], esp = 0;
+    for (let it = 0; it < 4; it++) {
+      esp = Math.max(0, (yFim - yIni - alt.reduce((a, b) => a + b, 0)) / (itens.length + 1));
+      let y = yIni + esp, mudou = false;
+      itens.forEach((i, k) => { med[k] = medir(i[0], i[1], y); const novo = altura(med[k]); if (novo !== alt[k]) { mudou = true; alt[k] = novo; } y += alt[k] + esp; });
+      if (!mudou) break;
+    }
+    let y = yIni + esp; itens.forEach((i, k) => { desenhar(med[k], w / 2, y, i[2]); y += alt[k] + esp; });
+  };
+  return { corda, quebrar, medir, medirAcima, altura, desenhar, pilha };
+}
+
+function simDesenharWalkie(c, w, h, redondo, fonte, cor, dados) {
+  const { corda, quebrar, medir, medirAcima, altura, desenhar } = simLayoutHelpers(c, w, h, redondo, fonte);
+  const cx = w / 2, fx = fonte('xtiny'), fh = fx.h;
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  const yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97), esp = fh * 0.25;
+  let y = yIni;
+  const mT = medir('WALKIE-TALKIE', ['xtiny'], y); desenhar(mT, cx, y, cor(0xFB8C1E)); y += altura(mT);
+  const nomeCanal = dados.totalCanais > 1 ? `${dados.canal} (${dados.posCanal}/${dados.totalCanais})` : (dados.canal || 'Walkie-Talkie');
+  const mC = medir(nomeCanal, ['tiny', 'xtiny'], y); desenhar(mC, cx, y, '#fff'); y += altura(mC) + 2;
+  const lsep = corda(y, y + 2) * 0.7; c.fillStyle = cor(0x1FA3E3); c.fillRect(cx - lsep / 2, y, lsep, 2); y += 2 + esp;
+  // rodapé medido de baixo para cima
+  const rodape = dados.atualizacao ? 'Atualizacao disponivel' : (dados.aviso || dados.estado || '');
+  const dica = dados.atualizacao ? 'alequizao.com/garmin > Apps' : 'START: responder';
+  const mD = medirAcima(dica, 'xtiny', yFim);
+  const mR = medirAcima(rodape, 'xtiny', yFim - altura(mD));
+  const yRod = yFim - altura(mD) - altura(mR);
+  desenhar(mR, cx, yRod, dados.atualizacao ? cor(0x5EE08A) : cor(0xAAAAAA)); desenhar(mD, cx, yRod + altura(mR), cor(0xFB8C1E));
+  const base = yRod - esp, msgs = dados.mensagens || [], n = msgs.length, desl = dados.deslocamento || 0;
+  if (!n) { const mV = medir('Nenhuma mensagem', ['xtiny'], (y + base - fh) / 2); desenhar(mV, cx, (y + base - altura(mV)) / 2, cor(0xAAAAAA)); return; }
+  const aviso = desl > 0, limite = aviso ? base - fh : base, largArea = corda(y, limite);
+  const blocos = []; let alt = 0;
+  for (let i = Math.max(0, n - 1 - desl); i >= 0; i--) {
+    const m = msgs[i]; let t = m.texto || ''; if (m.sos) t = 'SOS: ' + t; else if (m.atencao) t = '(!) ' + t;
+    const mA = { f: fx, linhas: quebrar(`${m.autor} ${m.hora}`, fx, largArea) }, mX = { f: fx, linhas: quebrar(t, fx, largArea) };
+    const hb = altura(mA) + altura(mX) + esp;
+    const corM = m.sos ? 0xEF4B5B : m.atencao ? 0xFB8C1E : m.meu ? 0x1FA3E3 : 0xF5C23B;
+    if (alt + hb > limite - y) {
+      if (!blocos.length) { // a mais recente sozinha não cabe: linhas que cabem + indicação para rolar (linhaIni = dados.linhaIni)
+        const todas = [...mA.linhas.map(l => [l, cor(corM)]), ...mX.linhas.map(l => [l, '#fff'])];
+        let cabem = Math.max(1, Math.floor((limite - y) / fh)); const temMais = todas.length > cabem; if (temMais) cabem = Math.max(1, cabem - 1);
+        const ini = Math.min(dados.linhaIni || 0, Math.max(0, todas.length - cabem));
+        c.font = fx.css; c.textAlign = 'center'; c.textBaseline = 'top';
+        for (let L = 0; L < cabem && ini + L < todas.length; L++) { c.fillStyle = todas[ini + L][1]; c.fillText(todas[ini + L][0], cx, y + L * fh); }
+        if (temMais) { const mS = medir(`DOWN: continua (${ini + cabem}/${todas.length})`, ['xtiny'], y + cabem * fh); desenhar(mS, cx, y + cabem * fh, cor(0x1FA3E3), 0, 1); }
+      }
+      break;
+    }
+    blocos.push({ mA, mX, hb, corM }); alt += hb;
+  }
+  let yy = limite - alt;
+  for (let k = blocos.length - 1; k >= 0; k--) { const b = blocos[k]; desenhar(b.mA, cx, yy, cor(b.corM)); desenhar(b.mX, cx, yy + altura(b.mA), '#fff'); yy += b.hb; }
+  if (aviso && blocos.length) { const mAv = medir(`v mais recentes (${desl})`, ['xtiny'], limite); desenhar(mAv, cx, limite, cor(0x1FA3E3), 0, 1); }
+}
+
+function simDesenharRastreador(c, w, h, redondo, fonte, cor, dados) {
+  const { pilha } = simLayoutHelpers(c, w, h, redondo, fonte);
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  let txt = `Enviados: ${dados.enviados ?? 0}`; if (dados.ultimoEnvio) txt += ` · ${dados.ultimoEnvio}${dados.ultimoOk ? ' ok' : ' x'}`;
+  pilha([
+    [dados.ativo ? 'AO VIVO' : 'RASTREADOR', ['xtiny'], dados.ativo ? cor(0x3DDC84) : cor(0x00A0DF)],
+    [`${Math.round(dados.bateria ?? 0)}%`, ['numberMedium', 'numberMild', 'large', 'medium'], '#fff'],
+    [`GPS: ${dados.gps || 'sem sinal'}`, ['xtiny'], cor(0xAAAAAA)],
+    [txt, ['xtiny'], cor(0xAAAAAA)],
+    [dados.estado || '', ['xtiny'], cor(0xAAAAAA)],
+    ['fechado: envia a cada 5 min', ['xtiny'], cor(0x6A6A70)],
+  ], h * (redondo ? 0.07 : 0.03), h * (redondo ? 0.94 : 0.97));
+}
+
+/* "Sobre o desenvolvedor" (Sobre.mc): itens a partir de dados.deslocamento; o que não cabe inteiro fica para a rolagem */
+function simDesenharSobre(c, w, h, redondo, fonte, cor, dados) {
+  const { medir, altura, desenhar } = simLayoutHelpers(c, w, h, redondo, fonte);
+  const cx = w / 2, fh = fonte('xtiny').h, x = ['xtiny'], s = ['small', 'tiny', 'xtiny'];
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  const cinza = cor(0x9A9AA0), azul = cor(0x1FA3E3);
+  const l = [[dados.app || '', s, cor(0xF5C23B)]];
+  if (dados.versao) l.push(['versao ' + dados.versao, x, cinza]);
+  l.push(['Desenvolvido por', x, cinza], ['Alequizao', s, '#fff'], ['Instagram', x, cinza], ['@alequizao', x, azul], ['WhatsApp', x, cinza], ['+55 82 98871-7072', x, azul],
+    ['E-mail', x, cinza], ['alequizao.dev@gmail.com', x, azul], ['Site', x, cinza], ['alequizao.com', x, azul], ['GitHub', x, cinza], ['github.com/alequizao', x, azul]);
+  const desl = Math.max(0, Math.min(dados.deslocamento || 0, l.length - 1));
+  const yIni = h * (redondo ? 0.1 : 0.04), yFim = h * (redondo ? 0.9 : 0.96), esp = fh * 0.2;
+  const seta = (t, y) => { c.font = fonte('xtiny').css; c.fillStyle = cor(0x6A6A70); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(t, cx, y); };
+  let y = yIni; if (desl > 0) { seta('^', y); y += fh; }
+  let i = desl;
+  for (; i < l.length; i++) {
+    const m = medir(l[i][0], l[i][1], y), alt = altura(m), reserva = i < l.length - 1 ? fh : 0;
+    if (y + alt + reserva > yFim && i > desl) break;
+    desenhar(m, cx, y, l[i][2]); y += alt + esp;
+  }
+  if (i < l.length) seta('v', yFim - fh);
 }

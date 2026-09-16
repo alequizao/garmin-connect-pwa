@@ -15,6 +15,7 @@ import Toybox.Background;
 import Toybox.Communications;
 import Toybox.Graphics;
 import Toybox.Lang;
+import Toybox.Math;
 import Toybox.Position;
 import Toybox.System;
 import Toybox.Time;
@@ -25,7 +26,7 @@ import Toybox.WatchUi;
 module Radio {
     const URL = "__URL__";     // gravado pelo compilador (appbuilder.py)
     const TOKEN = "__TOKEN__"; // gravado pelo compilador (appbuilder.py)
-    const VERSAO = "2.2.0";    // versão deste app (comparada com config.versao_app do servidor)
+    const VERSAO = "2.3.2";    // versão deste app (comparada com config.versao_app do servidor)
 
     function pedir(dados, cb) {
         dados["token"] = TOKEN;
@@ -90,6 +91,8 @@ var ultimoId = 0;
 var aguardando = false;
 var carregado = false;
 var relogioTimer = null;
+var linhaIni = 0;      // rolagem por linha quando a mensagem mais recente não cabe inteira
+var maxLinhaIni = 0;
 var intervaloMs = 8000;
 var frases = null;
 var deslocamento = 0;      // 0 = mostra as mais recentes; >0 = rolou para mensagens antigas
@@ -245,65 +248,197 @@ class RadioView extends WatchUi.View {
     }
     function onHide() { if ($.relogioTimer != null) { $.relogioTimer.stop(); } }
     function onUpdate(dc) {
-        var w = dc.getWidth(), h = dc.getHeight();
-        var f = Graphics.FONT_XTINY, fh = dc.getFontHeight(f);
+        var w = dc.getWidth(), h = dc.getHeight(), cx = w / 2;
+        var redondo = System.getDeviceSettings().screenShape == System.SCREEN_SHAPE_ROUND;
+        var fx = [Graphics.FONT_XTINY], fh = dc.getFontHeight(Graphics.FONT_XTINY);
         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK); dc.clear();
-        dc.setColor(0xFB8C1E, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(w / 2, h * 0.07, f, "WALKIE-TALKIE", Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        var yIni = h * (redondo ? 0.07 : 0.03), yFim = h * (redondo ? 0.94 : 0.97), esp = fh * 0.25;
+
+        // cabeçalho (sem cortes)
+        var y = yIni;
+        var mT = lMedir(dc, "WALKIE-TALKIE", fx, y, redondo);
+        dc.setColor(0xFB8C1E, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, y, mT, 0, mT[1].size()); y += lAltura(dc, mT);
         var nomeCanal = $.canal;
         if ($.canais.size() > 1) {
             for (var c = 0; c < $.canais.size(); c++) { if ($.canais[c]["id"] == $.canalId) { nomeCanal = $.canal + " (" + (c + 1) + "/" + $.canais.size() + ")"; } }
         }
-        dc.drawText(w / 2, h * 0.07 + fh - 2, f, nomeCanal, Graphics.TEXT_JUSTIFY_CENTER);
-        var topo = h * 0.07 + fh * 2 + 2;
+        var mC = lMedir(dc, nomeCanal, [Graphics.FONT_TINY, Graphics.FONT_XTINY], y, redondo);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, y, mC, 0, mC[1].size()); y += lAltura(dc, mC) + 2;
+        var lsep = lCorda(y, y + 2, w, h, redondo) * 0.7;
         dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
-        dc.fillRectangle(w * 0.2, topo, w * 0.6, 2);
+        dc.fillRectangle(cx - lsep / 2, y, lsep, 2);
+        y += 2 + esp;
 
-        var y = topo + 6, base = h * 0.80, larg = w * 0.76;
+        // rodapé: mede de baixo para cima (quebra se precisar)
+        var rodape = $.atualizacao ? "Atualizacao disponivel" : ($.avisoServidor != null && $.avisoServidor.length() > 0 ? $.avisoServidor : $.estado);
+        if (rodape == null) { rodape = ""; }
+        var dica = $.atualizacao ? "alequizao.com/garmin > Apps" : "START: responder";
+        var mD = lMedirAcima(dc, dica, Graphics.FONT_XTINY, yFim, redondo); var aD = lAltura(dc, mD);
+        var mR = lMedirAcima(dc, rodape, Graphics.FONT_XTINY, yFim - aD, redondo); var aR = lAltura(dc, mR);
+        var yRod = yFim - aD - aR;
+        dc.setColor($.atualizacao ? 0x5EE08A : Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, yRod, mR, 0, mR[1].size());
+        dc.setColor(0xFB8C1E, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, yRod + aR, mD, 0, mD[1].size());
+
+        var base = yRod - esp;
         var n = $.mensagens.size();
+        $.maxLinhaIni = 0;
         if (n == 0) {
             dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(w / 2, h * 0.42, f, "Nenhuma mensagem", Graphics.TEXT_JUSTIFY_CENTER);
-        } else {
-            // monta de baixo para cima a partir da mensagem (n - 1 - deslocamento)
-            var fim = n - 1 - $.deslocamento;
-            if (fim < 0) { fim = 0; }
-            var blocos = [];
-            var altura = 0;
-            for (var i = fim; i >= 0; i--) {
-                var m = $.mensagens[i];
-                var t = m["texto"] == null ? "" : m["texto"];
-                if (m["sos"] == 1) { t = "SOS: " + t; } else if (m["atencao"] == 1) { t = "(!) " + t; }
-                if (Graphics has :fitTextToArea) { t = Graphics.fitTextToArea(t, f, larg, fh * 3, true); }
-                var hb = fh - 2 + dc.getTextDimensions(t, f)[1] + 4;
-                if (altura + hb > base - y && blocos.size() > 0) { break; }
-                blocos.add([m, t, hb]);
-                altura += hb;
-            }
-            var yy = base - altura;
-            if (yy < y) { yy = y; }
-            for (var k = blocos.size() - 1; k >= 0; k--) {
-                var b = blocos[k], m2 = b[0];
-                var cor = m2["sos"] == 1 ? 0xEF4B5B : (m2["atencao"] == 1 ? 0xFB8C1E : (m2["meu"] == 1 ? 0x1FA3E3 : 0xF5C23B));
-                dc.setColor(cor, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(w / 2, yy, f, m2["autor"] + " " + m2["hora"], Graphics.TEXT_JUSTIFY_CENTER);
-                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(w / 2, yy + fh - 2, f, b[1], Graphics.TEXT_JUSTIFY_CENTER);
-                yy += b[2];
-            }
-            if ($.deslocamento > 0) {
-                dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(w / 2, base, f, "v mais recentes (" + $.deslocamento + ")", Graphics.TEXT_JUSTIFY_CENTER);
-            }
+            var mV = lMedir(dc, "Nenhuma mensagem", fx, (y + base - fh) / 2, redondo); lDesenhar(dc, cx, (y + base - lAltura(dc, mV)) / 2, mV, 0, mV[1].size());
+            return;
         }
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        var rodape = $.atualizacao ? "Atualizacao disponivel" : ($.avisoServidor != null && $.avisoServidor.length() > 0 ? $.avisoServidor : $.estado);
-        if ($.atualizacao) { dc.setColor(0x5EE08A, Graphics.COLOR_TRANSPARENT); }
-        dc.drawText(w / 2, h * 0.855, f, rodape, Graphics.TEXT_JUSTIFY_CENTER);
-        dc.setColor(0xFB8C1E, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(w / 2, h * 0.855 + fh - 2, f, $.atualizacao ? "alequizao.com/garmin > Apps" : "START: responder", Graphics.TEXT_JUSTIFY_CENTER);
+        var aviso = $.deslocamento > 0;
+        var limite = aviso ? base - fh : base;
+        var fim = n - 1 - $.deslocamento;
+        if (fim < 0) { fim = 0; }
+        // cada mensagem inteira: autor/hora + texto, medidos na largura mais estreita da área (nunca passa da borda)
+        var blocos = [], altura = 0;
+        for (var i = fim; i >= 0; i--) {
+            var m = $.mensagens[i];
+            var t = m["texto"] == null ? "" : m["texto"];
+            if (m["sos"] == 1) { t = "SOS: " + t; } else if (m["atencao"] == 1) { t = "(!) " + t; }
+            var mA = lMedirArea(dc, m["autor"] + " " + m["hora"], y, limite, redondo);
+            var mX = lMedirArea(dc, t, y, limite, redondo);
+            var hb = lAltura(dc, mA) + lAltura(dc, mX) + esp;
+            if (altura + hb > limite - y) {
+                if (blocos.size() == 0) {
+                    // a mais recente sozinha não cabe: mostra as linhas que cabem e rola o resto com UP/DOWN
+                    var todas = [], cores = [];
+                    var corM = m["sos"] == 1 ? 0xEF4B5B : (m["atencao"] == 1 ? 0xFB8C1E : (m["meu"] == 1 ? 0x1FA3E3 : 0xF5C23B));
+                    for (var a = 0; a < mA[1].size(); a++) { todas.add(mA[1][a]); cores.add(corM); }
+                    for (var b = 0; b < mX[1].size(); b++) { todas.add(mX[1][b]); cores.add(Graphics.COLOR_WHITE); }
+                    var cabem = ((limite - y) / fh).toNumber(); if (cabem < 1) { cabem = 1; }
+                    var temMais = todas.size() > cabem;
+                    if (temMais) { cabem -= 1; if (cabem < 1) { cabem = 1; } }
+                    $.maxLinhaIni = todas.size() - cabem; if ($.maxLinhaIni < 0) { $.maxLinhaIni = 0; }
+                    if ($.linhaIni > $.maxLinhaIni) { $.linhaIni = $.maxLinhaIni; }
+                    for (var L = 0; L < cabem && $.linhaIni + L < todas.size(); L++) {
+                        dc.setColor(cores[$.linhaIni + L], Graphics.COLOR_TRANSPARENT);
+                        dc.drawText(cx, y + L * fh, Graphics.FONT_XTINY, todas[$.linhaIni + L], Graphics.TEXT_JUSTIFY_CENTER);
+                    }
+                    if (temMais) {
+                        dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
+                        var mS = lMedir(dc, "DOWN: continua (" + ($.linhaIni + cabem) + "/" + todas.size() + ")", fx, y + cabem * fh, redondo);
+                        dc.drawText(cx, y + cabem * fh, Graphics.FONT_XTINY, mS[1][0], Graphics.TEXT_JUSTIFY_CENTER);
+                    }
+                }
+                break;
+            }
+            blocos.add([m, mA, mX, hb]);
+            altura += hb;
+        }
+        var yy = limite - altura;
+        for (var k2 = blocos.size() - 1; k2 >= 0; k2--) {
+            var bl = blocos[k2], m2 = bl[0];
+            var cor = m2["sos"] == 1 ? 0xEF4B5B : (m2["atencao"] == 1 ? 0xFB8C1E : (m2["meu"] == 1 ? 0x1FA3E3 : 0xF5C23B));
+            dc.setColor(cor, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, yy, bl[1], 0, bl[1][1].size());
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT); lDesenhar(dc, cx, yy + lAltura(dc, bl[1]), bl[2], 0, bl[2][1].size());
+            yy += bl[3];
+        }
+        if (aviso && blocos.size() > 0) {
+            dc.setColor(0x1FA3E3, Graphics.COLOR_TRANSPARENT);
+            var mAv = lMedir(dc, "v mais recentes (" + $.deslocamento + ")", fx, limite, redondo);
+            dc.drawText(cx, limite, Graphics.FONT_XTINY, mAv[1][0], Graphics.TEXT_JUSTIFY_CENTER);
+        }
     }
+}
+
+
+
+/* ---- layout responsivo SEM cortes: fonte menor e, se preciso, quebra em linhas ---- */
+function lCorda(y1, y2, w, h, redondo) {
+    if (!redondo) { return w * 0.92; }
+    var r = w / 2.0, cy = h / 2.0;
+    var d = (y1 - cy).abs() > (y2 - cy).abs() ? (y1 - cy).abs() : (y2 - cy).abs();
+    if (d >= r) { return 1; }
+    return 2 * Math.sqrt(r * r - d * d) * 0.92;
+}
+/* quebra por palavra; palavra maior que a linha quebra por caracteres */
+function lQuebrar(dc, t, fonte, larg) {
+    var linhas = [], atual = "", palavras = [], p = "";
+    for (var i = 0; i < t.length(); i++) {
+        var ch = t.substring(i, i + 1);
+        if (ch.equals(" ")) { if (p.length() > 0) { palavras.add(p); } p = ""; } else { p += ch; }
+    }
+    if (p.length() > 0) { palavras.add(p); }
+    for (var k = 0; k < palavras.size(); k++) {
+        var pal = palavras[k];
+        var teste = atual.length() > 0 ? atual + " " + pal : pal;
+        if (dc.getTextWidthInPixels(teste, fonte) <= larg) { atual = teste; continue; }
+        if (atual.length() > 0) { linhas.add(atual); atual = ""; }
+        while (dc.getTextWidthInPixels(pal, fonte) > larg && pal.length() > 1) {
+            var n = pal.length() - 1;
+            while (n > 1 && dc.getTextWidthInPixels(pal.substring(0, n), fonte) > larg) { n--; }
+            linhas.add(pal.substring(0, n)); pal = pal.substring(n, pal.length());
+        }
+        atual = pal;
+    }
+    if (atual.length() > 0 || linhas.size() == 0) { linhas.add(atual); }
+    return linhas;
+}
+/* devolve [fonte, linhas] na altura y: primeira fonte que cabe inteira; senão a menor, quebrada */
+function lMedir(dc, t, fontes, y, redondo) {
+    var w = dc.getWidth(), h = dc.getHeight();
+    if (t == null) { t = ""; }
+    for (var i = 0; i < fontes.size(); i++) {
+        var fh = dc.getFontHeight(fontes[i]);
+        if (dc.getTextWidthInPixels(t, fontes[i]) <= lCorda(y, y + fh, w, h, redondo)) { return [fontes[i], [t]]; }
+    }
+    var f = fontes[fontes.size() - 1], fh2 = dc.getFontHeight(f);
+    var linhas = lQuebrar(dc, t, f, lCorda(y, y + fh2, w, h, redondo));
+    for (var it = 0; it < 4; it++) {
+        var novas = lQuebrar(dc, t, f, lCorda(y, y + fh2 * linhas.size(), w, h, redondo));
+        if (novas.size() == linhas.size()) { return [f, novas]; }
+        linhas = novas;
+    }
+    return [f, linhas];
+}
+/* bloco que termina em yBase: quebra na corda da sua altura final, iterando até estabilizar */
+function lMedirAcima(dc, t, f, yBase, redondo) {
+    var w = dc.getWidth(), h = dc.getHeight(), fh = dc.getFontHeight(f);
+    if (t == null) { t = ""; }
+    var linhas = [t];
+    for (var it = 0; it < 6; it++) {
+        var novas = lQuebrar(dc, t, f, lCorda(yBase - fh * linhas.size(), yBase, w, h, redondo));
+        if (novas.size() == linhas.size()) { return [f, novas]; }
+        linhas = novas;
+    }
+    return [f, lQuebrar(dc, t, f, lCorda(yBase - fh * linhas.size(), yBase, w, h, redondo))];
+}
+function lAltura(dc, m) { return dc.getFontHeight(m[0]) * m[1].size(); }
+/* desenha [fonte, linhas] a partir de y, linhas de ini até fim (exclusivo) */
+function lDesenhar(dc, cx, y, m, ini, fim) {
+    var fh = dc.getFontHeight(m[0]);
+    for (var i = ini; i < fim && i < m[1].size(); i++) { dc.drawText(cx, y + (i - ini) * fh, m[0], m[1][i], Graphics.TEXT_JUSTIFY_CENTER); }
+}
+/* pilha vertical de blocos [texto, fontes, cor] distribuindo a sobra em espaços iguais */
+function lPilha(dc, itens, yIni, yFim, redondo) {
+    var n = itens.size(), alt = new [n], med = new [n];
+    for (var i = 0; i < n; i++) { alt[i] = dc.getFontHeight(itens[i][1][0]); }
+    var esp = 0;
+    for (var it = 0; it < 4; it++) {
+        var total = 0; for (var a = 0; a < n; a++) { total += alt[a]; }
+        esp = (yFim - yIni - total) / (n + 1.0); if (esp < 0) { esp = 0; }
+        var y = yIni + esp, mudou = false;
+        for (var b = 0; b < n; b++) {
+            med[b] = lMedir(dc, itens[b][0], itens[b][1], y, redondo);
+            var novo = lAltura(dc, med[b]); if (novo != alt[b]) { mudou = true; alt[b] = novo; }
+            y += alt[b] + esp;
+        }
+        if (!mudou) { break; }
+    }
+    var yy = yIni + esp;
+    for (var d = 0; d < n; d++) {
+        dc.setColor(itens[d][2], Graphics.COLOR_TRANSPARENT);
+        lDesenhar(dc, dc.getWidth() / 2, yy, med[d], 0, med[d][1].size());
+        yy += alt[d] + esp;
+    }
+}
+
+function lMedirArea(dc, t, y1, y2, redondo) {
+    var w = dc.getWidth(), h = dc.getHeight(), larg = lCorda(y1, y2, w, h, redondo), f = Graphics.FONT_XTINY;
+    if (t == null) { t = ""; }
+    return [f, lQuebrar(dc, t, f, larg)];
 }
 
 class RadioDelegate extends WatchUi.BehaviorDelegate {
@@ -314,6 +449,11 @@ class RadioDelegate extends WatchUi.BehaviorDelegate {
     function onPreviousPage() { rolar(1); return true; }
     function onNextPage() { rolar(-1); return true; }
     function rolar(d) {
+        if ($.maxLinhaIni > 0) {
+            if (d < 0 && $.linhaIni < $.maxLinhaIni) { $.linhaIni += 1; WatchUi.requestUpdate(); return; }
+            if (d > 0 && $.linhaIni > 0) { $.linhaIni -= 1; WatchUi.requestUpdate(); return; }
+        }
+        $.linhaIni = 0;
         var max = $.mensagens.size() - 1;
         $.deslocamento += d;
         if ($.deslocamento < 0) { $.deslocamento = 0; }
@@ -340,6 +480,7 @@ class RadioDelegate extends WatchUi.BehaviorDelegate {
         menu.addItem(new WatchUi.MenuItem("Chamar atencao", "vibra 10 s nos outros", "__ATENCAO__", null));
         menu.addItem(new WatchUi.MenuItem("SOS", "envia sua localizacao", "__SOS__", null));
         menu.addItem(new WatchUi.MenuItem("Atualizar", "v" + Radio.VERSAO, "__ATUALIZAR__", null));
+        menu.addItem(new WatchUi.MenuItem("Sobre", "desenvolvedor", "__SOBRE__", null));
         WatchUi.pushView(menu, new RadioMenuDelegate(), WatchUi.SLIDE_UP);
     }
 }
@@ -351,6 +492,7 @@ class RadioMenuDelegate extends WatchUi.Menu2InputDelegate {
         WatchUi.popView(WatchUi.SLIDE_DOWN);
         if (id.equals("__ATUALIZAR__")) { buscar(); return; }
         if (id.equals("__CANAIS__")) { abrirCanais(); return; }
+        if (id.equals("__SOBRE__")) { abrirSobre("Walkie-Talkie Alequizao", Radio.VERSAO); return; }
         if (id instanceof Lang.Number) { trocarCanal(id); return; }
         if (id.equals("__SOS__")) { enviar("SOS! Preciso de ajuda", true); return; }
         if (id.equals("__ATENCAO__")) { enviarTipo("Atencao!", false, true); return; }

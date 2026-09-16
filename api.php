@@ -497,7 +497,7 @@ case 'walkie_app': {
 case 'mimei_estado': {
   exigeLogin(); require_once __DIR__ . '/lib_mimei.php'; mimeiSemear(uid());
   $st = db()->prepare("SELECT id, nome, qtd, kcal, origem, DATE_FORMAT(criado, '%H:%i') hora FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC"); $st->execute([uid()]);
-  $apps = db()->prepare("SELECT id, nome, modelo, status, erro, visto FROM relogio_apps WHERE usuario_id=? AND tipo='mimei' ORDER BY id DESC"); $apps->execute([uid()]);
+  $apps = db()->prepare("SELECT id, nome, modelo, status, erro, visto FROM relogio_apps WHERE usuario_id=? AND tipo='mimei' AND modelo<>'simulador' ORDER BY id DESC"); $apps->execute([uid()]);
   out(['ok' => true, 'resumo' => mimeiResumo(uid()), 'lanches' => mimeiLanches(uid()), 'consumo' => $st->fetchAll(), 'apps' => $apps->fetchAll(), 'biblioteca' => mimeiBiblioteca()]);
 }
 case 'mimei_buscar': {
@@ -580,6 +580,15 @@ case 'mimei_comi': {
   db()->prepare("INSERT INTO mimei_consumo (usuario_id, lanche_id, nome, qtd, kcal, origem, data) VALUES (?,?,?,?,?, 'site', CURDATE())")->execute([uid(), $l['id'], $l['nome'], $q, (int)round($l['kcal'] * $q)]);
   out(['ok' => true]);
 }
+case 'sim_token': {
+  // o simulador do site conta como um relógio próprio de cada usuário (para testar Walkie-Talkie entre duas pessoas)
+  exigeLogin(); $tipo = in_array($in['tipo'] ?? '', ['walkie', 'mimei'], true) ? $in['tipo'] : erro('Tipo inválido');
+  $st = db()->prepare("SELECT token FROM relogio_apps WHERE usuario_id=? AND tipo=? AND modelo='simulador' LIMIT 1"); $st->execute([uid(), $tipo]);
+  $tok = $st->fetchColumn();
+  if (!$tok) { $tok = bin2hex(random_bytes(16)); $u = usuario();
+    db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?,?,NULL,'simulador',?,'pronto',?)")->execute([uid(), mb_substr(explode(' ', $u['nome'])[0] . ' (sim)', 0, 20), $tok, $tipo]); }
+  out(['ok' => true, 'token' => $tok]);
+}
 case 'mimei_desfazer': {
   exigeLogin(); $st = db()->prepare("SELECT id FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC LIMIT 1"); $st->execute([uid()]);
   if ($id = $st->fetchColumn()) db()->prepare("DELETE FROM mimei_consumo WHERE id=?")->execute([$id]);
@@ -598,7 +607,7 @@ case 'mimei_app': {
 
 case 'apps_listar': {
   exigeLogin(); relogioAppsTabela();
-  $st = db()->prepare("SELECT a.id, a.nome, a.device, a.modelo, a.status, a.erro, a.criado, a.pronto_em, a.tipo, (SELECT nome FROM walkie_canais c WHERE c.id=a.canal_id) canal, (SELECT MAX(recebido) FROM relogio_leituras r WHERE r.app_id=a.id) ultimo, (SELECT COUNT(*) FROM relogio_leituras r WHERE r.app_id=a.id) envios FROM relogio_apps a WHERE a.usuario_id=? ORDER BY a.id DESC");
+  $st = db()->prepare("SELECT a.id, a.nome, a.device, a.modelo, a.status, a.erro, a.criado, a.pronto_em, a.tipo, (SELECT nome FROM walkie_canais c WHERE c.id=a.canal_id) canal, (SELECT MAX(recebido) FROM relogio_leituras r WHERE r.app_id=a.id) ultimo, (SELECT COUNT(*) FROM relogio_leituras r WHERE r.app_id=a.id) envios FROM relogio_apps a WHERE a.usuario_id=? AND a.modelo<>'simulador' ORDER BY a.id DESC");
   $st->execute([uid()]); out(['ok' => true, 'itens' => $st->fetchAll()]);
 }
 
@@ -648,8 +657,13 @@ case 'ao_vivo': {
   exigeLogin(); $u = uid(); $pdo = db();
   $r = null;
   { $st = $pdo->prepare("SELECT id, recebido, origem, bateria, carregando, bateria_dias, lat, lon, precisao, fc, passos, body_battery, estresse, spo2 FROM relogio_leituras WHERE usuario_id=? ORDER BY id DESC LIMIT 1"); $st->execute([$u]); $r = $st->fetch() ?: null; }
-  $v = $pdo->prepare("SELECT CONCAT_WS('|', (SELECT COUNT(*) FROM atividades WHERE usuario_id=?), (SELECT MAX(id) FROM atividades WHERE usuario_id=?), (SELECT COUNT(*) FROM metricas WHERE usuario_id=? AND data=CURDATE()), (SELECT SUM(valor) FROM metricas WHERE usuario_id=? AND data>=CURDATE() - INTERVAL 7 DAY), (SELECT MAX(id) FROM fc_amostras WHERE usuario_id=?))");
-  $v->execute([$u, $u, $u, $u, $u]);
+  // "versão" de tudo o que o usuário vê: se mudar, a tela aberta se atualiza sozinha (AJAX)
+  $v = $pdo->prepare("SELECT CONCAT_WS('|', (SELECT COUNT(*) FROM atividades WHERE usuario_id=?), (SELECT MAX(id) FROM atividades WHERE usuario_id=?), (SELECT COUNT(*) FROM metricas WHERE usuario_id=? AND data=CURDATE()), (SELECT SUM(valor) FROM metricas WHERE usuario_id=? AND data>=CURDATE() - INTERVAL 7 DAY), (SELECT MAX(id) FROM fc_amostras WHERE usuario_id=?),
+    (SELECT CONCAT(COUNT(*), '-', COALESCE(MAX(UNIX_TIMESTAMP(atualizado)),0)) FROM mimei_lanches WHERE usuario_id=?), (SELECT CONCAT(COUNT(*), '-', COALESCE(MAX(id),0)) FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE()),
+    (SELECT COALESCE(MAX(m.id),0) FROM walkie_mensagens m JOIN walkie_membros wm ON wm.canal_id=m.canal_id AND wm.usuario_id=?), (SELECT COUNT(*) FROM walkie_membros WHERE usuario_id=?),
+    (SELECT CONCAT(COUNT(*), '-', COALESCE(MAX(id),0), '-', GROUP_CONCAT(status ORDER BY id)) FROM relogio_apps WHERE usuario_id=? AND modelo<>'simulador'),
+    (SELECT CONCAT_WS('-', status, ultimo_sync) FROM integracoes WHERE usuario_id=? AND servico='garmin'))");
+  $v->execute([$u, $u, $u, $u, $u, $u, $u, $u, $u, $u, $u]);
   $ag = strtotime($r['recebido'] ?? '2000-01-01');
   out(['ok' => true, 'relogio' => $r, 'segundos' => $r ? time() - $ag : null, 'versao' => md5($v->fetchColumn())]);
 }

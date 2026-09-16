@@ -1,0 +1,20 @@
+<settings>
+  <setting propertyKey="@Properties.dev_nome" title="@Strings.dev_nome_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+  <setting propertyKey="@Properties.dev_instagram" title="@Strings.dev_instagram_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+  <setting propertyKey="@Properties.dev_whatsapp" title="@Strings.dev_whatsapp_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+  <setting propertyKey="@Properties.dev_email" title="@Strings.dev_email_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+  <setting propertyKey="@Properties.dev_site" title="@Strings.dev_site_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+  <setting propertyKey="@Properties.dev_github" title="@Strings.dev_github_t">
+    <settingConfig type="alphaNumeric" readonly="true"/>
+  </setting>
+</settings>

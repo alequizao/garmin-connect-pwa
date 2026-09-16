@@ -1,0 +1,8 @@
+<properties>
+  <property id="dev_nome" type="string">Alequizao</property>
+  <property id="dev_instagram" type="string">@alequizao</property>
+  <property id="dev_whatsapp" type="string">+55 82 98871-7072</property>
+  <property id="dev_email" type="string">alequizao.dev@gmail.com</property>
+  <property id="dev_site" type="string">alequizao.com</property>
+  <property id="dev_github" type="string">github.com/alequizao</property>
+</properties>

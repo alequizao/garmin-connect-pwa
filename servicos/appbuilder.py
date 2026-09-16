@@ -52,7 +52,7 @@ def main():
     while True:
         try:
             con.ping(reconnect=True)
-            cur.execute("SELECT * FROM relogio_apps WHERE status='pendente' ORDER BY id LIMIT 1"); p = cur.fetchone()
+            cur.execute("SELECT * FROM relogio_apps WHERE status='pendente' AND modelo<>'simulador' ORDER BY id LIMIT 1"); p = cur.fetchone()
             if not p: time.sleep(3); continue
             cur.execute("UPDATE relogio_apps SET status='compilando', erro=NULL WHERE id=%s", (p['id'],))
             try:
