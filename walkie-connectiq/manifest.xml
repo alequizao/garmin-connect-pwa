@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+  <iq:application id="bd6006cdcad54abd977fe29742b5ee93" type="watch-app" name="@Strings.AppName" entry="RadioApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.2.0">
+    <iq:products><iq:product id="fr165"/></iq:products>
+    <iq:permissions>
+      <iq:uses-permission id="Background"/>
+      <iq:uses-permission id="Communications"/>
+      <iq:uses-permission id="Positioning"/>
+    </iq:permissions>
+    <iq:languages><iq:language>por</iq:language><iq:language>eng</iq:language></iq:languages>
+    <iq:barrels/>
+  </iq:application>
+</iq:manifest>

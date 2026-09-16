@@ -1,0 +1,9 @@
+[Unit]
+Description=Compilador do app do relógio (aba App)
+After=mysql.service
+[Service]
+ExecStart=/opt/garmin-sync/venv/bin/python3 /opt/garmin-sync/appbuilder.py
+Restart=always
+RestartSec=10
+[Install]
+WantedBy=multi-user.target

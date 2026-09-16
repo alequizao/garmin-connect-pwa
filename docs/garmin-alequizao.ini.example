@@ -1,0 +1,37 @@
+; Configuração dos serviços em segundo plano (Python/Node).
+; Copie para /etc/garmin-alequizao.ini e proteja:  chmod 600 /etc/garmin-alequizao.ini
+; (ou aponte outro caminho com a variável de ambiente GARMIN_CONF)
+
+[db]
+host = 127.0.0.1
+banco = garmin
+usuario = usuario_do_banco
+senha = senha_do_banco
+
+[traccar]
+; API REST (usuário administrador) e porta do protocolo OsmAnd
+api = http://127.0.0.1:8082/api
+osmand = http://127.0.0.1:5055/
+usuario =
+senha =
+
+[imap]
+; caixa de e-mail que recebe os convites de LiveTrack da Garmin
+servidor = imap.gmail.com
+usuario =
+senha =
+; id do usuário do app dono dessa caixa
+usuario_id = 1
+
+[app]
+; endereço público do relogio.php (gravado dentro do app do relógio na compilação)
+url_relogio = https://seu-dominio.com/garmin/relogio.php
+url_walkie = https://seu-dominio.com/garmin/walkie.php
+
+[compilador]
+; Connect IQ SDK (https://developer.garmin.com/connect-iq/sdk/) e chave de desenvolvedor (.der)
+fonte = /opt/garmin-sync/relogio-connectiq
+saida = /var/www/garmin/app/builds
+sdk_manager = /opt/ciq/connect-iq-sdk-manager
+chave = /opt/ciq/dev.der
+fonte_walkie = /opt/garmin-sync/walkie-connectiq

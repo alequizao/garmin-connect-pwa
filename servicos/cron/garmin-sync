@@ -1,0 +1,11 @@
+# Sincronizador Garmin — tempos alternados (jitter) para evitar bloqueio
+# leve: todo minuto com atraso aleatório 0-40s (10 atividades + hoje/ontem)
+* * * * * root [ $(( $(date +\%-M) \% 30 )) -eq 0 ] || { sleep $(shuf -i 0-40 -n1); /opt/garmin-sync/sync.py --leve; } >/dev/null 2>&1
+# completo: minutos 0 e 30 com atraso 0-4 min
+0,30 * * * * root sleep $(shuf -i 0-240 -n1); /opt/garmin-sync/sync.py >/dev/null 2>&1
+# coleta completa (HRV, VO2max, prontidão, sono detalhado etc.): a cada 3h com atraso 0-40 min
+17 */3 * * * root sleep $(shuf -i 0-2400 -n1); /opt/garmin-sync/extra.py --dias 2 >/dev/null 2>&1
+# e-mails de LiveTrack (atraso aleatório interno 0-50s)
+*/2 * * * * root /opt/garmin-sync/livetrack_mail.py >/dev/null 2>&1
+# rotas das atividades -> Traccar (local, sem tocar na Garmin)
+*/5 * * * * root /opt/garmin-sync/traccar.py >/dev/null 2>&1

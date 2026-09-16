@@ -1,0 +1,10 @@
+[Unit]
+Description=Garmin LiveTrack -> Traccar
+After=network-online.target mysql.service
+[Service]
+WorkingDirectory=/opt/garmin-sync
+ExecStart=/usr/bin/node /opt/garmin-sync/livetrack.js
+Restart=always
+RestartSec=15
+[Install]
+WantedBy=multi-user.target

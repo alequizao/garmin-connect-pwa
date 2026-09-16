@@ -1,0 +1,21 @@
+# segredos e dados — nunca versionar
+config.php
+*.ini
+!docs/*.ini.example
+*.der
+*.pem
+tokens/
+app/builds/
+app/*.prg
+uploads/
+# gerados
+icons/*.png
+!icons/icon-192.png
+!icons/icon-512.png
+node_modules/
+venv/
+__pycache__/
+*.log
+*.bak*
+*.tar.gz
+.cache.json

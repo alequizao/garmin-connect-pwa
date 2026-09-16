@@ -1,0 +1,7 @@
+{
+  "name": "garmin-livetrack",
+  "private": true,
+  "description": "Acompanha sessões de LiveTrack da Garmin e envia os pontos ao Traccar",
+  "main": "livetrack.js",
+  "dependencies": { "mysql2": "^3.11.0", "puppeteer": "^24.0.0" }
+}

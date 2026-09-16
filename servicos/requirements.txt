@@ -1,0 +1,4 @@
+garminconnect>=0.3.11
+PyMySQL>=1.1
+requests>=2.31
+curl_cffi>=0.7
