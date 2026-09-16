@@ -309,3 +309,5 @@ canvas.graf{width:100%;height:120px;display:block;margin:6px 0}
 .strava-bloco{margin-top:6px;padding-top:12px;border-top:1px solid var(--linha)}
 .strava-bt{background:#fc4c02!important;color:#fff!important}
 .strava-envio{margin-top:6px}
+
+.push-status{background:#1f1f21;border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:8px;line-height:1.45}

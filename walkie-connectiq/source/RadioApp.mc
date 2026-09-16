@@ -25,7 +25,7 @@ import Toybox.WatchUi;
 module Radio {
     const URL = "__URL__";     // gravado pelo compilador (appbuilder.py)
     const TOKEN = "__TOKEN__"; // gravado pelo compilador (appbuilder.py)
-    const VERSAO = "2.0.0";    // versão deste app (comparada com config.versao_app do servidor)
+    const VERSAO = "2.1.0";    // versão deste app (comparada com config.versao_app do servidor)
 
     function pedir(dados, cb) {
         dados["token"] = TOKEN;
@@ -60,8 +60,19 @@ class RadioFundo extends System.ServiceDelegate {
         Radio.pedir({ "acao" => "receber", "desde" => (ult == null ? 0 : ult), "fundo" => 1 }, method(:resposta));
     }
     function resposta(code, data) {
-        if (code == 200 && data != null && data["novas"] != null && data["novas"] > 0 && (Background has :requestApplicationWake)) {
-            Background.requestApplicationWake(data["resumo"] == null ? "Nova mensagem no Walkie-Talkie" : data["resumo"]);
+        if (code == 200 && data != null && data["novas"] != null && data["novas"] > 0) {
+            var resumo = data["resumo"] == null ? "Nova mensagem" : data["resumo"];
+            var avisou = false;
+            // relógios com API 5.1+ (ex.: Forerunner 165): notificação nativa do sistema, com vibração do relógio
+            if (Toybox has :Notifications) {
+                try {
+                    Toybox.Notifications.showNotification(data["atencao"] == 1 ? "Chamando sua atencao" : (data["sos"] == 1 ? "SOS" : "Walkie-Talkie"),
+                        resumo, { :body => (data["canal"] == null ? "Toque para abrir" : "Canal " + data["canal"]), :dismissPrevious => true });
+                    avisou = true;
+                } catch (e) { avisou = false; }
+            }
+            // relógios antigos (ou se a notificação nativa falhar): pede para abrir o app
+            if (!avisou && (Background has :requestApplicationWake)) { Background.requestApplicationWake(resumo); }
         }
         Background.exit(null);
     }

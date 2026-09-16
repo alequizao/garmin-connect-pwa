@@ -2,7 +2,7 @@
 
 **Aplicativo web progressivo (PWA) em PHP + MySQL que sincroniza sua conta Garmin Connect, cria relatórios que o relógio não mostra, envia a posição e a bateria do relógio para o Traccar e ainda transforma relógios Garmin em um walkie-talkie de mensagens.**
 
-Visual inspirado no app oficial (tela "Meu dia"), com layout de celular e de computador, tempo real por AJAX e apps Connect IQ gerados automaticamente para mais de 160 modelos de relógio.
+Visual inspirado no app oficial (tela "Meu dia"), com layout de celular e de computador, tempo real por AJAX e apps Connect IQ gerados automaticamente para 159 modelos de relógio.
 
 - **Demonstração em produção:** https://alequizao.com/garmin/
 - **Stack:** PHP 8.3 · MySQL/MariaDB · JavaScript puro (sem framework) · Leaflet · Python 3 (sincronização) · Node.js + Puppeteer (LiveTrack) · Monkey C / Connect IQ SDK
@@ -66,7 +66,7 @@ Forma × fadiga (modelo de Banister), **risco de lesão (ACWR)**, eficiência ae
 - Chave de integração por canal para outros sistemas publicarem avisos (ex.: lembretes).
 
 ### Apps do relógio gerados sob medida
-Na aba **Apps**, cada pessoa digita o nome do dispositivo e o modelo do relógio (lista com mais de 160 modelos Garmin), e o servidor **compila o `.prg` com a chave dela embutida** em cerca de 30 s.
+Na aba **Apps**, cada pessoa digita o nome do dispositivo e o modelo do relógio (lista com 159 modelos Garmin), e o servidor **compila o `.prg` com a chave dela embutida** em cerca de 30 s.
 
 ### Strava
 "Conectar com Strava" (OAuth), **envio de todos os treinos do relógio** (GPX com FC, cadência e altitude) com fila, progresso, envio automático dos novos e respeito aos limites da API.

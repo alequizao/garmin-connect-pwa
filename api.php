@@ -483,7 +483,7 @@ case 'walkie_enviar': {
   if ($tipo === 'atencao' && $texto === '') $texto = 'Atenção!';
   $autor = explode(' ', $u['nome'])[0];
   db()->prepare("INSERT INTO walkie_mensagens (canal_id, usuario_id, autor, texto, sos, tipo, origem) VALUES (?,?,?,?,?,?, 'site')")->execute([$canal, uid(), $autor, $texto, $tipo === 'sos' ? 1 : 0, $tipo]);
-  walkieNotificar($canal, uid(), $autor, $texto, $tipo);
+  walkieNotificar($canal, 0, $autor, $texto, $tipo);
   out(['ok' => true]);
 }
 case 'walkie_app': {

@@ -62,6 +62,8 @@ $saida = ['ok' => true, 'config' => $config, 'canal' => $app['canal'], 'frases' 
   'sos' => (int)$m['sos'], 'atencao' => $m['tipo'] === 'atencao' ? 1 : 0, 'hora' => $m['hora'], 'meu' => (int)$m['app_id'] === (int)$app['id'] ? 1 : 0], $msgs)];
 if (!empty($d['fundo'])) {
   $novas = array_filter($saida['mensagens'], fn($m) => !$m['meu']);
-  $saida = ['ok' => true, 'novas' => count($novas), 'resumo' => $novas ? mb_substr(end($novas)['autor'] . ': ' . end($novas)['texto'], 0, 60) : null];
+  $ult = $novas ? end($novas) : null;
+  $saida = ['ok' => true, 'novas' => count($novas), 'resumo' => $ult ? mb_substr($ult['autor'] . ': ' . $ult['texto'], 0, 60) : null,
+    'canal' => $app['canal'], 'atencao' => $ult ? (int)$ult['atencao'] : 0, 'sos' => $ult ? (int)$ult['sos'] : 0];
 }
 echo json_encode($saida, JSON_UNESCAPED_UNICODE);
