@@ -27,7 +27,6 @@ class OmnitrixApp extends Application.AppBase {
 class OmnitrixView extends WatchUi.View {
     // <aliens>
     const NOMES = ["CHAMA", "BESTA", "DIAMANTE", "XLR8", "MASSA CINZENTA", "QUATRO BRAÇOS", "INSECTÓIDE", "AQUÁTICO", "ULTRA-T", "FANTASMÁTICO", "BALA DE CANHÃO", "CIPÓ SELVAGEM", "BLITZWOLFER", "SNARE-OH", "FRANKENSTRIKE", "GLUTÃO", "DITTO", "EYE GUY", "GIGANTE", "FOGO-FÁTUO", "ECO ECO", "HUMUNGOSSAURO", "ARRAIA-A-JATO", "FRIAGEM", "CROMASTONE", "BRAINSTORM", "MACACO-ARANHA", "GOSMA", "ALIEN X", "LODESTAR", "RATH", "NANOMECH", "WATER HAZARD", "AMPFIBIAN", "ARMODRILLO", "TERRASPIN", "NRG", "FASTTRACK", "CHAMALIEN", "CLOCKWORK", "EATLE", "JURYRIGG", "FEEDBACK", "BLOXX", "GRAVATTACK", "CRASHHOPPER", "BALL WEEVIL", "WALKATROUT", "PESKY DUST", "MOLE-STACHE", "THE WORST", "KICKIN HAWK", "TOEPICK", "ASTRODACTYL", "BULLFRAG", "ATOMIX", "GUTROT", "WHAMPIRE", "SHOCKSQUATCH"];
-    const SERIES = ["CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE"];
     const CORES = [0xFF5500, 0xFF8800, 0x00DDFF, 0x2288FF, 0xAAAAAA, 0xFF2222, 0xAAFF00, 0x00AAAA, 0x00FF55, 0xDDDDFF, 0xFFCC00, 0x33CC33, 0x8899AA, 0xCC9966, 0x66CC99, 0x66AA33, 0xFFFFFF, 0xFFDD55, 0xFF3333, 0x44BB22, 0xEEEEEE, 0xAA7744, 0xDD2222, 0x3399FF, 0xCC66FF, 0xFF8877, 0x3355DD, 0x77FF33, 0x222244, 0xAA3333, 0xFF9900, 0x88FF88, 0x3366AA, 0x66CCFF, 0xDDAA22, 0x99AA66, 0xFF4400, 0x3344AA, 0x9966CC, 0xCC9933, 0x664422, 0xFF3366, 0x2255FF, 0xFF5533, 0x886644, 0x77AA22, 0xDDBB33, 0x88BBAA, 0xFF99CC, 0xAA7755, 0xCCCC99, 0xCC5522, 0x553366, 0x33AA88, 0x44AA44, 0x99FF33, 0xAA8844, 0x6633AA, 0xEEEEFF];
     // </aliens>
     const PRONTO = 0, SELECAO = 1, TRANSFORMANDO = 2, ALIEN = 3, RECARGA = 4;
@@ -42,21 +41,29 @@ class OmnitrixView extends WatchUi.View {
     var timer;
 
     // <rez>
-    function imagem(i) {
-        var r = [Rez.Drawables.a0, Rez.Drawables.a1, Rez.Drawables.a2, Rez.Drawables.a3, Rez.Drawables.a4, Rez.Drawables.a5, Rez.Drawables.a6, Rez.Drawables.a7, Rez.Drawables.a8, Rez.Drawables.a9, Rez.Drawables.a10, Rez.Drawables.a11, Rez.Drawables.a12, Rez.Drawables.a13, Rez.Drawables.a14, Rez.Drawables.a15, Rez.Drawables.a16, Rez.Drawables.a17, Rez.Drawables.a18, Rez.Drawables.a19, Rez.Drawables.a20, Rez.Drawables.a21, Rez.Drawables.a22, Rez.Drawables.a23, Rez.Drawables.a24, Rez.Drawables.a25, Rez.Drawables.a26, Rez.Drawables.a27, Rez.Drawables.a28, Rez.Drawables.a29, Rez.Drawables.a30, Rez.Drawables.a31, Rez.Drawables.a32, Rez.Drawables.a33, Rez.Drawables.a34, Rez.Drawables.a35, Rez.Drawables.a36, Rez.Drawables.a37, Rez.Drawables.a38, Rez.Drawables.a39, Rez.Drawables.a40, Rez.Drawables.a41, Rez.Drawables.a42, Rez.Drawables.a43, Rez.Drawables.a44, Rez.Drawables.a45, Rez.Drawables.a46, Rez.Drawables.a47, Rez.Drawables.a48, Rez.Drawables.a49, Rez.Drawables.a50, Rez.Drawables.a51, Rez.Drawables.a52, Rez.Drawables.a53, Rez.Drawables.a54, Rez.Drawables.a55, Rez.Drawables.a56, Rez.Drawables.a57, Rez.Drawables.a58];
-        return WatchUi.loadResource(r[i]);
-    }
+    const REZ = [Rez.Drawables.a0, Rez.Drawables.a1, Rez.Drawables.a2, Rez.Drawables.a3, Rez.Drawables.a4, Rez.Drawables.a5, Rez.Drawables.a6, Rez.Drawables.a7, Rez.Drawables.a8, Rez.Drawables.a9, Rez.Drawables.a10, Rez.Drawables.a11, Rez.Drawables.a12, Rez.Drawables.a13, Rez.Drawables.a14, Rez.Drawables.a15, Rez.Drawables.a16, Rez.Drawables.a17, Rez.Drawables.a18, Rez.Drawables.a19, Rez.Drawables.a20, Rez.Drawables.a21, Rez.Drawables.a22, Rez.Drawables.a23, Rez.Drawables.a24, Rez.Drawables.a25, Rez.Drawables.a26, Rez.Drawables.a27, Rez.Drawables.a28, Rez.Drawables.a29, Rez.Drawables.a30, Rez.Drawables.a31, Rez.Drawables.a32, Rez.Drawables.a33, Rez.Drawables.a34, Rez.Drawables.a35, Rez.Drawables.a36, Rez.Drawables.a37, Rez.Drawables.a38, Rez.Drawables.a39, Rez.Drawables.a40, Rez.Drawables.a41, Rez.Drawables.a42, Rez.Drawables.a43, Rez.Drawables.a44, Rez.Drawables.a45, Rez.Drawables.a46, Rez.Drawables.a47, Rez.Drawables.a48, Rez.Drawables.a49, Rez.Drawables.a50, Rez.Drawables.a51, Rez.Drawables.a52, Rez.Drawables.a53, Rez.Drawables.a54, Rez.Drawables.a55, Rez.Drawables.a56, Rez.Drawables.a57, Rez.Drawables.a58];
+    function imagem(i) { return WatchUi.loadResource(REZ[i]); }
     // </rez>
 
     function initialize() {
         View.initialize();
         var s = Application.Storage.getValue("alien");
         if (s != null && s >= 0 && s < NOMES.size()) { atual = s; }
+        var e = Application.Storage.getValue("estado"), f = Application.Storage.getValue("fimEm");
+        if (e != null && f != null && f > Time.now().value()) { estado = e; fimEm = f; }
+        else if (e != null && e == ALIEN) { estado = RECARGA; fimEm = Time.now().value() + RECARGA_S; }
         timer = new Timer.Timer();
     }
 
     function onShow() { timer.start(method(:tique), 50, true); }
-    function onHide() { timer.stop(); }
+    function onHide() { timer.stop(); salvar(); }
+
+    // guarda o que precisa continuar valendo com o app fechado
+    function salvar() {
+        Application.Storage.setValue("alien", atual);
+        Application.Storage.setValue("estado", estado);
+        Application.Storage.setValue("fimEm", fimEm);
+    }
 
     var t = 0;               // relógio da animação (1 = 50 ms)
     var avisou = -1;
@@ -68,7 +75,8 @@ class OmnitrixView extends WatchUi.View {
         if (estado == PRONTO && t % 4 == 0) { WatchUi.requestUpdate(); }
         // últimos 10 s: bipe e piscar da tela, como o Omnitrix ficando sem energia
         if (estado == ALIEN && fimEm - agora <= 10 && fimEm - agora != avisou) {
-            avisou = fimEm - agora; som([2600, 90]); luz(true);
+            if (avisou < 0) { luz(true); }   // acende uma vez só; depois é só o bipe
+            avisou = fimEm - agora; som([2600, 90]);
         }
         if (quadro > 0) { quadro--; WatchUi.requestUpdate(); }
         if (estado == TRANSFORMANDO && quadro == 0) { estado = ALIEN; fimEm = agora + DURACAO; som([220, 120, 160, 250]); }
@@ -108,6 +116,7 @@ class OmnitrixView extends WatchUi.View {
         if (estado == PRONTO) { estado = SELECAO; quadro = 6; }
         if (estado != SELECAO) { return; }
         atual = (atual + dir + NOMES.size()) % NOMES.size(); giro = dir; quadro = 4; vibrar(20, 30); som([2200, 18]);
+        Application.Storage.setValue("alien", atual);
         WatchUi.requestUpdate();
     }
     function voltar() {
@@ -228,8 +237,7 @@ class OmnitrixView extends WatchUi.View {
         }
 
         if (estado == SELECAO) {
-            var abre = 1.0 - quadro / 6.0;
-            if (giro == 0 || quadro == 0) { abre = quadro > 0 && giro == 0 ? 1.0 - quadro / 6.0 : 1.0; }
+            var abre = giro == 0 && quadro > 0 ? 1.0 - quadro / 6.0 : 1.0;
             aro(dc, cx, cy, r, verde);
             // marcas do mostrador girando: posição do alien atual
             var n = NOMES.size();

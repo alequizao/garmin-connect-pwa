@@ -29,7 +29,6 @@ class Ben10App extends Application.AppBase {
 class Ben10View extends WatchUi.WatchFace {
     // <aliens>
     const NOMES = ["CHAMA", "BESTA", "DIAMANTE", "XLR8", "MASSA CINZENTA", "QUATRO BRAÇOS", "INSECTÓIDE", "AQUÁTICO", "ULTRA-T", "FANTASMÁTICO", "BALA DE CANHÃO", "CIPÓ SELVAGEM", "BLITZWOLFER", "SNARE-OH", "FRANKENSTRIKE", "GLUTÃO", "DITTO", "EYE GUY", "GIGANTE", "FOGO-FÁTUO", "ECO ECO", "HUMUNGOSSAURO", "ARRAIA-A-JATO", "FRIAGEM", "CROMASTONE", "BRAINSTORM", "MACACO-ARANHA", "GOSMA", "ALIEN X", "LODESTAR", "RATH", "NANOMECH", "WATER HAZARD", "AMPFIBIAN", "ARMODRILLO", "TERRASPIN", "NRG", "FASTTRACK", "CHAMALIEN", "CLOCKWORK", "EATLE", "JURYRIGG", "FEEDBACK", "BLOXX", "GRAVATTACK", "CRASHHOPPER", "BALL WEEVIL", "WALKATROUT", "PESKY DUST", "MOLE-STACHE", "THE WORST", "KICKIN HAWK", "TOEPICK", "ASTRODACTYL", "BULLFRAG", "ATOMIX", "GUTROT", "WHAMPIRE", "SHOCKSQUATCH"];
-    const SERIES = ["CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "CLÁSSICO", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "FORÇA ALIENÍGENA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "SUPREMACIA", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE", "OMNIVERSE"];
     const CORES = [0xFF5500, 0xFF8800, 0x00DDFF, 0x2288FF, 0xAAAAAA, 0xFF2222, 0xAAFF00, 0x00AAAA, 0x00FF55, 0xDDDDFF, 0xFFCC00, 0x33CC33, 0x8899AA, 0xCC9966, 0x66CC99, 0x66AA33, 0xFFFFFF, 0xFFDD55, 0xFF3333, 0x44BB22, 0xEEEEEE, 0xAA7744, 0xDD2222, 0x3399FF, 0xCC66FF, 0xFF8877, 0x3355DD, 0x77FF33, 0x222244, 0xAA3333, 0xFF9900, 0x88FF88, 0x3366AA, 0x66CCFF, 0xDDAA22, 0x99AA66, 0xFF4400, 0x3344AA, 0x9966CC, 0xCC9933, 0x664422, 0xFF3366, 0x2255FF, 0xFF5533, 0x886644, 0x77AA22, 0xDDBB33, 0x88BBAA, 0xFF99CC, 0xAA7755, 0xCCCC99, 0xCC5522, 0x553366, 0x33AA88, 0x44AA44, 0x99FF33, 0xAA8844, 0x6633AA, 0xEEEEFF];
     // </aliens>
     const DIAS = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
@@ -52,7 +51,7 @@ class Ben10View extends WatchUi.WatchFace {
         try {
             var t = Application.Properties.getValue("tema"); if (t != null) { tema = t; }
             var a = Application.Properties.getValue("alien"); if (a != null) { mostrarAlien = a; }
-            var e = Application.Properties.getValue("escolhido"); if (e != null) { escolhido = e; }
+            var esc = Application.Properties.getValue("escolhido"); if (esc != null) { escolhido = esc; }
         } catch (e) { }
     }
 
@@ -71,7 +70,7 @@ class Ben10View extends WatchUi.WatchFace {
     function onEnterSleep() { dormindo = true; WatchUi.requestUpdate(); }
     function onExitSleep() { dormindo = false; WatchUi.requestUpdate(); }
 
-    function idxAlien(hora) { return (escolhido > 0 && escolhido <= NOMES.size()) ? escolhido - 1 : hora % NOMES.size(); }
+    function idxAlien(hora) { return (escolhido > 0 && escolhido <= NOMES.size()) ? escolhido - 1 : (hora * NOMES.size()) / 24; }
 
     function corTema(hora) {
         if (tema == 1) { return 0xAAFF00; }

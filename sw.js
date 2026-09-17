@@ -1,4 +1,4 @@
-const VERSAO = 'garmin-v27'; // painel web 2.1.0
+const VERSAO = 'garmin-v29'; // painel web 2.1.0
 const TILES = 'garmin-tiles';
 const SHELL = ['/garmin/', '/garmin/index.php', '/garmin/manifest.json', '/garmin/icons/icon-192.png', '/garmin/icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'];

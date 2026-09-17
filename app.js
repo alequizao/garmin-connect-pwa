@@ -282,7 +282,7 @@ function modalAgua() {
   modal(`<h2>💧 Hidratação</h2><div class="num-grande" style="color:#00a0df" id="aguaV">${fmtNum(h.agua)} <small style="font-size:16px;color:#9aa0a6">/ ${fmtNum(m.agua_ml)} ml</small></div><div class="barra"><i id="aguaB" style="width:${Math.min(100, (h.agua || 0) / m.agua_ml * 100)}%"></i></div>
   <div class="agua-botoes"><button data-ml="150">🥛 150</button><button data-ml="250">🥤 250</button><button data-ml="500">🍶 500</button><button data-ml="750">🧴 750</button></div>
   <div class="agua-botoes"><button data-ml="-250" style="color:#ff4d4f">− 250 ml</button><button id="aguaCustom">Outro valor</button></div>`, box => {
-    box.querySelectorAll('[data-ml]').forEach(b => b.onclick = async () => { const ml = +b.dataset.ml; const j = await api('metrica_salvar', { tipo: 'agua', valor: ml, modo: 'add' }); S.dash.hoje = j.hoje; $('#aguaV').innerHTML = `${fmtNum(j.hoje.agua)} <small style="font-size:16px;color:#9aa0a6">/ ${fmtNum(m.agua_ml)} ml</small>`; $('#aguaB').style.width = Math.min(100, j.hoje.agua / m.agua_ml * 100) + '%'; medalhasNovas(j.novas_medalhas); if (S.tela === 'inicio') renderInicio(); });
+    box.querySelectorAll('[data-ml]').forEach(b => b.onclick = async () => { const ml = +b.dataset.ml; const j = await api('metrica_salvar', { tipo: 'agua', valor: ml }); S.dash.hoje = j.hoje; $('#aguaV').innerHTML = `${fmtNum(j.hoje.agua)} <small style="font-size:16px;color:#9aa0a6">/ ${fmtNum(m.agua_ml)} ml</small>`; $('#aguaB').style.width = Math.min(100, j.hoje.agua / m.agua_ml * 100) + '%'; medalhasNovas(j.novas_medalhas); if (S.tela === 'inicio') renderInicio(); });
     $('#aguaCustom').onclick = async () => { const v = prompt('Quantidade em ml'); if (v) { await api('metrica_salvar', { tipo: 'agua', valor: +v, modo: 'add' }); fecharModal(); renderInicio(); } };
   });
 }
@@ -1185,7 +1185,7 @@ async function renderMimei() {
   $('#mmNovo').onclick = () => editarLanche(null, [...new Set(lista.map(x => x.grupo).filter(Boolean))]);
   ligarPareamento();
   // gerar app
-  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#mmModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#mmModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
   const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)) || ((l) => l.length === 1 ? l[0] : null)(modelos.filter(m => n(m.nome).startsWith(q))); };
   $('#mmApp').onsubmit = async e => {
     e.preventDefault(); const m = achar($('#mmModelo').value); if (!m) return toast('Escolha o modelo do relógio');
@@ -1275,7 +1275,7 @@ async function renderSimulador(arg) {
   if (appArg) SIM.app = appArg;
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sim')}
   <section class="w"><header class="w-top"><span class="w-ico">🖥️</span><span class="w-tit">Simulador do relógio</span></header><div class="w-corpo">
-    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador'], ['tama', '🥚', 'Bichinho']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
+    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador'], ['tama', '🥚', 'Bichinho'], ['omnitrix', '🟢', 'Omnitrix']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
     <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
     <div class="sim-palco"><canvas id="simCanvas"></canvas></div>
     <div class="mini centro" id="simDica"></div>
@@ -1310,16 +1310,24 @@ async function renderSimulador(arg) {
 }
 function simPonto(e) { const r = SIM.canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / SIM.escala, y: (e.clientY - r.top) / SIM.escala }; }
 async function simIniciarApp() {
+  if (!document.querySelector('#simCanvas')) { SIM.canvas = null; return; }
   clearTimeout(SIM.timer); SIM.menu = null; SIM.sobre = null;
   const dicas = { mimei: 'Deslize ou use ↑ ↓ ← → para trocar de lanche; START (Enter) abre "Comi" e "Desfazer". Ações valem de verdade.',
     walkie: 'Você conta como um relógio próprio: abra o simulador em outra conta (ex.: jeovana) para conversar. START abre mensagens rápidas, escrever, chamar atenção, SOS e canais.',
+    omnitrix: 'START (Enter) abre o Omnitrix, ↑ ↓ giram entre os 59 aliens e START transforma. É o mesmo Omnitrix da aba Ben 10.',
     tama: 'Cuide do bichinho: ↑ ↓ escolhem o ícone, START (Enter) usa, VOLTAR (Esc) cancela. É o mesmo bichinho da aba Bichinho.',
     rastreador: 'Mostra a última leitura real do seu relógio. O simulador não envia posição nem bateria (para não criar dados falsos). MENU (segurar UP) abre Sobre.' };
   $('#simDica') && ($('#simDica').textContent = dicas[SIM.app]);
   if (SIM.app === 'mimei') await simMimeiDados();
   if (SIM.app === 'walkie') await simWalkieIniciar();
   if (SIM.app === 'rastreador') await simRastreadorDados();
-  clearInterval(SIM.tamaTimer); if (SIM.app === 'tama') { tamaCarregar(); tamaSimular(); SIM.tamaTimer = setInterval(() => { if (SIM.app === 'tama' && SIM.canvas) tamaTique(); else clearInterval(SIM.tamaTimer); }, 250); }
+  clearInterval(SIM.b10Timer);
+  clearInterval(B10.anim); B10.anim = null;
+  if (SIM.app === 'omnitrix') {
+    if (!B10.aliens.length) { try { B10.aliens = await fetch('app/ben10/aliens.json?v=2').then(x => x.json()); } catch (e) { } }
+    SIM.b10Timer = setInterval(() => { if (SIM.app === 'omnitrix' && SIM.canvas) { b10Tique(); simDesenhar(); } else clearInterval(SIM.b10Timer); }, 50);
+  }
+  clearInterval(SIM.tamaTimer); clearInterval(TAMA.anim2); TAMA.anim2 = null; if (SIM.app === 'tama') { tamaCarregar(); tamaSimular(); SIM.tamaTimer = setInterval(() => { if (SIM.app === 'tama' && SIM.canvas) tamaTique(); else clearInterval(SIM.tamaTimer); }, 250); }
   simDesenhar();
 }
 /* ---- ME MIMEI ---- */
@@ -1378,6 +1386,7 @@ function simTecla(t) {
     if (t === 'next' && n) M.sel = (M.sel + 1) % n; else if (t === 'prev' && n) M.sel = (M.sel - 1 + n) % n; else if ((t === 'start' || t === 'menu') && n) simMenuMimei(); }
   if (SIM.app === 'walkie') { const W = SIM.walkie;
     if (t === 'prev') W.desloc = Math.min(W.desloc + 1, Math.max(0, W.mensagens.length - 1)); else if (t === 'next') W.desloc = Math.max(0, W.desloc - 1); else if (t === 'start' || t === 'menu') simMenuWalkie(); }
+  if (SIM.app === 'omnitrix') { b10Acao({ start: 'start', back: 'voltar', prev: 'cima', next: 'baixo', menu: 'start' }[t] || 'start'); return simDesenhar(); }
   if (SIM.app === 'tama') { tamaBotao({ start: 'start', back: 'back', prev: 'cima', next: 'baixo', menu: 'start' }[t] || 'start'); return simDesenhar(); }
   if (SIM.app === 'rastreador' && t === 'start') { SIM.rastreador.ativo = !SIM.rastreador.ativo; }
   simDesenhar();
@@ -1437,6 +1446,7 @@ function simDesenhar() {
   const cor = x => '#' + x.toString(16).padStart(6, '0');
   if (SIM.sobre && typeof simDesenharSobre === 'function') simDesenharSobre(c, w, h, redondo, fonte, cor, SIM.sobre);
   else if (SIM.menu) simDesenharMenu(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'omnitrix') b10Desenhar(c, w, h);
   else if (SIM.app === 'tama') tamaDesenhar(c, w, h);
   else if (SIM.app === 'mimei') simDesenharMimei(c, w, h, redondo, fonte, cor);
   else if (SIM.app === 'walkie' && typeof simDesenharWalkie === 'function') { const W = SIM.walkie, pos = W.canais.findIndex(x => x.id == W.canal);
@@ -1653,8 +1663,8 @@ let B10AC = null;
 function b10Som(notas) { try { B10AC = B10AC || new (window.AudioContext || window.webkitAudioContext)(); let t = B10AC.currentTime; for (let i = 0; i < notas.length; i += 2) { const d = notas[i + 1] / 1000; if (notas[i]) { const o = B10AC.createOscillator(), g = B10AC.createGain(); o.type = 'square'; o.frequency.value = notas[i]; g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(B10AC.destination); o.start(t); o.stop(t + d); } t += d; } } catch (e) { } }
 function b10Luz(cor) { const cv = document.querySelector('#b10cv'); if (!cv) return; cv.style.transition = 'box-shadow .15s'; cv.style.boxShadow = `0 0 90px 20px ${cor}`; setTimeout(() => { cv.style.transition = 'box-shadow 1.2s'; cv.style.boxShadow = '0 0 40px #22ff4433'; }, 400); }
 
-const B10 = { tema: 0, alien: true, bat: 87, timer: null, aliens: [], img: {}, esc: 0, modo: 'app', estado: 'pronto', fim: 0, quadro: 0, anim: null };
-const b10Img = i => { const a = B10.aliens[i]; if (!a) return null; if (!B10.img[a.slug]) { const im = new Image(); im.onload = () => { const cv = $('#b10cv'); cv && desenharBen10(cv); }; im.src = 'app/ben10/' + a.slug + '.png'; B10.img[a.slug] = im; } return B10.img[a.slug]; };
+const B10 = { timer: null, aliens: [], img: {}, esc: 0, modo: 'app', estado: 'pronto', fim: 0, quadro: 0, anim: null };
+const b10Img = i => { const a = B10.aliens[i]; if (!a) return null; if (!B10.img[a.slug]) { const im = new Image(); im.onload = () => { const cv = $('#b10cv'); cv ? desenharBen10(cv) : simDesenhar(); }; im.src = 'app/ben10/' + a.slug + '.png'; B10.img[a.slug] = im; } return B10.img[a.slug]; };
 function b10Aro(c, cx, cy, r, cor) {
   const circ = (rr, k) => { c.fillStyle = k; c.beginPath(); c.arc(cx, cy, rr, 0, 7); c.fill(); };
   circ(r, '#555'); circ(r * .86, '#222'); c.fillStyle = '#999';
@@ -1671,23 +1681,12 @@ function b10Texto(c, txt, x, y, maxW, px, cor, peso = 700) {
   if (c.measureText(txt).width <= maxW || !txt.includes(' ')) return c.fillText(txt, x, y);
   const i = txt.indexOf(' '); c.fillText(txt.slice(0, i), x, y - t * .55); c.fillText(txt.slice(i + 1), x, y + t * .55);
 }
-function desenharBen10(cv) {
-  const c = cv.getContext('2d'), W = cv.width, cx = W / 2, cy = W / 2, r = W / 2, d = new Date(), h = d.getHours();
+function desenharBen10(cv) { b10Desenhar(cv.getContext('2d'), cv.width, cv.height); }
+function b10Desenhar(c, W, H) {
+  const cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2, d = new Date(), h = d.getHours();
   const n = B10.aliens.length || 1, al = B10.aliens[B10.esc] || { nome: 'OMNITRIX', cor: '#22FF44' };
-  c.clearRect(0, 0, W, W); c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.clearRect(0, 0, W, H); c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.textAlign = 'center'; c.textBaseline = 'middle';
   const dd = String(h).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
-  if (B10.modo === 'face') {
-    const idx = B10.alien === 'hora' ? h % n : B10.esc, ah = B10.aliens[idx] || al;
-    const rec = B10.bat <= 20, verde = rec ? '#FF2200' : ['#22FF44', '#AAFF00', '#00AA22', ah.cor][B10.tema];
-    b10Aro(c, cx, cy, r, verde); b10Ampulheta(c, cx, cy, r, verde);
-    c.fillStyle = '#000'; c.font = `700 ${r * .36}px Roboto, sans-serif`; c.fillText(dd, cx, cy - r * .34); c.fillText(mm, cx, cy + r * .34);
-    const lx = cx - r * .47, rx = cx + r * .47, fx = `500 ${r * .09}px Roboto, sans-serif`, fp = `700 ${r * .13}px Roboto, sans-serif`;
-    c.font = fx; c.fillStyle = '#bbb'; c.fillText(['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][d.getDay()], lx, cy + r * .04); c.fillText('6.482', rx, cy + r * .04);
-    c.font = fp; c.fillStyle = '#fff'; c.fillText(d.getDate(), lx, cy - r * .1); c.fillStyle = verde; c.fillText(B10.bat + '%', rx, cy - r * .1);
-    c.font = fx; c.fillStyle = '#FF3344'; c.fillText('FC 72', cx, cy + r * .7);
-    b10Texto(c, rec ? 'RECARREGANDO' : B10.alien ? ah.nome.toUpperCase() : 'OMNITRIX', cx, cy - r * .7, r * .8, r * .1, rec ? '#FF2200' : B10.alien ? ah.cor : verde, 500);
-    return;
-  }
   const est = B10.estado, resta = Math.max(0, Math.round((B10.fim - Date.now()) / 1000)), mmss = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   if (est === 'pronto' || est === 'recarga') {
     const cor = est === 'recarga' ? '#FF2200' : '#22FF44';
@@ -1717,15 +1716,17 @@ function desenharBen10(cv) {
   }
 }
 function b10Tique() {
-  const cv = $('#b10cv'); if (!cv) { clearInterval(B10.anim); B10.anim = null; return; }
+  const cv = $('#b10cv');
+  if (!cv && !(typeof SIM === 'object' && SIM.app === 'omnitrix' && SIM.canvas)) { clearInterval(B10.anim); B10.anim = null; return; }
   if (B10.quadro > 0) B10.quadro--; else B10.giro = 0;
   if (B10.estado === 'transformando' && !B10.quadro) { B10.estado = 'alien'; B10.fim = Date.now() + 600000; b10Som([220, 120, 160, 250]); }
   if (B10.estado === 'alien' && Date.now() >= B10.fim) b10Acao('fim');
   if (B10.estado === 'recarga' && Date.now() >= B10.fim) { B10.estado = 'pronto'; b10Som([1200, 80, 0, 40, 1800, 140]); b10Luz('#22ff44'); }
-  desenharBen10(cv);
+  cv ? desenharBen10(cv) : simDesenhar();
 }
 function b10Acao(a) {
-  const n = B10.aliens.length; if (B10.modo !== 'app') B10.modo = 'app';
+  if (!B10.aliens.length) return;
+  const n = B10.aliens.length;
   if (a === 'start') { if (B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; b10Som([900, 40, 1300, 40, 1900, 70]); b10Luz('#22ff4488'); } else if (B10.estado === 'selecao') { B10.estado = 'transformando'; B10.quadro = 14; navigator.vibrate?.([120, 80, 400]); b10Som([500, 60, 700, 60, 900, 60, 1200, 60, 1500, 60, 1900, 70, 2400, 80, 3000, 260]); b10Luz('#aaffbb'); } }
   if (a === 'cima' || a === 'baixo') { if (B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; } if (B10.estado === 'selecao') { B10.esc = (B10.esc + (a === 'baixo' ? 1 : -1) + n) % n; B10.giro = a === 'baixo' ? 1 : -1; B10.quadro = 4; b10Som([2200, 18]); b10Lista(); } }
   if (a === 'voltar') { if (B10.estado === 'selecao') { B10.estado = 'pronto'; b10Som([1600, 40, 1000, 60]); } else if (B10.estado === 'alien' || B10.estado === 'transformando') a = 'fim'; }
@@ -1734,6 +1735,7 @@ function b10Acao(a) {
 function b10Lista() {
   const l = $('#b10Lista'); if (!l) return;
   l.querySelectorAll('[data-b10a]').forEach(b => b.classList.toggle('ativo', +b.dataset.b10a === B10.esc));
+  if (!B10.aliens.length) return;
   $('#b10Nome') && ($('#b10Nome').textContent = `${B10.aliens[B10.esc].nome} · ${B10.aliens[B10.esc].original} (${B10.aliens[B10.esc].serie})`);
 }
 async function renderBen10() {
@@ -1743,11 +1745,8 @@ async function renderBen10() {
   <section class="w"><header class="w-top"><span class="w-ico">⌚</span><span class="w-tit">Omnitrix Ben 10</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
    
    <canvas id="b10cv" width="360" height="360" style="width:min(300px,80vw);height:auto;border-radius:50%;box-shadow:0 0 40px #22ff4433;touch-action:pan-y;cursor:pointer"></canvas>
-   ${B10.modo === 'app' ? `<div class="chips"><button class="chip" data-b10bt="cima">▲ Cima</button><button class="chip" data-b10bt="start">● START</button><button class="chip" data-b10bt="baixo">▼ Baixo</button><button class="chip" data-b10bt="voltar">↩ Voltar</button></div>
-   <div class="mini" style="text-align:center;max-width:460px">Igual ao relógio do desenho: <b>START</b> (ou toque na tela) abre o mostrador, <b>Cima/Baixo</b> (ou deslizar) gira entre os aliens e <b>START</b> de novo <b>transforma</b> — clarão verde, vibração e a silhueta do alien com o tempo da transformação (10 min). Quando acaba, ou ao apertar <b>Voltar</b>, o Omnitrix fica <b>vermelho recarregando</b> por 1 minuto. O último alien escolhido fica guardado.</div>`
-   : `<div class="chips">${['Clássico', 'Omniverse', 'Ultimatrix', 'Cor do alien'].map((n, i) => `<button class="chip ${B10.tema === i ? 'ativo' : ''}" data-b10tema="${i}">${n}</button>`).join('')}</div>
-   <div class="chips"><button class="chip ${B10.alien === 'hora' ? 'ativo' : ''}" id="b10hora">🕐 Alien da hora</button><button class="chip ${B10.bat <= 20 ? 'ativo' : ''}" id="b10bat">🔋 Simular bateria fraca</button></div>
-   <div class="mini" style="text-align:center;max-width:460px">Mostrador com a hora na ampulheta e o nome do alien em cima. No relógio, o alien do mostrador é escolhido no app <b>Garmin Connect</b> (Configurações do mostrador → <b>Alien escolhido</b>) — mostradores da Garmin não aceitam botões, por isso a escolha girando o Omnitrix fica no app interativo.</div>`}
+   <div class="chips"><button class="chip" data-b10bt="cima">▲ Cima</button><button class="chip" data-b10bt="start">● START</button><button class="chip" data-b10bt="baixo">▼ Baixo</button><button class="chip" data-b10bt="voltar">↩ Voltar</button></div>
+   <div class="mini" style="text-align:center;max-width:460px">Igual ao relógio do desenho: <b>START</b> (ou toque na tela) abre o mostrador, <b>Cima/Baixo</b> (ou deslizar) gira entre os aliens e <b>START</b> de novo <b>transforma</b> — clarão verde, vibração e a silhueta do alien com o tempo da transformação (10 min). Quando acaba, ou ao apertar <b>Voltar</b>, o Omnitrix fica <b>vermelho recarregando</b> por 1 minuto. O último alien escolhido fica guardado.</div>
    <div class="mini" id="b10Nome" style="text-align:center">${a.nome ? `${a.nome} · ${a.original} (${a.serie})` : ''}</div>
    <div id="b10Lista" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;width:100%;max-height:260px;overflow:auto">${B10.aliens.map((x, i) => `<button class="chip ${i === B10.esc ? 'ativo' : ''}" data-b10a="${i}" title="${esc(x.nome)}" style="display:flex;flex-direction:column;align-items:center;padding:4px;min-width:0"><span style="width:44px;height:44px;border-radius:50%;background:#22FF44;display:flex;align-items:center;justify-content:center"><img src="app/ben10/${x.slug}.png" loading="lazy" alt="" style="width:40px;height:40px"></span><span style="font-size:10px;line-height:1.1;white-space:normal;text-align:center">${esc(x.nome)}</span></button>`).join('')}</div>
   </div></section>
@@ -1757,16 +1756,12 @@ async function renderBen10() {
    <div class="mini" id="b10Prog" style="margin-top:8px">Copie o arquivo .prg para a pasta GARMIN/APPS do relógio (cabo USB). O interativo aparece na lista de apps (dá para pôr num atalho de botão); o mostrador, em Aparência.</div></form></div>
   ${tabbar('app')}</div>`;
   const cv = $('#b10cv');
-  clearInterval(B10.anim); B10.anim = setInterval(b10Tique, 50); desenharBen10(cv);
-  document.querySelectorAll('[data-b10modo]').forEach(b => b.onclick = () => { B10.modo = b.dataset.b10modo; renderBen10(); });
+  clearInterval(B10.anim); clearInterval(SIM.b10Timer); B10.anim = setInterval(b10Tique, 50); cv ? desenharBen10(cv) : simDesenhar();
   document.querySelectorAll('[data-b10bt]').forEach(b => b.onclick = () => b10Acao(b.dataset.b10bt));
-  document.querySelectorAll('[data-b10tema]').forEach(b => b.onclick = () => { B10.tema = +b.dataset.b10tema; renderBen10(); });
-  document.querySelectorAll('[data-b10a]').forEach(b => b.onclick = () => { B10.esc = +b.dataset.b10a; if (B10.alien === 'hora') B10.alien = true; if (B10.modo === 'app' && B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; } b10Lista(); });
-  $('#b10hora') && ($('#b10hora').onclick = () => { B10.alien = B10.alien === 'hora' ? true : 'hora'; renderBen10(); });
-  $('#b10bat') && ($('#b10bat').onclick = () => { B10.bat = B10.bat <= 20 ? 87 : 15; renderBen10(); });
-  cv.onclick = () => B10.modo === 'app' && b10Acao('start');
-  let x0 = null; cv.ontouchstart = e => { x0 = e.touches[0].clientX; }; cv.ontouchend = e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 30 && B10.modo === 'app') { e.preventDefault(); b10Acao(dx < 0 ? 'baixo' : 'cima'); } };
-  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#b10Modelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  document.querySelectorAll('[data-b10a]').forEach(b => b.onclick = () => { B10.esc = +b.dataset.b10a; if (B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; } b10Lista(); });
+  cv.onclick = () => b10Acao('start');
+  let x0 = null; cv.ontouchstart = e => { x0 = e.touches[0].clientX; }; cv.ontouchend = e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 30) { e.preventDefault(); b10Acao(dx < 0 ? 'baixo' : 'cima'); } };
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#b10Modelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
   const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)) || ((l) => l.length === 1 ? l[0] : null)(modelos.filter(m => n(m.nome).startsWith(q))); };
   $('#b10App').onsubmit = e => e.preventDefault();
   document.querySelectorAll('[data-b10gera]').forEach(bt => bt.onclick = async e => {
@@ -1848,13 +1843,24 @@ const TAMA = { tela: 'principal', sel: -1, sub: 0, q: 0, posX: 8, dirX: 1, anim:
 let TAMAC = null;
 function tamaSom(notas) { if (TAMA.p && TAMA.p.somLig === 0) return; try { TAMAC = TAMAC || new (window.AudioContext || window.webkitAudioContext)(); let t = TAMAC.currentTime; for (let i = 0; i < notas.length; i += 2) { const d = notas[i + 1] / 1000; if (notas[i]) { const o = TAMAC.createOscillator(), g = TAMAC.createGain(); o.type = 'square'; o.frequency.value = notas[i]; g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(TAMAC.destination); o.start(t); o.stop(t + d); } t += d; } } catch (e) { } }
 const tamaBip = () => tamaSom([2000, 30]);
-function tamaNovoOvo() { const a = Math.floor(Date.now() / 1000); TAMA.p = { per: 0, nasc: a, ultimo: a, idade: 0, fome: 2, feliz: 2, peso: 5, coco: 0, doente: 0, doses: 0, luz: 1, disc: 0, somLig: 1, erroC: 0, erroD: 0, erroCrianca: 0, birra: 0, aFome: 0, aFeliz: 0, aCoco: 0, tZero: 0, tFome0: 0, tDoente: 0, tLuz: 0, tBir: 0 }; tamaSalvar(); }
-function tamaCarregar() { try { const d = JSON.parse(localStorage.getItem('tama2') || 'null'); if (d && d.nasc) { TAMA.p = d; return; } } catch (e) { } tamaNovoOvo(); }
+function tamaNovoOvo() { const a = Math.floor(Date.now() / 1000); TAMA.p = { ver: 2, per: 0, nasc: a, ultimo: a, idade: 0, fome: 2, feliz: 2, peso: 5, coco: 0, doente: 0, doses: 0, luz: 1, disc: 0, somLig: 1, erroC: 0, erroD: 0, erroCrianca: 0, birra: 0, aFome: 0, aFeliz: 0, aCoco: 0, tZero: 0, tFome0: 0, tDoente: 0, tLuz: 0, tBir: 0 }; tamaSalvar(); }
+function tamaCarregar() {
+  try {
+    const d = JSON.parse(localStorage.getItem('tama2') || 'null');
+    if (d && d.ver === 2 && d.nasc) { tamaNovoOvo(); for (const k in TAMA.p) if (typeof d[k] === 'number') TAMA.p[k] = d[k]; return; }
+  } catch (e) { }
+  tamaNovoOvo();
+}
 function tamaSalvar() { try { localStorage.setItem('tama2', JSON.stringify(TAMA.p)); } catch (e) { } }
 function tamaDormindo(t) { const p = TAMA.p; if (!p || p.per === 0 || p.per === 12) return false; const h = new Date(t * 1000).getHours(), d = TAMA_DORMIR[p.per], a = TAMA_ACORDAR[p.per]; return d > a ? (h >= d || h < a) : (h >= d && h < a); }
 // o ícone de atenção acende por fome, tristeza, birra ou luz acesa na hora de dormir (a doença não avisa)
 function tamaChamando() { const p = TAMA.p; if (!p || p.per === 0 || p.per === 12) return false; if (tamaDormindo(Math.floor(Date.now() / 1000))) return p.luz === 1; return p.fome === 0 || p.feliz === 0 || p.birra === 1; }
 function tamaEvoluir() {
+  const p = TAMA.p, antes = p.per;
+  tamaEvoluirFase();
+  if (p.per !== antes && p.peso < TAMA_PESOMIN[p.per]) p.peso = TAMA_PESOMIN[p.per];
+}
+function tamaEvoluirFase() {
   const p = TAMA.p;
   if (p.per === 1 && p.idade >= 65) { p.per = 2; p.erroCrianca = p.erroC; }
   else if (p.per === 2 && p.idade >= 3 * 1440) { p.per = (p.erroC - p.erroCrianca) <= 2 ? 3 : 4; p.erroCrianca = p.erroC; }
@@ -1866,23 +1872,29 @@ function tamaEvoluir() {
 function tamaPasso(t) {
   const p = TAMA.p;
   p.idade += 5; tamaEvoluir();
-  if (tamaDormindo(t)) { if (p.luz === 1) { p.tLuz += 5; if (p.tLuz === 15) p.erroC++; } else p.tLuz = 0; return; }
+  if (tamaDormindo(t)) {
+    if (p.luz === 1) { p.tLuz += 5; if (p.tLuz % 15 === 0) p.erroC++; } else p.tLuz = 0;
+    p.tFome0 = p.fome === 0 ? p.tFome0 + 5 : 0;
+    p.tDoente = p.doente === 1 ? p.tDoente + 5 : 0;
+    if (p.tFome0 >= 720 || p.tDoente >= 1440) p.per = 12;
+    return;
+  }
   p.tLuz = 0;
   p.aFome += 5; if (p.aFome >= TAMA_RFOME[p.per]) { p.aFome = 0; if (p.fome > 0) p.fome--; }
   p.aFeliz += 5; if (p.aFeliz >= TAMA_RFELIZ[p.per]) { p.aFeliz = 0; if (p.feliz > 0) p.feliz--; }
   p.aCoco += 5; if (p.aCoco >= TAMA_RCOCO[p.per]) { p.aCoco = 0; if (p.coco < 4) p.coco++; }
   if (!p.birra && p.fome > 0 && p.feliz > 0 && !p.doente && Math.random() < 1 / 36) { p.birra = 1; p.tBir = 0; }
   if (p.birra === 1) { p.tBir += 5; if (p.tBir >= 15) { p.erroD++; p.birra = 0; p.tBir = 0; } }
-  if (p.fome === 0 || p.feliz === 0) { p.tZero += 5; if (p.tZero === 15) p.erroC++; } else p.tZero = 0;
+  if (p.fome === 0 || p.feliz === 0) { p.tZero += 5; if (p.tZero % 15 === 0) p.erroC++; } else p.tZero = 0;
   p.tFome0 = p.fome === 0 ? p.tFome0 + 5 : 0;
   if (!p.doente && (p.coco >= 4 || p.tFome0 >= 360 || p.peso >= 90)) { p.doente = 1; p.doses = 2; }
   p.tDoente = p.doente === 1 ? p.tDoente + 5 : 0;
-  const limite = Math.max(8, 25 - p.erroC - 2 * p.erroD);
+  const limite = Math.max(12, 25 - p.erroC - 2 * p.erroD);
   if (p.tFome0 >= 720 || p.tDoente >= 1440 || p.idade / 1440 >= limite) p.per = 12;
 }
 function tamaSimular() {
   const p = TAMA.p, agora = Math.floor(Date.now() / 1000);
-  if (p.per === 0) { if (agora - p.nasc < 300) { p.ultimo = agora; return; } p.per = 1; p.idade = 0; p.ultimo = p.nasc + 300; tamaSom([1047, 120, 1319, 120, 1568, 120, 2093, 300]); }
+  if (p.per === 0) { if (agora - p.nasc < 300) { p.ultimo = agora; return; } p.per = 1; p.idade = 0; p.ultimo = p.nasc + 300; tamaSom([1047, 120, 1319, 120, 1568, 120, 2093, 300]); navigator.vibrate?.(300); }
   if (p.per === 12) { p.ultimo = agora; return; }
   if (agora - p.ultimo > 7 * 86400) p.ultimo = agora - 7 * 86400;
   const antes = p.per;
@@ -1893,8 +1905,9 @@ function tamaSimular() {
 }
 const tamaAnim = (a, q, txt) => { TAMA.tela = 'anim'; TAMA.anim = a; TAMA.animQ = q; TAMA.animTxt = txt || ''; };
 function tamaTique() {
+  if (!TAMA.p) tamaCarregar();
   TAMA.q++;
-  if (TAMA.q % 240 === 0) tamaSimular();
+  if (TAMA.q % 240 === 0 || (TAMA.p.per === 0 && Math.floor(Date.now() / 1000) - TAMA.p.nasc >= 300)) tamaSimular();
   if (TAMA.animQ > 0 && --TAMA.animQ === 0) { TAMA.tela = 'principal'; TAMA.anim = ''; tamaSalvar(); }
   if (TAMA.q % 4 === 0 && TAMA.tela === 'principal') {
     const maxX = TAMA.p.coco === 0 ? 16 : TAMA.p.coco <= 2 ? 8 : 0;
@@ -1911,7 +1924,7 @@ function tamaRodada() {
   const p = TAMA.p;
   if (TAMA.rod >= 5) {
     if (p.peso > TAMA_PESOMIN[p.per]) p.peso--;
-    if (TAMA.acertos >= 3) { if (p.feliz < 4) p.feliz++; p.tZero = 0; tamaAnim('feliz', 12, TAMA.acertos + '/5 GANHOU'); tamaSom([1047, 100, 1319, 100, 1568, 250]); }
+    if (TAMA.acertos >= 3) { if (p.feliz < 4) p.feliz++; if (p.fome > 0 && p.feliz > 0) p.tZero = 0; tamaAnim('feliz', 12, TAMA.acertos + '/5 GANHOU'); tamaSom([1047, 100, 1319, 100, 1568, 250]); }
     else { tamaAnim('triste', 10, TAMA.acertos + '/5 PERDEU'); tamaSom([523, 150, 392, 300]); }
     tamaSalvar(); return;
   }
@@ -1922,7 +1935,8 @@ function tamaComer(qual) {
   if (qual === 0) { if (p.fome >= 4) { tamaAnim('triste', 8, 'CHEIO!'); return tamaSom([300, 200]); } p.fome++; p.peso++; }
   else { if (p.feliz < 4) p.feliz++; p.peso += 2; }
   if (p.peso > 99) p.peso = 99;
-  p.tZero = 0; tamaAnim(qual === 0 ? 'comida' : 'doce', 12, ''); tamaSom([1200, 60, 0, 120, 1200, 60, 0, 120, 1200, 60]); tamaSalvar();
+  if (p.fome > 0 && p.feliz > 0) p.tZero = 0;
+  tamaAnim(qual === 0 ? 'comida' : 'doce', 12, ''); tamaSom([1200, 60, 0, 120, 1200, 60, 0, 120, 1200, 60]); tamaSalvar();
 }
 // 0 comer · 1 luz · 2 brincar · 3 remédio · 4 limpar · 5 bronca · 6 status
 function tamaUsar(i) {
@@ -1947,6 +1961,7 @@ function tamaUsar(i) {
   if (i === 4) { if (p.coco > 0) { p.coco = 0; tamaAnim('limpar', 12, ''); tamaSom([1500, 40, 1700, 40, 1900, 40, 2100, 80]); tamaSalvar(); } else tamaSom([400, 120]); }
 }
 function tamaBotao(b) {
+  if (!TAMA.p) tamaCarregar();
   tamaBip(); const p = TAMA.p;
   if (TAMA.tela === 'anim') return;
   if (p.per === 12) { if (b === 'start') { tamaNovoOvo(); TAMA.tela = 'principal'; TAMA.sel = -1; tamaSom([1568, 80, 2093, 160]); } return tamaPintar(); }
@@ -1958,7 +1973,7 @@ function tamaBotao(b) {
   }
   if (TAMA.tela === 'comer') { if (b === 'back') TAMA.tela = 'principal'; else if (b === 'start') tamaComer(TAMA.sub); else TAMA.sub = 1 - TAMA.sub; return tamaPintar(); }
   if (TAMA.tela === 'jogo') {
-    if (b === 'back') TAMA.tela = 'principal';
+    if (b === 'back') { TAMA.tela = 'principal'; TAMA.mostra = 0; }
     else if (TAMA.mostra === 0 && (b === 'cima' || b === 'baixo')) { TAMA.escolha = b === 'cima' ? -1 : 1; TAMA.mostra = 5; if (TAMA.escolha === TAMA.lado) { TAMA.acertos++; tamaSom([1568, 60, 2093, 100]); } else tamaSom([392, 150]); }
     return tamaPintar();
   }
@@ -1995,19 +2010,19 @@ function tamaDesenhar(c, w, h) {
     if (i === TAMA.sel && i !== 7) c.fillRect(ix, lin === 0 ? iy + ip * 9 : iy - ip - 2, ip * 8, 2);
   }
   c.fillStyle = TAMA_PIX;
-  const fonte = Math.max(9, Math.round(p * 2.2)), yTopo = ly + faixa - fonte;
+  const fonte = Math.max(9, Math.round(p * 2.2)), yTopo = ly + faixa - fonte, yRodape = ly + lh - faixa - fonte * 0.7;
   const txt = (t, x, y, al) => { c.font = `${fonte}px Roboto, Arial, sans-serif`; c.textAlign = al || 'center'; c.textBaseline = 'middle'; c.fillText(t, x, y); };
   const quadro = TAMA.q % 2, meio = Math.max(2, Math.floor(p / 2));
   if (p0.per === 12) {
     tamaSpr(c, TAMA_SPR.FANTASMA, 16, cx - 14 * p, ay - (Math.floor(TAMA.q / 4) % 2) * p, p, false);
     tamaSpr(c, TAMA_SPR.TUMBA, 16, cx + p, ay, p, false);
-    txt('START: NOVO OVO', cx, ay + 16 * p); return;
+    txt('START: NOVO OVO', cx, yRodape); return;
   }
   if (TAMA.tela === 'status') {
-    txt(['IDADE ' + Math.floor(p0.idade / 1440) + ' ANOS', 'FOME', 'FELIZ', 'DISCIPLINA', TAMA_NOMES[p0.per]][TAMA.sub], cx, ay + 3 * p);
+    txt(['IDADE ' + Math.floor(p0.idade / 1440), 'FOME', 'FELIZ', 'DISCIPLINA', TAMA_NOMES[p0.per]][TAMA.sub], cx, ay + 3 * p);
     if (TAMA.sub === 0) txt('PESO ' + p0.peso + 'g', cx, ay + 11 * p);
     else if (TAMA.sub === 3) txt(p0.disc + '%', cx, ay + 11 * p);
-    else if (TAMA.sub === 4) txt(p0.somLig === 1 ? 'SOM LIGADO' : 'SOM DESLIGADO', cx, ay + 11 * p);
+    else if (TAMA.sub === 4) txt(p0.somLig === 1 ? 'SOM: SIM' : 'SOM: NAO', cx, ay + 11 * p);
     else { const n = TAMA.sub === 1 ? p0.fome : p0.feliz, hp = Math.max(2, Math.floor(p * 3 / 4)); for (let k = 0; k < 4; k++) tamaSpr(c, k < n ? TAMA_SPR.CORACAO : TAMA_SPR.CORACAO_V, 8, cx - 16 * p + k * 8 * p + 2 * p, ay + 8 * p, hp, false); }
     txt((TAMA.sub + 1) + '/5', cx, yTopo); return;
   }
@@ -2017,7 +2032,7 @@ function tamaDesenhar(c, w, h) {
     const lado = TAMA.mostra > 0 ? TAMA.lado : 0;
     tamaSpr(c, tamaSprPet(), 16, cx - 8 * p + lado * 6 * p, ay, p, lado < 0);
     txt(TAMA.rod + '/5', lx + 8, yTopo, 'left');
-    txt(TAMA.mostra > 0 ? (TAMA.escolha === TAMA.lado ? 'ACERTOU!' : 'ERROU') : 'CIMA=ESQ  BAIXO=DIR', cx, ay + 16 * p);
+    txt(TAMA.mostra > 0 ? (TAMA.escolha === TAMA.lado ? 'ACERTOU!' : 'ERROU') : '↑ ESQ   ↓ DIR', cx, yRodape);
     return;
   }
   if (TAMA.tela === 'anim') {
@@ -2039,7 +2054,7 @@ function tamaDesenhar(c, w, h) {
     tamaSpr(c, TAMA_SPR.EGG, 16, cx - 8 * p + (Math.floor(TAMA.q / 4) % 2 ? p : -p), ay, p, false);
     const falta = Math.max(0, 300 - (agora - p0.nasc));
     txt(Math.floor(falta / 60) + ':' + String(falta % 60).padStart(2, '0'), lx + lw - 8, yTopo, 'right');
-    if (!falta) tamaSimular();
+
   } else if (tamaDormindo(agora)) {
     tamaSpr(c, tamaSprPet(), 16, cx - 12 * p, ay, p, false); tamaSpr(c, TAMA_SPR.ZZZ, 8, cx + 5 * p, ay - (Math.floor(TAMA.q / 4) % 2) * p, p, false);
   } else {
@@ -2058,7 +2073,7 @@ async function renderTama() {
    <div class="chips"><button class="chip" data-tamabt="cima">▲ Cima</button><button class="chip" data-tamabt="start">● START</button><button class="chip" data-tamabt="baixo">▼ Baixo</button><button class="chip" data-tamabt="back">↩ Voltar</button></div>
    <div class="mini" style="text-align:center;max-width:520px">Como nos bichinhos de 1996: <b>1 dia real = 1 ano de vida</b>. O ovo choca em 5 minutos, vira bebê (1 hora), criança (até 3 anos), adolescente (até 6 anos) e então adulto.<br>
    <b>Qual adulto ele vira depende de você.</b> Erro de cuidado é deixar fome ou felicidade em zero por 15 minutos, ou a luz acesa na hora de dormir. Erro de disciplina é não dar bronca quando ele chama de birra (chamar com os corações cheios). Cuidado impecável dá o <b>Gatinho</b>; descuido leva ao <b>Robozinho</b>, <b>Mascarado</b>, <b>Patinho</b>, <b>Minhoca</b> ou <b>Gosminha</b>. Existe um <b>secreto</b>: chegue ao Mascarado com disciplina 0% e cuide bem até os 10 anos.<br>
-   Cocô acumulado (4) adoece, e a <b>caveira não toca alarme</b> — fique de olho. O remédio precisa de <b>2 doses</b>. Ele morre de fome (12 h), de doença (24 h) ou de velhice, e quanto mais erros, menos tempo de vida.<br>
+   Cocô acumulado (4) adoece, e a <b>caveira não toca alarme</b> — fique de olho. O remédio precisa de <b>2 doses</b>. Ele morre de fome (12 h), de doença (24 h) ou de velhice, e quanto mais erros, menos tempo de vida. <b>O tempo corre mesmo com a página fechada</b>, inclusive enquanto ele dorme: sumir por um dia inteiro mata o bichinho.<br>
    Ícones: 🍴 comer (refeição ou doce) · 💡 luz · ⚽ brincar (5 rodadas de esquerda/direita, tira 1 g) · 💉 remédio · 🦆 limpar · 😠 bronca · 📊 status (idade, peso, corações, disciplina, nome e som) · ❗ atenção.<br>
    O bichinho do site e o do relógio são separados.</div>
    <div class="chips"><button class="chip" id="tamaZera">🥚 Começar um ovo novo</button></div>
@@ -2068,12 +2083,12 @@ async function renderTama() {
    <div class="chips"><button class="btn" id="tamaGera">⬇ Baixar Bichinho</button></div>
    <div class="mini" id="tamaProg"></div></form></div>
   ${tabbar('app')}</div>`;
-  clearInterval(TAMA.anim2); TAMA.anim2 = setInterval(tamaTique, 250); tamaPintar();
+  clearInterval(TAMA.anim2); clearInterval(SIM.tamaTimer); TAMA.anim2 = setInterval(tamaTique, 250); tamaPintar();
   document.querySelectorAll('[data-tamabt]').forEach(b => b.onclick = () => tamaBotao(b.dataset.tamabt));
   $('#tamaZera').onclick = () => { tamaNovoOvo(); TAMA.tela = 'principal'; TAMA.sel = -1; tamaSom([1568, 80, 2093, 160]); tamaPintar(); };
   const cv = $('#tamaCv'); cv.onclick = () => tamaBotao('start');
   let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; }; cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); tamaBotao(dy > 0 ? 'cima' : 'baixo'); } };
-  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#tamaModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#tamaModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
   const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
   $('#tamaApp').onsubmit = e => e.preventDefault();
   $('#tamaGera').onclick = async e => {

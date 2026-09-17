@@ -39,7 +39,7 @@ class BichinhoView extends WatchUi.View {
     // estado salvo
     var per = OVO, nasc = 0, ultimo = 0, idade = 0;          // idade em minutos de vida (depois de chocar)
     var fome = 2, feliz = 2, peso = 5, coco = 0, doente = 0, doses = 0, luz = 1, disc = 0, somLig = 1;
-    var erroC = 0, erroD = 0, erroCrianca = 0, birra = 0, tBirra = 0;
+    var erroC = 0, erroD = 0, erroCrianca = 0, birra = 0;
     var aFome = 0, aFeliz = 0, aCoco = 0, tZero = 0, tFome0 = 0, tDoente = 0, tLuz = 0, tBir = 0;
     // tela
     var tela = PRINCIPAL, sel = -1, sub = 0, q = 0, posX = 8, dirX = 1, anim = "", animQ = 0, animTxt = "";
@@ -49,19 +49,25 @@ class BichinhoView extends WatchUi.View {
     function initialize() {
         View.initialize();
         var d = Application.Storage.getValue("pet2");
-        if (d instanceof Dictionary) {
-            per = d["per"]; nasc = d["nasc"]; ultimo = d["ultimo"]; idade = d["idade"];
-            fome = d["fome"]; feliz = d["feliz"]; peso = d["peso"]; coco = d["coco"]; doente = d["doente"];
-            doses = d["doses"]; luz = d["luz"]; disc = d["disc"]; somLig = d["somLig"];
-            erroC = d["erroC"]; erroD = d["erroD"]; erroCrianca = d["erroCrianca"]; birra = d["birra"];
-            aFome = d["aFome"]; aFeliz = d["aFeliz"]; aCoco = d["aCoco"];
-            tFome0 = d["tFome0"]; tDoente = d["tDoente"]; tLuz = d["tLuz"]; tBir = d["tBir"]; tZero = d["tZero"];
+        if (d instanceof Dictionary && d["ver"] != null) {
+            per = n(d, "per", per); nasc = n(d, "nasc", nasc); ultimo = n(d, "ultimo", ultimo); idade = n(d, "idade", idade);
+            fome = n(d, "fome", fome); feliz = n(d, "feliz", feliz); peso = n(d, "peso", peso); coco = n(d, "coco", coco); doente = n(d, "doente", doente);
+            doses = n(d, "doses", doses); luz = n(d, "luz", luz); disc = n(d, "disc", disc); somLig = n(d, "somLig", somLig);
+            erroC = n(d, "erroC", erroC); erroD = n(d, "erroD", erroD); erroCrianca = n(d, "erroCrianca", erroCrianca); birra = n(d, "birra", birra);
+            aFome = n(d, "aFome", aFome); aFeliz = n(d, "aFeliz", aFeliz); aCoco = n(d, "aCoco", aCoco);
+            tFome0 = n(d, "tFome0", tFome0); tDoente = n(d, "tDoente", tDoente); tLuz = n(d, "tLuz", tLuz); tBir = n(d, "tBir", tBir); tZero = n(d, "tZero", tZero);
         } else { novoOvo(); }
         timer = new Timer.Timer();
     }
 
+    // lê um campo do save; se faltar (save antigo), fica com o valor padrão
+    function n(d, chave, padrao) {
+        var v = d[chave];
+        return v instanceof Number ? v : padrao;
+    }
+
     function salvar() {
-        Application.Storage.setValue("pet2", {"per" => per, "nasc" => nasc, "ultimo" => ultimo, "idade" => idade,
+        Application.Storage.setValue("pet2", {"ver" => 2,"per" => per, "nasc" => nasc, "ultimo" => ultimo, "idade" => idade,
             "fome" => fome, "feliz" => feliz, "peso" => peso, "coco" => coco, "doente" => doente, "doses" => doses,
             "luz" => luz, "disc" => disc, "somLig" => somLig, "erroC" => erroC, "erroD" => erroD, "erroCrianca" => erroCrianca,
             "birra" => birra, "aFome" => aFome, "aFeliz" => aFeliz, "aCoco" => aCoco, "tFome0" => tFome0,
@@ -79,22 +85,26 @@ class BichinhoView extends WatchUi.View {
     function onHide() { timer.stop(); salvar(); }
 
     // ---------- tabela dos personagens ----------
-    function nome() {
-        return ["OVO", "BOLINHA", "REDONDO", "PONTINHAS", "BIQUINHO", "GATINHO", "ROBOZINHO",
-                "MASCARADO", "PATINHO", "MINHOCA", "GOSMINHA", "VEIO", "ANJINHO"][per];
-    }
-    function horaDormir() { return [22, 20, 20, 21, 21, 22, 22, 23, 22, 22, 22, 22, 22][per]; }
-    function horaAcordar() { return [9, 9, 9, 9, 9, 9, 9, 11, 9, 9, 10, 9, 9][per]; }
-    function pesoMinimo() { return [5, 5, 10, 20, 20, 30, 30, 30, 30, 10, 30, 30, 5][per]; }
-    function ritmoFome() { return [70, 30, 45, 60, 60, 70, 70, 45, 70, 60, 45, 70, 70][per]; }
-    function ritmoFeliz() { return [60, 25, 40, 55, 55, 65, 65, 40, 65, 55, 40, 65, 65][per]; }
-    function ritmoCoco() { return [180, 45, 90, 150, 150, 180, 180, 120, 180, 150, 120, 180, 180][per]; }
+    const NOMES = ["OVO", "BOLINHA", "REDONDO", "PONTINHAS", "BIQUINHO", "GATINHO", "ROBOZINHO",
+                   "MASCARADO", "PATINHO", "MINHOCA", "GOSMINHA", "VEIO", "ANJINHO"];
+    const DORMIR = [22, 20, 20, 21, 21, 22, 22, 23, 22, 22, 22, 22, 22];
+    const ACORDAR = [9, 9, 9, 9, 9, 9, 9, 11, 9, 9, 10, 9, 9];
+    const PESO_MIN = [5, 5, 10, 20, 20, 30, 30, 30, 30, 10, 30, 30, 5];
+    const R_FOME = [70, 30, 45, 60, 60, 70, 70, 45, 70, 60, 45, 70, 70];
+    const R_FELIZ = [60, 25, 40, 55, 55, 65, 65, 40, 65, 55, 40, 65, 65];
+    const R_COCO = [180, 45, 90, 150, 150, 180, 180, 120, 180, 150, 120, 180, 180];
 
-    function sprPet() {
-        var s = [Spr.EGG, Spr.BEBETCHI, Spr.MARUTCHI, Spr.ESPINHO, Spr.BICOTCHI, Spr.GATOTCHI, Spr.ROBOTCHI,
-                 Spr.MASCARATCHI, Spr.PATOTCHI, Spr.VERMETCHI, Spr.BLOBTCHI, Spr.VELHOTCHI, Spr.FANTASMA];
-        return s[per];
-    }
+    function nome() { return NOMES[per]; }
+    function horaDormir() { return DORMIR[per]; }
+    function horaAcordar() { return ACORDAR[per]; }
+    function pesoMinimo() { return PESO_MIN[per]; }
+    function ritmoFome() { return R_FOME[per]; }
+    function ritmoFeliz() { return R_FELIZ[per]; }
+    function ritmoCoco() { return R_COCO[per]; }
+
+    const SPR_PET = [Spr.EGG, Spr.BEBETCHI, Spr.MARUTCHI, Spr.ESPINHO, Spr.BICOTCHI, Spr.GATOTCHI, Spr.ROBOTCHI,
+                     Spr.MASCARATCHI, Spr.PATOTCHI, Spr.VERMETCHI, Spr.BLOBTCHI, Spr.VELHOTCHI, Spr.FANTASMA];
+    function sprPet() { return SPR_PET[per]; }
 
     // ---------- tempo ----------
     function hora(t) { return ((t + System.getClockTime().timeZoneOffset) % 86400) / 3600; }
@@ -122,7 +132,10 @@ class BichinhoView extends WatchUi.View {
         idade += 5;
         evoluir();
         if (dormindo(t)) {
-            if (luz == 1) { tLuz += 5; if (tLuz == 15) { erroC++; } } else { tLuz = 0; }
+            if (luz == 1) { tLuz += 5; if (tLuz % 15 == 0) { erroC++; } } else { tLuz = 0; }
+            tFome0 = fome == 0 ? tFome0 + 5 : 0;
+            tDoente = doente == 1 ? tDoente + 5 : 0;
+            if (tFome0 >= 720 || tDoente >= 1440) { per = MORTO; }
             return;
         }
         tLuz = 0;
@@ -133,17 +146,23 @@ class BichinhoView extends WatchUi.View {
         if (birra == 0 && fome > 0 && feliz > 0 && doente == 0 && Math.rand() % 36 == 0) { birra = 1; tBir = 0; }
         if (birra == 1) { tBir += 5; if (tBir >= 15) { erroD++; birra = 0; tBir = 0; } }
         // erro de cuidado: coração zerado sem atendimento por 15 min
-        if (fome == 0 || feliz == 0) { tZero += 5; if (tZero == 15) { erroC++; } } else { tZero = 0; }
+        if (fome == 0 || feliz == 0) { tZero += 5; if (tZero % 15 == 0) { erroC++; } } else { tZero = 0; }
         tFome0 = fome == 0 ? tFome0 + 5 : 0;
         // doença: cocô acumulado, fome longa ou obesidade
         if (doente == 0 && (coco >= 4 || tFome0 >= 360 || peso >= 90)) { doente = 1; doses = 2; }
         tDoente = doente == 1 ? tDoente + 5 : 0;
         // morte: fome, doença ou velhice (quanto mais erros, menos tempo de vida)
-        var limite = 25 - erroC - 2 * erroD; if (limite < 8) { limite = 8; }
+        var limite = 25 - erroC - 2 * erroD; if (limite < 12) { limite = 12; }
         if (tFome0 >= 720 || tDoente >= 1440 || idade / 1440 >= limite) { per = MORTO; }
     }
 
     function evoluir() {
+        var antesPer = per;
+        evoluirFase();
+        if (per != antesPer && peso < pesoMinimo()) { peso = pesoMinimo(); }
+    }
+
+    function evoluirFase() {
         if (per == BEBE && idade >= 65) { per = CRIANCA; erroCrianca = erroC; }
         else if (per == CRIANCA && idade >= 3 * 1440) { per = (erroC - erroCrianca) <= 2 ? TEEN_A : TEEN_B; erroCrianca = erroC; }
         else if ((per == TEEN_A || per == TEEN_B) && idade >= 6 * 1440) {
@@ -163,7 +182,7 @@ class BichinhoView extends WatchUi.View {
 
     function tique() as Void {
         q++;
-        if (q % 240 == 0) { simular(); salvar(); }
+        if (q % 240 == 0 || (per == OVO && Time.now().value() - nasc >= 300)) { simular(); salvar(); }
         if (animQ > 0) { animQ--; if (animQ == 0) { fimAnim(); } }
         if (q % 4 == 0 && tela == PRINCIPAL) {
             var maxX = coco == 0 ? 16 : (coco <= 2 ? 8 : 0);
@@ -212,7 +231,7 @@ class BichinhoView extends WatchUi.View {
             return true;
         }
         if (tela == JOGO) {
-            if (b.equals("back")) { tela = PRINCIPAL; return true; }
+            if (b.equals("back")) { tela = PRINCIPAL; jogoMostra = 0; return true; }
             if (jogoMostra > 0) { return true; }
             if (b.equals("cima")) { jogar(-1); } else if (b.equals("baixo")) { jogar(1); }
             return true;
@@ -263,7 +282,7 @@ class BichinhoView extends WatchUi.View {
             fome++; peso++;
         } else { if (feliz < 4) { feliz++; } peso += 2; }
         if (peso > 99) { peso = 99; }
-        tZero = 0;
+        if (fome > 0 && feliz > 0) { tZero = 0; }
         iniciaAnim(tipoComida == 0 ? "comida" : "doce", 12, ""); som([1200, 60, 0, 120, 1200, 60, 0, 120, 1200, 60]);
         salvar();
     }
@@ -271,7 +290,7 @@ class BichinhoView extends WatchUi.View {
     function proximaRodada() {
         if (jogoRod >= 5) {
             if (peso > pesoMinimo()) { peso--; }
-            if (jogoAcertos >= 3) { if (feliz < 4) { feliz++; } tZero = 0; iniciaAnim("feliz", 12, jogoAcertos + "/5 GANHOU"); som([1047, 100, 1319, 100, 1568, 250]); }
+            if (jogoAcertos >= 3) { if (feliz < 4) { feliz++; } if (fome > 0 && feliz > 0) { tZero = 0; } iniciaAnim("feliz", 12, jogoAcertos + "/5 GANHOU"); som([1047, 100, 1319, 100, 1568, 250]); }
             else { iniciaAnim("triste", 10, jogoAcertos + "/5 PERDEU"); som([523, 150, 392, 300]); }
             salvar(); return;
         }
@@ -328,6 +347,7 @@ class BichinhoView extends WatchUi.View {
         dc.setColor(PIXEL, Graphics.COLOR_TRANSPARENT);
         var fn = Graphics.FONT_XTINY, hf = Graphics.getFontHeight(fn);
         var yTopo = ly + faixa - hf / 2 - 2;
+        var yRodape = ly + lh - faixa - hf / 2 - 2;
         var agora = Time.now().value();
         var meio = p / 2 > 1 ? p / 2 : 2;
         var quadro = q % 2;
@@ -335,16 +355,16 @@ class BichinhoView extends WatchUi.View {
         if (per == MORTO) {
             spr(dc, Spr.FANTASMA, 16, cx - 14 * p, ay - (q / 4 % 2) * p, p, false);
             spr(dc, Spr.TUMBA, 16, cx + 1 * p, ay, p, false);
-            dc.drawText(cx, ay + 16 * p, fn, "START: NOVO OVO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            dc.drawText(cx, yRodape, fn, "START: NOVO OVO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             return;
         }
 
         if (tela == STATUS) {
-            var titulo = ["IDADE " + (idade / 1440) + " ANOS", "FOME", "FELIZ", "DISCIPLINA", nome()][sub];
-            dc.drawText(cx, ay + 3 * p, Graphics.FONT_SMALL, titulo, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            if (sub == 0) { dc.drawText(cx, ay + 11 * p, Graphics.FONT_SMALL, "PESO " + peso + "g", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
-            else if (sub == 3) { dc.drawText(cx, ay + 11 * p, Graphics.FONT_SMALL, disc + "%", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
-            else if (sub == 4) { dc.drawText(cx, ay + 11 * p, Graphics.FONT_SMALL, somLig == 1 ? "SOM LIGADO" : "SOM DESLIGADO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
+            var titulo = ["IDADE " + (idade / 1440), "FOME", "FELIZ", "DISCIPLINA", nome()][sub];
+            dc.drawText(cx, ay + 3 * p, fn, titulo, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            if (sub == 0) { dc.drawText(cx, ay + 11 * p, fn, "PESO " + peso + "g", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
+            else if (sub == 3) { dc.drawText(cx, ay + 11 * p, fn, disc + "%", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
+            else if (sub == 4) { dc.drawText(cx, ay + 11 * p, fn, somLig == 1 ? "SOM: SIM" : "SOM: NAO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER); }
             else {
                 var n = sub == 1 ? fome : feliz, hp = p * 3 / 4; if (hp < 2) { hp = 2; }
                 for (var k = 0; k < 4; k++) { spr(dc, k < n ? Spr.CORACAO : Spr.CORACAO_V, 8, cx - 16 * p + k * 8 * p + 2 * p, ay + 8 * p, hp, false); }
@@ -354,8 +374,8 @@ class BichinhoView extends WatchUi.View {
         }
 
         if (tela == COMER) {
-            dc.drawText(cx, ay + 4 * p, Graphics.FONT_SMALL, (sub == 0 ? "> " : "  ") + "REFEIÇÃO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-            dc.drawText(cx, ay + 12 * p, Graphics.FONT_SMALL, (sub == 1 ? "> " : "  ") + "DOCE", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            dc.drawText(cx, ay + 4 * p, fn, (sub == 0 ? "> " : "  ") + "REFEIÇÃO", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            dc.drawText(cx, ay + 12 * p, fn, (sub == 1 ? "> " : "  ") + "DOCE", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             return;
         }
 
@@ -369,7 +389,7 @@ class BichinhoView extends WatchUi.View {
             var lado = jogoMostra > 0 ? jogoLado : 0;
             spr(dc, sprPet(), 16, cx - 8 * p + lado * 6 * p, ay, p, lado < 0);
             dc.drawText(lx + 8, yTopo, fn, jogoRod + "/5", Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-            dc.drawText(cx, ay + 16 * p, fn, jogoMostra > 0 ? (jogoEscolha == jogoLado ? "ACERTOU!" : "ERROU") : "CIMA=ESQ  BAIXO=DIR", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+            dc.drawText(cx, yRodape, fn, jogoMostra > 0 ? (jogoEscolha == jogoLado ? "ACERTOU!" : "ERROU") : "↑ ESQ   ↓ DIR", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
             return;
         }
 
@@ -407,7 +427,7 @@ class BichinhoView extends WatchUi.View {
             spr(dc, Spr.EGG, 16, cx - 8 * p + (q / 4 % 2 == 0 ? -p : p), ay, p, false);
             var falta = 300 - (agora - nasc); if (falta < 0) { falta = 0; }
             dc.drawText(lx + lw - 8, yTopo, fn, (falta / 60) + ":" + (falta % 60).format("%02d"), Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-            if (falta == 0) { simular(); }
+
         } else if (dormindo(agora)) {
             spr(dc, sprPet(), 16, cx - 12 * p, ay, p, false);
             spr(dc, Spr.ZZZ, 8, cx + 5 * p, ay - (q / 4 % 2) * p, p, false);

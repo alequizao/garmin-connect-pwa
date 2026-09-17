@@ -626,7 +626,8 @@ case 'ben10_app': {
   exigeLogin();
   $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
   if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
-  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, ?, NULL, ?, ?, 'pendente', ?)")->execute([uid(), ($in['variante'] ?? '') === 'omnitrix' ? 'Omnitrix' : 'Omnitrix Ben 10', $in['modelo'], bin2hex(random_bytes(16)), ($in['variante'] ?? '') === 'omnitrix' ? 'omnitrix' : 'ben10']);
+  $tipo = ($in['variante'] ?? 'omnitrix') === 'ben10' ? 'ben10' : 'omnitrix';   // o site só oferece o app interativo; 'ben10' é o mostrador, mantido para quem já tem o link
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, ?, NULL, ?, ?, 'pendente', ?)")->execute([uid(), $tipo === 'ben10' ? 'Omnitrix Ben 10' : 'Omnitrix', $in['modelo'], bin2hex(random_bytes(16)), $tipo]);
   out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
 }
 case 'tama_app': {
