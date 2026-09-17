@@ -72,6 +72,16 @@ Forma × fadiga (modelo de Banister), **risco de lesão (ACWR)**, eficiência ae
 ### 🍺 ME MIMEI
 Inspirado no CheersCore: mostra no relógio **quantos lanches cabem nas calorias ativas do dia** (coxinha, pastel, acarajé, tapioca, cuscuz, cerveja long neck…), cada um com **ícone 3D**. A lista é editada no site (inserir, editar, reordenar, apagar) e o relógio atualiza sozinho. Busca de calorias estilo YAZIO na **tabela TACO**, numa base de lanches populares e no **Open Food Facts**; ícones em estilo Fluent Emoji 3D (MIT) e gerados por IA para pratos regionais.
 
+### 🥚 Bichinho Virtual
+Bichinho virtual no estilo dos aparelhinhos de 1996, feito em pixel art desenhada por código (nada de imagens). **1 dia real = 1 ano de vida**: o ovo choca em 5 minutos, vira bebê, criança, adolescente e adulto — e **qual adulto ele vira depende do seu cuidado**. São 13 personagens, 8 ícones (comer, luz, brincar, remédio, limpar, bronca, status e atenção), disciplina com bronca na birra, doença que exige 2 doses de remédio, peso em gramas, jogo de adivinhar o lado, sono com horário próprio de cada personagem e morte por fome, doença ou velhice. Toca sons pelo alto-falante do relógio e acende a tela nos avisos. Tudo continua correndo com o app fechado: o tempo é recalculado ao abrir. Jogável também no site, com a mesma lógica e os mesmos desenhos.
+
+| Ovo | Adulto | Jogo | Fim |
+|:---:|:---:|:---:|:---:|
+| <img src="docs/telas/bichinho-ovo.png" width="200"> | <img src="docs/telas/bichinho-adulto.png" width="200"> | <img src="docs/telas/bichinho-jogo.png" width="200"> | <img src="docs/telas/bichinho-fim.png" width="200"> |
+
+### 🟢 Omnitrix (relógio alienígena)
+App interativo: START abre o mostrador, cima e baixo giram entre **59 silhuetas**, e START transforma — com clarão, raios girando, vibração e sons. A transformação dura 10 minutos, com bipe e piscar vermelho nos últimos 10 segundos, e depois o aparelho recarrega por 1 minuto. Acompanha um mostrador de relógio no mesmo tema.
+
 ### Apps do relógio gerados sob medida
 Na aba **Apps**, cada pessoa digita o nome do dispositivo e o modelo do relógio (lista com 159 modelos Garmin), e o servidor **compila o `.prg` com a chave dela embutida** em cerca de 30 s.
 
@@ -99,6 +109,9 @@ Login com limite de tentativas, sessão renovada no login, **"Esqueci minha senh
 ├── relogio-connectiq/                                   # fonte do app Rastreador (Monkey C)
 ├── walkie-connectiq/                                    # fonte do app Walkie-Talkie (Monkey C)
 ├── mimei-connectiq/                                     # fonte do app ME MIMEI (Monkey C)
+├── bichinho-connectiq/                                  # fonte do Bichinho Virtual (Monkey C)
+├── omnitrix-connectiq/                                  # fonte do Omnitrix interativo (Monkey C)
+├── ben10-mostrador-connectiq/                           # fonte do mostrador do mesmo tema (Monkey C)
 │   (servicos/strava_upload.py envia os treinos ao Strava)
 └── docs/                                                # schema.sql, exemplo do .ini, instalação, telas
 ```

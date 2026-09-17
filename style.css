@@ -357,3 +357,133 @@ canvas.graf{width:100%;height:120px;display:block;margin:6px 0}
 .sim-vibra{animation:simVibra .12s linear infinite}
 
 .mais-lista.dev a.item{color:inherit;text-decoration:none}
+/* pareamento da loja */
+.parear-cod{font-size:38px;font-weight:300;letter-spacing:6px;text-align:center;color:var(--amarelo);background:#1c1c1e;border-radius:14px;padding:14px 8px;margin:12px 0 6px;font-variant-numeric:tabular-nums}
+.parear-cod.ok{color:var(--ok)}.parear-cod.vencido{color:var(--txt3);text-decoration:line-through}
+.parear-st{text-align:center}
+/* ME MIMEI · sabores (grupos recolhíveis) */
+.mimei-grupo{display:contents}.mimei-grupo>summary{list-style:none;cursor:pointer}.mimei-grupo>summary::-webkit-details-marker{display:none}
+.mimei-grade>.mimei-grupo[open]>summary{outline:1px solid var(--amarelo)}
+.mimei-grupo>.mimei-grade{grid-column:1/-1;margin:0 0 6px;padding:8px;background:#161618;border-radius:14px}
+.mimei-grupo:not([open])>.mimei-grade,.mimei-grupo:not([open])>.mimei-sabores{display:none}
+.lista .mimei-grupo{display:block}.mimei-sabores{padding-left:14px;border-left:2px solid var(--amarelo);margin:2px 0 8px 18px}
+.mimei-seta{font-size:16px;color:var(--txt2);padding:0 8px;transition:transform .2s}.mimei-grupo[open] .mimei-seta{transform:rotate(180deg)}
+
+/* ================= APPS › ME MIMEI · refresh visual (2026-09-17) =================
+   Hierarquia: saldo de calorias livres domina; lista de 100 itens fica navegável
+   com busca + chips por tipo; alvos de toque >= 44px; estados cuidados.
+   Tudo com escopo em .w-mimei / .mimei-* para não afetar as outras telas.        */
+
+/* sticky da barra de busca precisa que o widget não recorte o conteúdo */
+.w.w-mimei{overflow:visible}
+.w-mimei>.w-top{border-radius:var(--raio) var(--raio) 0 0}
+.mimei-corpo{padding:16px 14px 18px}
+
+/* ---- HERÓI: saldo de calorias livres ---- */
+.mimei-hero{background:linear-gradient(160deg,#242428,#1a1a1c);border:1px solid var(--linha);border-radius:16px;padding:16px 18px 14px;margin-bottom:14px}
+.mimei-saldo{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.mimei-saldo b{font-size:64px;font-weight:300;line-height:1;letter-spacing:-2.5px;font-variant-numeric:tabular-nums;color:var(--ok)}
+.mimei-saldo span{font-size:14px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;color:var(--txt2)}
+.mimei-hero.baixo .mimei-saldo b{color:var(--amarelo)}
+.mimei-hero.zerado .mimei-saldo b{color:var(--verm)}
+.mimei-barra{height:8px;border-radius:5px;background:#37373c;overflow:hidden;margin:13px 0 11px}
+.mimei-barra i{display:block;height:100%;border-radius:5px;background:var(--laranja);transition:width .5s ease}
+.mimei-hero.zerado .mimei-barra i{background:var(--verm)}
+.mimei-conta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12.5px;color:var(--txt2)}
+.mimei-conta b{color:var(--txt);font-weight:500;font-variant-numeric:tabular-nums}
+.mimei-conta em{font-style:normal;color:var(--txt2);font-size:14px}
+.mimei-conta .hl b{color:var(--ok)}
+.mimei-hero.baixo .mimei-conta .hl b{color:var(--amarelo)}
+.mimei-hero.zerado .mimei-conta .hl b{color:var(--verm)}
+
+/* ---- BARRA DE BUSCA + CHIPS (navegar 100 itens) ---- */
+.mimei-tools{position:sticky;top:var(--safe-t);z-index:6;background:var(--card);padding:10px 14px 2px;margin:0 -14px 2px;transition:box-shadow .2s}
+.mimei-busca{display:flex;align-items:center;gap:10px;background:#1c1c1e;border:1px solid #3a3a3c;border-radius:12px;padding:0 12px;min-height:48px}
+.mimei-busca:focus-within{border-color:var(--azul)}
+.mimei-busca>svg{width:18px;height:18px;color:var(--txt2);stroke-width:2;flex:0 0 auto}
+.mimei-busca input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:16px;padding:13px 0;color:#fff}
+.mimei-busca input::placeholder{color:var(--txt2)}
+.mimei-busca input::-webkit-search-cancel-button,.mimei-busca input::-webkit-search-decoration{-webkit-appearance:none;display:none}
+.mimei-busca>button{width:44px;height:44px;margin-right:-10px;border-radius:50%;color:var(--txt2);font-size:15px;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+.mimei-busca>button:active{background:var(--card2)}
+.mimei-chips{margin:10px 0 0;padding-bottom:10px;gap:8px}
+.mimei-chips .chip{min-height:44px;display:inline-flex;align-items:center;gap:7px;border:1px solid var(--linha2);background:#232326;padding:8px 14px;font-size:13.5px;font-weight:500}
+.mimei-chips .chip i{font-style:normal;font-size:11px;color:var(--txt2);background:rgba(255,255,255,.08);border-radius:9px;padding:2px 7px;font-variant-numeric:tabular-nums}
+.mimei-chips .chip.ativo{background:var(--azul2);color:#fff;border-color:transparent}
+.mimei-chips .chip.ativo i{color:#fff;background:rgba(0,0,0,.3)}
+.mimei-contagem{margin:2px 0 0;font-size:12px;color:var(--txt2)}
+
+/* ---- GRADE DE LANCHES ---- */
+.mimei-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:10px;margin-top:10px;align-items:stretch}
+.mimei-card{background:#232326;border:1px solid var(--linha);border-radius:16px;padding:12px 8px 10px;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;height:100%;transition:border-color .15s,background .15s}
+.mimei-card img{width:46px;height:46px;object-fit:contain}
+.mimei-card b{font-size:27px;font-weight:300;color:var(--ok);line-height:1.15;font-variant-numeric:tabular-nums}
+.mimei-card b .x{font-size:14px;color:var(--txt2);margin-left:1px;font-weight:400}
+.mimei-card span{font-size:13.5px;line-height:1.25;color:#fff;font-weight:500}
+.mimei-card small{font-size:11px;color:var(--txt2);min-height:28px;line-height:1.3}
+.mimei-card.cabe{border-color:rgba(94,224,138,.3)}
+.mimei-card.nao-cabe b{color:var(--txt2)}
+.mimei-card.nao-cabe img{opacity:.5;filter:grayscale(.55)}
+.mimei-card .btn{margin-top:auto;width:100%;min-height:44px;padding:10px 6px;font-size:13px;border-radius:12px;font-weight:500}
+.mimei-card .btn:active{transform:scale(.96)}
+.mimei-card.cabe>.btn{background:var(--verde);color:#062019}
+
+/* grupos de sabores dentro da grade */
+details.mimei-grupo::details-content{display:contents}
+.mimei-grade>.mimei-grupo>summary.mimei-card{background:#26262a;border-color:var(--linha2)}
+.mimei-grade>.mimei-grupo[open]>summary.mimei-card{outline:none;border-color:var(--azul);background:#1d2831}
+.mimei-grupo>.mimei-grade{grid-column:1/-1;margin:2px 0 6px;padding:10px;background:#161618;border:1px solid var(--linha);border-radius:16px}
+.mimei-grupo>summary .btn{background:#3a3a3c;color:#fff}
+
+/* ---- LISTA "Meus lanches": alvos de toque ---- */
+.lista .mimei-item{min-height:60px;gap:10px}
+.mimei-ic{width:42px;height:42px}
+.mimei-item .ico-btn{width:44px;height:44px;font-size:16px}
+.mimei-seta{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+/* ---- ESTADOS: carregando, vazio, sem resultado, erro ---- */
+.mimei-off{display:none!important}
+.mimei-skel{padding:18px 14px}
+.mimei-skel .l{border-radius:12px;background:linear-gradient(90deg,#232326,#2e2e33,#232326);background-size:200% 100%;animation:mimei-brilha 1.2s linear infinite}
+.mimei-skel .l.h1{height:58px;width:62%;margin-bottom:12px}
+.mimei-skel .l.h2{height:16px;width:85%;margin-bottom:18px}
+.mimei-skel .g{display:grid;grid-template-columns:repeat(auto-fill,minmax(116px,1fr));gap:10px}
+.mimei-skel .g .l{height:150px}
+@keyframes mimei-brilha{from{background-position:200% 0}to{background-position:-200% 0}}
+.mimei-estado{text-align:center;padding:34px 18px}
+.mimei-estado .i{font-size:44px;line-height:1;margin-bottom:10px}
+.mimei-estado b{display:block;font-size:17px;font-weight:500;margin-bottom:6px}
+.mimei-estado p{margin:0 auto;max-width:320px}
+.mimei-estado .btn{max-width:240px;margin:16px auto 0}
+
+/* ---- telas maiores ---- */
+@media(min-width:620px){
+  .mimei-saldo b{font-size:78px}
+  .mimei-grade{grid-template-columns:repeat(auto-fill,minmax(132px,1fr))}
+}
+@media (prefers-reduced-motion:reduce){.mimei-skel .l{animation:none}}
+/* ME MIMEI · foco e movimento reduzido */
+.mimei-chips .chip:focus-visible,.mimei-card .btn:focus-visible,.mimei-grupo>summary:focus-visible,.mimei-busca>button:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+.mimei-busca:has(input:focus-visible){box-shadow:0 0 0 2px rgba(31,163,227,.35)}
+.mimei-chips .chip:active,.mimei-grupo>summary:active{transform:scale(.97)}
+@media (prefers-reduced-motion:reduce){.w-mimei *,.w-mimei *::before{transition:none!important;animation:none!important}.mimei-card .btn:active,.mimei-chips .chip:active,.mimei-grupo>summary:active{transform:none}}
+
+/* ME MIMEI · pendentes (2026-09-17): sticky ativo, chips roláveis, busca/arrasto em Meus lanches */
+.mimei-tools.fixo{box-shadow:0 8px 14px -6px rgba(0,0,0,.6);border-bottom:1px solid var(--linha)}
+body:has(.off:not(.medalha)) .mimei-tools{top:calc(var(--safe-t) + 21px)}
+.mimei-chips{flex-wrap:nowrap;overflow-x:auto;overscroll-behavior-x:contain;scroll-snap-type:x proximity;scroll-padding-left:0;scrollbar-width:none;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 44px),transparent)}
+.mimei-chips::-webkit-scrollbar{display:none}
+.mimei-chips.fim{-webkit-mask-image:none;mask-image:none}
+.mimei-chips .chip{flex:0 0 auto;white-space:nowrap;scroll-snap-align:start}
+.mimei-ic{width:42px;height:42px;aspect-ratio:1;flex:0 0 42px}
+.mimei-busca-lista{margin:0 0 4px}
+.mimei-busca-lista+.mimei-contagem{margin-bottom:6px}
+.mimei-arrasta{flex:0 0 44px;width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;color:var(--txt2);font-size:18px;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;margin:0 -12px 0 -8px}
+.mimei-arrasta:active{cursor:grabbing}
+#mmLista.filtrando .mimei-arrasta{opacity:.25;cursor:default}
+.mimei-arrastando{position:relative;z-index:3;background:var(--card2);border-radius:12px;box-shadow:0 6px 18px rgba(0,0,0,.55);opacity:.95}
+details.mimei-arrastando>summary{background:var(--card2)}
+
+/* ME MIMEI · revisão 2026-09-17: alvos de toque >=44px só na tela #mm */
+#mm .ico-btn{width:44px;height:44px}
+#mm a.btn.peq{min-width:44px;min-height:44px}

@@ -541,14 +541,16 @@ case 'mimei_salvar': {
   if (mb_strlen($nome) < 2) erro('Dê um nome ao lanche'); if ($kcal < 1 || $kcal > 5000) erro('Informe as calorias (1 a 5000)');
   $porcao = trim(mb_substr(strip_tags((string)($in['porcao'] ?? '')), 0, 40)) ?: null;
   $emoji = trim(mb_substr((string)($in['emoji'] ?? ''), 0, 8)) ?: null;
+  $grupo = trim(preg_replace('/\s+/u', ' ', mb_substr(strip_tags((string)($in['grupo'] ?? '')), 0, 40))) ?: null;
+  if ($grupo) $grupo = mb_strtoupper(mb_substr($grupo, 0, 1)) . mb_substr($grupo, 1);
   $id = (int)($in['id'] ?? 0);
   if ($id) {
     $st = db()->prepare("SELECT emoji FROM mimei_lanches WHERE id=? AND usuario_id=?"); $st->execute([$id, uid()]); $atual = $st->fetch() ?: erro('Lanche não encontrado', 404);
-    db()->prepare("UPDATE mimei_lanches SET nome=?, porcao=?, kcal=?, emoji=? WHERE id=? AND usuario_id=?")->execute([$nome, $porcao, $kcal, $emoji, $id, uid()]);
+    db()->prepare("UPDATE mimei_lanches SET nome=?, grupo=?, porcao=?, kcal=?, emoji=? WHERE id=? AND usuario_id=?")->execute([$nome, $grupo, $porcao, $kcal, $emoji, $id, uid()]);
     $emojiMudou = $emoji && $emoji !== $atual['emoji'];
   } else {
     $st = db()->prepare("SELECT COALESCE(MAX(ordem),0)+1 FROM mimei_lanches WHERE usuario_id=?"); $st->execute([uid()]);
-    db()->prepare("INSERT INTO mimei_lanches (usuario_id, nome, porcao, kcal, emoji, ordem) VALUES (?,?,?,?,?,?)")->execute([uid(), $nome, $porcao, $kcal, $emoji, (int)$st->fetchColumn()]);
+    db()->prepare("INSERT INTO mimei_lanches (usuario_id, nome, grupo, porcao, kcal, emoji, ordem) VALUES (?,?,?,?,?,?,?)")->execute([uid(), $nome, $grupo, $porcao, $kcal, $emoji, (int)$st->fetchColumn()]);
     $id = (int)db()->lastInsertId(); $emojiMudou = (bool)$emoji;
   }
   // ícone: imagem enviada > ícone da biblioteca > emoji
@@ -580,6 +582,19 @@ case 'mimei_comi': {
   db()->prepare("INSERT INTO mimei_consumo (usuario_id, lanche_id, nome, qtd, kcal, origem, data) VALUES (?,?,?,?,?, 'site', CURDATE())")->execute([uid(), $l['id'], $l['nome'], $q, (int)round($l['kcal'] * $q)]);
   out(['ok' => true]);
 }
+case 'pareamento_codigo': {
+  // código de 6 caracteres (15 min) para parear um app da Connect IQ Store com esta conta
+  exigeLogin(); $tipo = in_array($in['tipo'] ?? '', ['rastreador', 'walkie', 'mimei'], true) ? $in['tipo'] : erro('App inválido');
+  $alfabeto = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; $codigo = '';
+  for ($i = 0; $i < 6; $i++) $codigo .= $alfabeto[random_int(0, strlen($alfabeto) - 1)];
+  db()->prepare("UPDATE pareamentos SET expira=NOW() WHERE usuario_id=? AND tipo=? AND usado IS NULL AND expira > NOW()")->execute([uid(), $tipo]);
+  db()->prepare("INSERT INTO pareamentos (codigo, usuario_id, tipo, expira) VALUES (?,?,?, NOW() + INTERVAL 15 MINUTE)")->execute([$codigo, uid(), $tipo]);
+  out(['ok' => true, 'codigo' => $codigo, 'expira_min' => 15]);
+}
+case 'pareamento_status': {
+  exigeLogin(); $st = db()->prepare("SELECT p.codigo, p.usado, a.modelo FROM pareamentos p LEFT JOIN relogio_apps a ON a.id=p.app_id WHERE p.usuario_id=? AND p.codigo=?"); $st->execute([uid(), strtoupper((string)($_GET['codigo'] ?? ''))]);
+  out(['ok' => true] + ($st->fetch() ?: ['usado' => null]));
+}
 case 'sim_token': {
   // o simulador do site conta como um relógio próprio de cada usuário (para testar Walkie-Talkie entre duas pessoas)
   exigeLogin(); $tipo = in_array($in['tipo'] ?? '', ['walkie', 'mimei'], true) ? $in['tipo'] : erro('Tipo inválido');
@@ -596,6 +611,30 @@ case 'mimei_desfazer': {
 }
 case 'mimei_consumo_excluir': {
   exigeLogin(); db()->prepare("DELETE FROM mimei_consumo WHERE id=? AND usuario_id=?")->execute([(int)($in['id'] ?? 0), uid()]); out(['ok' => true]);
+}
+case 'lojas': {
+  exigeLogin(); $l = [];
+  foreach (glob(__DIR__ . '/app/loja-*/index.html') ?: [] as $f) {
+    $h = (string)@file_get_contents($f, false, null, 0, 4000);
+    $t = preg_match('~<title>(.*?)</title>~s', $h, $m) ? html_entity_decode(trim($m[1])) : basename(dirname($f));
+    $ic = glob(dirname($f) . '/icone*256*.png') ?: glob(dirname($f) . '/icone*.png') ?: [];
+    $l[] = ['titulo' => $t, 'url' => 'app/' . basename(dirname($f)) . '/', 'icone' => $ic ? 'app/' . basename(dirname($f)) . '/' . basename($ic[0]) : null, 'data' => date('d/m H:i', filemtime($f))];
+  }
+  out(['ok' => true, 'lojas' => $l]);
+}
+case 'ben10_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, ?, NULL, ?, ?, 'pendente', ?)")->execute([uid(), ($in['variante'] ?? '') === 'omnitrix' ? 'Omnitrix' : 'Omnitrix Ben 10', $in['modelo'], bin2hex(random_bytes(16)), ($in['variante'] ?? '') === 'omnitrix' ? 'omnitrix' : 'ben10']);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'tama_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Bichinho Virtual', NULL, ?, ?, 'pendente', 'tama')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
 }
 case 'mimei_app': {
   exigeLogin();
@@ -642,7 +681,7 @@ case 'app_baixar': {
   $r = $st->fetch() ?: erro('App ainda não está pronto', 404);
   $arq = __DIR__ . '/app/builds/' . $r['token'] . '.prg'; if (!is_file($arq)) erro('Arquivo não encontrado', 404);
   header('Content-Type: application/octet-stream'); header('Content-Length: ' . filesize($arq));
-  header('Content-Disposition: attachment; filename="' . ($r['tipo'] === 'mimei' ? 'MeMimei' : ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome']))) . '.prg"');
+  header('Content-Disposition: attachment; filename="' . ($r['tipo'] === 'ben10' ? 'OmnitrixBen10' : ($r['tipo'] === 'omnitrix' ? 'Omnitrix' : ($r['tipo'] === 'tama' ? 'Bichinho' : ($r['tipo'] === 'mimei' ? 'MeMimei' : ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome'])))))) . '.prg"');
   readfile($arq); exit;
 }
 

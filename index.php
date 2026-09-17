@@ -1,4 +1,7 @@
-<?php require __DIR__ . '/config.php'; $v = max(filemtime(__DIR__.'/app.js'), filemtime(__DIR__.'/style.css')); ?>
+<?php require __DIR__ . '/config.php'; $v = max(filemtime(__DIR__.'/app.js'), filemtime(__DIR__.'/style.css'));
+// app.min.js (gerado por /root/perf-garmin/build.sh) so e usado se estiver mais novo que o fonte app.js
+$js = (is_file(__DIR__.'/app.min.js') && filemtime(__DIR__.'/app.min.js') >= filemtime(__DIR__.'/app.js')) ? 'app.min.js' : 'app.js';
+$vjs = filemtime(__DIR__.'/'.$js); ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -15,15 +18,14 @@
 <link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="style.css?v=<?= $v ?>">
 </head>
 <body>
 <div id="app"><div class="splash"><div class="logo-anim"></div><div>GARMIN CONNECT</div></div></div>
 <div id="toast"></div>
 <div id="modal" hidden><div class="modal-box" id="modalBox"></div></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script>window.APP_VERSAO='<?= APP_VERSAO ?>';</script>
-<script src="app.js?v=<?= $v ?>"></script>
+<script>window.SW_V="<?= filemtime(__DIR__ . "/sw.js") ?>";window.APP_VERSAO='<?= APP_VERSAO ?>';</script>
+<script src="<?= $js ?>?v=<?= $vjs ?>"></script>
 </body>
 </html>

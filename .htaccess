@@ -1,7 +1,7 @@
 <FilesMatch "(\.bak|\.orig|\.old|\.sql|~)">
 Require all denied
 </FilesMatch>
-<FilesMatch "^(config|install|icons)\.php$">
+<FilesMatch "^(config|install|icons|mimei_modelos)\.php$">
 Require all denied
 </FilesMatch>
 RewriteEngine On
@@ -9,11 +9,22 @@ RewriteBase /garmin/
 RewriteCond %{THE_REQUEST} \s/garmin/index\.php[\s?] [NC]
 RewriteRule ^index\.php$ / [R=301,L]
 RewriteRule ^api$ api.php [L,QSA]
+RewriteRule ^meu/?$ meu.php [L,QSA]
 RewriteRule ^gpx/([0-9]+)$ api.php?acao=gpx&id=$1 [L,QSA]
 AddType application/manifest+json .webmanifest
 <IfModule mod_headers.c>
 <FilesMatch "sw\.js$">
 Header set Cache-Control "no-cache"
 Header set Service-Worker-Allowed "/garmin/"
+</FilesMatch>
+</IfModule>
+# performance: cache longo para imagens (nomes com hash) e assets versionados por ?v=
+<IfModule mod_headers.c>
+<FilesMatch "\.(png|jpg|webp|svg)$">
+Header set Cache-Control "public, max-age=2592000"
+</FilesMatch>
+<FilesMatch "^(app\.min\.js|app\.js|style\.css)$">
+Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /v=/"
+Header set Cache-Control "no-cache" "expr=%{QUERY_STRING} !~ /v=/"
 </FilesMatch>
 </IfModule>

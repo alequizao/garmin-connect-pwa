@@ -29,13 +29,13 @@ def traccar_device(nome, unico):
 
 def compilar(p):
     tmp = f'/tmp/ciq-build-{p["id"]}'
-    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree({'walkie': FONTE_WALKIE, 'mimei': FONTE_MIMEI}.get(p.get('tipo'), FONTE), tmp)
+    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree({'walkie': FONTE_WALKIE, 'mimei': FONTE_MIMEI, 'ben10': '/opt/ciq/ben10', 'omnitrix': '/opt/ciq/omnitrix', 'tama': '/opt/ciq/tama'}.get(p.get('tipo'), FONTE), tmp)
     modelo = p['modelo'] or 'fr165'
     if not os.path.isfile(f'/root/.Garmin/ConnectIQ/Devices/{modelo}/compiler.json'): raise Exception(f'Modelo {modelo} não encontrado')
     mf = f'{tmp}/manifest.xml'; m = open(mf).read()
     m = re.sub(r'<iq:products>.*?</iq:products>', f'<iq:products><iq:product id="{modelo}"/></iq:products>', m, flags=re.S)
     m = re.sub(r'minApiLevel="[0-9.]+"', 'minApiLevel="2.4.0"', m); open(mf, 'w').write(m)
-    mc = f'{tmp}/source/' + {'walkie': 'RadioApp.mc', 'mimei': 'MeMimeiApp.mc'}.get(p.get('tipo'), 'RastreadorApp.mc'); s = open(mc).read()
+    mc = f'{tmp}/source/' + {'walkie': 'RadioApp.mc', 'mimei': 'MeMimeiApp.mc', 'ben10': 'Ben10App.mc', 'omnitrix': 'OmnitrixApp.mc', 'tama': 'BichinhoApp.mc'}.get(p.get('tipo'), 'RastreadorApp.mc'); s = open(mc).read()
     s = re.sub(r'const TOKEN = "[^"]*";', f'const TOKEN = "{p["token"]}";', s)
     s = re.sub(r'const URL = "[^"]*";', 'const URL = "' + {'walkie': URL_WALKIE, 'mimei': URL_MIMEI}.get(p.get('tipo'), conf.get('app', 'url_relogio', 'https://alequizao.com/garmin/relogio.php')) + '";', s); open(mc, 'w').write(s)
     os.makedirs(SAIDA, exist_ok=True)
@@ -56,7 +56,7 @@ def main():
             if not p: time.sleep(3); continue
             cur.execute("UPDATE relogio_apps SET status='compilando', erro=NULL WHERE id=%s", (p['id'],))
             try:
-                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') not in ('walkie', 'mimei') else (None, False)
+                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') not in ('walkie', 'mimei', 'ben10', 'omnitrix', 'tama') else (None, False)
                 compilar(p)
                 cur.execute("UPDATE relogio_apps SET status='pronto', traccar_id=%s, pronto_em=NOW() WHERE id=%s", (did, p['id']))
                 log.info(f"app {p['id']} ({p['device']}) pronto; traccar {did} {'criado' if novo else 'existente'}")

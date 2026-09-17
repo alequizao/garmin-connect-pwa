@@ -42,7 +42,7 @@ const store = { get: (k, d) => { try { return JSON.parse(localStorage.getItem('g
 
 /* ---------- boot ---------- */
 async function boot() {
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => { });
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js?v=' + (window.SW_V || ''), { scope: './' }).catch(() => { });
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); S.install = e; mostrarInstalar(); });
   window.addEventListener('online', () => { S.online = true; $('.off')?.remove(); sincronizarPendentes(); });
   window.addEventListener('offline', () => { S.online = false; avisoOffline(); });
@@ -372,6 +372,7 @@ async function sincronizarPendentes() { const p = store.get('pendentes', []); if
 /* ---------- DETALHE ---------- */
 async function renderAtividadeDetalhe(id) {
   S.arg = id;
+  if (!window.L) await carregarLeaflet();
   app.innerHTML = `<div class="tela"><div class="topo"><div style="display:flex;align-items:center;gap:10px"><button class="ico-btn" data-tela="atividades">‹</button><h1>Atividade</h1></div></div><div id="det"><div class="mini centro">Carregando…</div></div>${tabbar('atividades')}</div>`;
   let a; try { a = (await apiGet('atividade_obter', { id })).atividade; } catch (x) { $('#det').innerHTML = '<div class="vazio">Não foi possível carregar</div>'; return; }
   const pts = a.pontos || []; const comGps = pts.filter(p => p.lat).length > 1;
@@ -416,6 +417,7 @@ async function renderAtividadeDetalhe(id) {
 
 /* ---------- GRAVAR ---------- */
 function renderGravar() {
+  carregarLeaflet();
   const ult = store.get('esporte', 'corrida');
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Gravar atividade</h1><button class="ico-btn" id="btnFC3">${S.fcDevice ? '💓' : '📡'}</button></div>
   <div class="esportes" id="esp">${Object.entries(ESPORTES).map(([k, v]) => `<div class="esporte ${k === ult ? 'ativo' : ''}" data-e="${k}"><div class="i">${v.i}</div>${v.n}</div>`).join('')}</div>
@@ -456,6 +458,7 @@ const Gravador = {
     <div class="controles"><button class="ctrl volta" id="cVolta">⏱</button><button class="ctrl ${this.pausado ? 'inicio' : 'pausa'}" id="cPausa">${this.pausado ? '▶' : '❚❚'}</button><button class="ctrl parar" id="cParar">■</button></div></div>`;
     $('#cPausa').onclick = () => this.togglePausa(); $('#cParar').onclick = () => this.parar(); $('#cVolta').onclick = () => this.volta(false);
     $('#bleLink') && ($('#bleLink').onclick = () => BLE.conectar());
+    if (gps && !window.L) carregarLeaflet().then(() => { if (window.L && this.a && !this.mapa && $('#mapaLive')) this.render(); });
     if (gps && window.L) { this.mapa = L.map('mapaLive', { zoomControl: false, attributionControl: false }).setView([-9.66, -35.73], 15); camadaGoogle().addTo(this.mapa); this.linha = L.polyline(this.a.pontos.filter(p => p.lat).map(p => [p.lat, p.lon]), { color: '#00a0df', weight: 5 }).addTo(this.mapa); this.marcador = L.circleMarker([0, 0], { radius: 8, color: '#fff', fillColor: '#00a0df', fillOpacity: 1 }).addTo(this.mapa); }
   },
   ligarGPS() {
@@ -666,11 +669,20 @@ boot();
 
 /* ---------- MAPA (onde está o relógio) ---------- */
 const TILE_GOOGLE = 'https://mt{s}.google.com/vt/lyrs=y,traffic&x={x}&y={y}&z={z}&s=Galil';
+/* Leaflet sob demanda: so baixa CSS+JS quando uma tela com mapa abre */
+function carregarLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (window.__leafletP) return window.__leafletP;
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/';
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = base + 'leaflet.min.css'; document.head.appendChild(css);
+  return window.__leafletP = new Promise(ok => { const js = document.createElement('script'); js.src = base + 'leaflet.min.js'; js.onload = ok; js.onerror = () => { window.__leafletP = null; ok(); }; document.head.appendChild(js); });
+}
 function camadaGoogle() { return L.tileLayer(TILE_GOOGLE, { subdomains: ['0', '1', '2', '3'], maxZoom: 21 }); }
 const tempoAtras = ts => { if (!ts) return '--'; const s = Math.round(Date.now() / 1000 - ts); if (s < 60) return 'agora'; if (s < 3600) return Math.round(s / 60) + ' min atrás'; if (s < 86400) return Math.round(s / 3600) + ' h atrás'; return Math.round(s / 86400) + ' dia(s) atrás'; };
 let mapaTimer = null;
 async function renderMapa() {
   clearTimeout(mapaTimer);
+  if (!window.L) { await carregarLeaflet(); if (S.tela !== 'mapa') return; }
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Mapa</h1><div class="acoes"><button class="ico-btn" id="mLive" title="Adicionar link do LiveTrack">📡</button><button class="ico-btn" id="mCentro" title="Centralizar">🎯</button></div></div>
   <div class="card" style="padding:0;overflow:hidden"><div id="mapaG" style="height:52vh;min-height:320px"></div></div>
   <div class="grid2"><div class="card"><h3>Posição atual</h3><div id="mPos" class="mini">Carregando…</div></div><div class="card"><h3>Relógio</h3><div id="mRel" class="mini">…</div></div></div>
@@ -813,8 +825,10 @@ async function renderApp(arg) {
   clearTimeout(appTimer); clearTimeout(WK.timer);
   if (arg === 'walkie') return renderWalkie();
   if (arg === 'mimei') return renderMimei();
+  if (arg === 'ben10') return renderBen10();
+  if (arg === 'tama') return renderTama();
   if (arg && String(arg).startsWith('sim')) return renderSimulador(arg);
-  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}${cartaoPareamento('rastreador', 'Rastreador Alequizão')}
   <div class="card"><h3>📍 Rastreador — gerar app com dispositivo próprio</h3>
    <div class="mini" style="margin-bottom:10px">Cada pessoa gera o seu app. Ele já sai configurado para enviar bateria, GPS, frequência cardíaca, passos, Body Battery e estresse para o dispositivo escolhido no Traccar.</div>
    <form id="fApp"><div class="campo"><label>Nome do dispositivo</label><input name="nome" id="aNome" maxlength="60" placeholder="Ex.: Garmin da Maria" required></div>
@@ -825,6 +839,7 @@ async function renderApp(arg) {
   <div class="card"><h3>Meus apps</h3><div id="aLista" class="mini">Carregando…</div></div>
   <div class="card"><h3>Como instalar</h3><div class="mini">1) Conecte o relógio no computador pelo cabo USB.<br>2) Copie o arquivo <b>.prg</b> baixado para a pasta <b>GARMIN/APPS</b> (se já houver outro Rastreador, substitua).<br>3) Desconecte. No relógio: <b>START</b> → role até <b>Adicionar</b> → <b>Rastreador Alequizão</b>.<br>4) Abra o app uma vez. <b>Aberto</b>: GPS ao vivo a cada 30 s. <b>Fechado</b>: envia sozinho a cada 5 min (limite da Garmin).<br>O celular precisa estar perto, com Bluetooth ligado e o app Garmin Connect instalado.</div></div>
   ${tabbar('app')}</div>`;
+  ligarPareamento();
   let editado = false, modelos = [];
   fetch('app/modelos.json?v=1').then(r => r.json()).then(l => { modelos = l; $('#aModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
   const acharModelo = t => {
@@ -858,7 +873,7 @@ async function renderApp(arg) {
   async function carregarApps() {
     if (S.tela !== 'app') return;
     const j = await apiGet('apps_listar').catch(() => null); if (!j || !$('#aLista')) return;
-    $('#aLista').innerHTML = j.itens.length ? `<div class="lista">${j.itens.map(a => `<div class="item"><div class="ic">⌚</div><div class="info"><b>${esc(a.nome)}</b><span>${a.tipo === 'walkie' ? '📻 Walkie-Talkie · ' + esc(a.canal || '') : '📍 ' + esc(a.device)} · ${esc(a.modelo)} · ${a.status === 'pronto' ? (a.envios ? a.envios + ' envios · último ' + fmtData(a.ultimo) : 'ainda sem envios') : a.status === 'erro' ? '❌ ' + esc(a.erro || 'erro') : '⚙️ ' + a.status}</span></div>${a.status === 'pronto' ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : ''}<button class="ico-btn" data-rm="${a.id}" title="Excluir">🗑</button></div>`).join('')}</div>` : 'Nenhum app gerado ainda';
+    $('#aLista').innerHTML = j.itens.length ? `<div class="lista">${j.itens.map(a => `<div class="item"><div class="ic">⌚</div><div class="info"><b>${esc(a.nome)}</b><span>${a.tipo === 'walkie' ? '📻 Walkie-Talkie · ' + esc(a.canal || '') : '📍 ' + esc(a.device)} · ${esc(a.modelo)} · ${a.status === 'pronto' ? (a.envios ? a.envios + ' envios · último ' + fmtData(a.ultimo) : 'ainda sem envios') : a.status === 'erro' ? '❌ ' + esc(a.erro || 'erro') : '⚙️ ' + a.status}</span></div>${a.status === 'pronto' && !String(a.modelo).startsWith('loja') ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : String(a.modelo).startsWith('loja') ? '<span class="mini">🏪 loja</span>' : ''}<button class="ico-btn" data-rm="${a.id}" title="Excluir">🗑</button></div>`).join('')}</div>` : 'Nenhum app gerado ainda';
     $('#aLista').querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { if (confirm('Excluir este app? O relógio com ele instalado para de enviar.')) { await api('app_excluir', { id: +b.dataset.rm }); carregarApps(); } });
     appTimer = setTimeout(carregarApps, 20000);
   }
@@ -889,8 +904,33 @@ async function renderDispositivo() {
   if (j.serie24h.length > 1) grafLinha($('#gBat'), [{ v: j.serie24h.map(x => +x.bateria), cor: '#3cc7a8' }, { v: j.serie24h.map(x => x.fc != null ? +x.fc : null), cor: '#ef4b5b' }, { v: j.serie24h.map(x => x.body_battery != null ? +x.body_battery : null), cor: '#f5c23b' }], { min: 0, max: 200 });
 }
 
+/* ---------- pareamento dos apps da Connect IQ Store ---------- */
+function cartaoPareamento(tipo, nomeApp) {
+  return widget({ ico: '🏪', cor: '#3cc7a8', titulo: 'App da loja Connect IQ', corpo: `<div class="mini" style="margin-bottom:10px">Instalou o <b>${nomeApp}</b> pela Connect IQ Store? Gere um código e digite no app (no relógio ou nas configurações do app no Garmin Connect). O código vale 15 minutos. Pela loja o app se atualiza sozinho.</div>
+    <div class="parear" data-parear="${tipo}"><button class="btn" data-gerar="${tipo}">🔑 Gerar código de pareamento</button><div class="parear-cod" hidden></div><div class="mini parear-st"></div></div>` });
+}
+function ligarPareamento() {
+  document.querySelectorAll('[data-gerar]').forEach(b => b.onclick = async () => {
+    const box = b.closest('.parear'), cod = box.querySelector('.parear-cod'), st = box.querySelector('.parear-st');
+    b.disabled = true;
+    try {
+      const r = await api('pareamento_codigo', { tipo: b.dataset.gerar });
+      cod.hidden = false; cod.textContent = r.codigo.split('').join(' '); b.textContent = '↻ Gerar outro código'; b.disabled = false;
+      let fim = Date.now() + r.expira_min * 60000; clearInterval(box._t);
+      box._t = setInterval(async () => {
+        if (!document.body.contains(box)) return clearInterval(box._t);
+        const s = Math.max(0, Math.round((fim - Date.now()) / 1000));
+        if (!s) { clearInterval(box._t); st.textContent = 'Código vencido — gere outro.'; cod.classList.add('vencido'); return; }
+        st.textContent = `Aguardando o relógio… vale por mais ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+        if (s % 4 === 0) { const q = await apiGet('pareamento_status', { codigo: r.codigo }).catch(() => null);
+          if (q?.usado) { clearInterval(box._t); cod.classList.add('ok'); st.innerHTML = `✅ Relógio pareado (${esc((q.modelo || '').replace('loja:', ''))})! Já pode usar o app.`; toast('Relógio pareado!'); } }
+      }, 1000);
+    } catch (x) { toast(x.message); b.disabled = false; }
+  });
+}
+
 /* ---------- APPS › WALKIE-TALKIE ALEQUIZÃO ---------- */
-const segApps = ativo => `<div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button><button class="${ativo === 'sim' ? 'ativo' : ''}" data-tela="app" data-arg="sim">🖥️ Simulador</button></div>`;
+const segApps = ativo => (setTimeout(pintarLojas, 0), '') + `<div id="lojaLinks"></div><div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button><button class="${ativo === 'ben10' ? 'ativo' : ''}" data-tela="app" data-arg="ben10">⌚ Ben 10</button><button class="${ativo === 'tama' ? 'ativo' : ''}" data-tela="app" data-arg="tama">🥚 Bichinho</button><button class="${ativo === 'sim' ? 'ativo' : ''}" data-tela="app" data-arg="sim">🖥️ Simulador</button></div>`;
 const WK = { canal: null, ultimo: 0, timer: null, canais: [] };
 async function renderWalkie() {
   clearTimeout(WK.timer);
@@ -902,6 +942,7 @@ async function renderWalkie() {
   if (!WK.canal || !j.itens.find(c => c.id == WK.canal)) WK.canal = j.itens[0]?.id || null;
   const c = j.itens.find(x => x.id == WK.canal);
   $('#wk').innerHTML = `
+  ${cartaoPareamento('walkie', 'Walkie-Talkie Alequizão')}
   ${widget({ ico: '📻', cor: '#fb8c1e', titulo: 'Canais', corpo: `${j.itens.length ? `<div class="chips">${j.itens.map(x => `<span class="chip ${x.id == WK.canal ? 'ativo' : ''}" data-canal="${x.id}">${esc(x.nome)} <small>${x.online ? '● ' + x.online : ''}</small></span>`).join('')}</div>` : '<div class="mini" style="margin-bottom:10px">Crie um canal ou entre com o código que alguém te passou.</div>'}
     <div class="linha"><button class="btn peq" id="wkNovo">+ Criar canal</button><button class="btn sec peq" id="wkEntrar">Entrar com código</button></div>` })}
   ${c ? `
@@ -919,6 +960,7 @@ async function renderWalkie() {
   ${c.dono ? widget({ ico: '🔗', cor: '#8b7cf6', titulo: 'Integração (Lembretes e outros sistemas)', corpo: `<div class="mini" style="margin-bottom:8px">Com esta chave, o <b>Lembretes</b> (alequizao.com/lembretes) manda avisos direto para os relógios deste canal: cole-a na ficha do contato, no campo “Chave do Walkie-Talkie”. Não compartilhe em público — quem tem a chave consegue enviar mensagens.</div><div class="enviar"><input id="wkChave" readonly value="${esc(c.chave_api || '')}"><button type="button" class="ico-btn" id="wkCopiar" title="Copiar">📋</button><button type="button" class="ico-btn" id="wkNovaChave" title="Gerar nova chave">↻</button></div>` }) : ''}
   ${widget({ ico: '🔔', cor: '#3cc7a8', titulo: 'Receber nas notificações do relógio', corpo: `<div id="pushStatus" class="push-status">Verificando este aparelho…</div><div id="pushGuia"></div><div class="linha" style="margin-top:10px"><button class="btn peq" id="wkPush2">🔔 Ativar neste aparelho</button><button class="btn sec peq" id="wkPushTeste">Enviar teste</button></div>` })}` : ''}`;
   document.querySelectorAll('[data-canal]').forEach(e => e.onclick = () => { WK.canal = +e.dataset.canal; WK.ultimo = 0; renderWalkie(); });
+  ligarPareamento();
   $('#wkNovo').onclick = () => modal(`<h2>Novo canal</h2><form id="fCanal"><div class="campo"><label>Nome do canal</label><input name="nome" maxlength="40" required placeholder="Ex.: Grupo de corrida"></div><button class="btn">Criar</button></form>`, () => { $('#fCanal').onsubmit = async e => { e.preventDefault(); try { const r = await api('walkie_criar', Object.fromEntries(new FormData(e.target))); WK.canal = r.id; fecharModal(); toast('Canal criado — código ' + r.codigo, 3500); renderWalkie(); } catch (x) { toast(x.message); } }; });
   $('#wkEntrar').onclick = () => modal(`<h2>Entrar em um canal</h2><form id="fEnt"><div class="campo"><label>Código do canal</label><input name="codigo" maxlength="8" required style="text-transform:uppercase;letter-spacing:4px"></div><button class="btn">Entrar</button></form>`, () => { $('#fEnt').onsubmit = async e => { e.preventDefault(); try { const r = await api('walkie_entrar', Object.fromEntries(new FormData(e.target))); WK.canal = r.id; fecharModal(); toast('Você entrou em ' + r.nome); renderWalkie(); } catch (x) { toast(x.message); } }; });
   if (!c) return;
@@ -1024,30 +1066,124 @@ async function pushDiagnostico() {
 /* ---------- APPS › ME MIMEI (lanches que cabem nas calorias do dia) ---------- */
 const EMOJIS_MIMEI = ['🍗', '🥟', '🍰', '🥧', '🥔', '🧀', '🔺', '🧆', '🫓', '🍺', '🍕', '🍔', '🌭', '🍟', '🍩', '🍪', '🍫', '🍬', '🍦', '🍨', '🍧', '🍇', '🍌', '🥤', '🧋', '☕', '🍷', '🥃', '🍹', '🍿', '🥐', '🥖', '🧁', '🍮', '🍭', '🌮', '🌯', '🥪', '🍝', '🍣', '🍤', '🥗', '🍳', '🥞', '🧇', '🥓', '🍖', '🥩', '🍜', '🍛', '🥜', '🍓', '🍉', '🍍', '🥭', '🥥'];
 async function renderMimei() {
-  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('mimei')}<div id="mm"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('app')}</div>`;
-  const j = await apiGet('mimei_estado').catch(() => null); if (!j || !j.ok) { $('#mm').innerHTML = '<div class="vazio">Sem conexão</div>'; return; }
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('mimei')}<div id="mm" aria-busy="true"><section class="w w-mimei"><div class="mimei-skel" role="status" aria-label="Carregando ME MIMEI"><div class="l h1"></div><div class="l h2"></div><div class="g"><div class="l"></div><div class="l"></div><div class="l"></div><div class="l"></div></div></div></section></div>${tabbar('app')}</div>`;
+  const j = await apiGet('mimei_estado').catch(() => null); if (!$('#mm')) return;
+  if (!j || !j.ok) { const off = navigator.onLine === false; $('#mm').removeAttribute('aria-busy'); $('#mm').innerHTML = `<section class="w w-mimei"><div class="mimei-estado" role="alert"><div class="i" aria-hidden="true">${off ? '📡' : '⚠️'}</div><b>${off ? 'Você está offline' : 'Não deu para carregar o ME MIMEI'}</b><p class="mini">${off ? 'Conecte-se à internet para ver o saldo e registrar lanches.' : 'O servidor não respondeu. Tente de novo em instantes.'}</p><button class="btn" id="mmTentar">Tentar de novo</button></div></section>`; $('#mmTentar').onclick = renderMimei; return; }
+  $('#mm').removeAttribute('aria-busy');
   window.MIMEI_BIB = j.biblioteca || [];
   const r = j.resumo, fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
+  // sabores: agrupa lanches com o mesmo "grupo" num bloco só, na posição do primeiro
+  const blocos = [], porGrupo = {}; j.lanches.forEach((l, i) => { l._i = i; if (!l.grupo) return blocos.push({ l }); const k = l.grupo.toLowerCase(); if (!porGrupo[k]) blocos.push(porGrupo[k] = { grupo: l.grupo, itens: [] }); porGrupo[k].itens.push(l); });
+  blocos.forEach((b, i) => { if (b.itens && b.itens.length === 1) blocos[i] = { l: b.itens[0] }; });
+  const semAc = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const abertos = window.MIMEI_ABERTOS || (window.MIMEI_ABERTOS = new Set());
+  const cardLanche = (l, titulo) => `<div class="mimei-card ${r.saldo >= l.kcal ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(l.icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'"><b aria-label="cabem ${fmt(Math.max(0, r.saldo / l.kcal))}">${fmt(Math.max(0, r.saldo / l.kcal))}<span class="x">×</span></b><span>${esc(titulo)}</span><small>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</small><button class="btn sec peq" data-comi="${l.id}" aria-label="Comi 1 ${esc(l.nome)}">Comi 1</button></div>`;
+  const itemLanche = (l, titulo) => `<div class="item mimei-item" data-id="${l.id}" data-busca="${esc(semAc(`${l.nome} ${l.grupo || ''} ${l.sabor || ''}`))}"><span class="mimei-arrasta" aria-hidden="true" title="Arraste para reordenar">⠿</span><img loading="lazy" decoding="async" class="mimei-ic" width="42" height="42" src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(titulo)}</b><span>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</span></div><button class="ico-btn" data-sobe="${l.id}" title="Subir" aria-label="Subir ${esc(l.nome)}">↑</button><button class="ico-btn" data-edita="${l.id}" title="Editar" aria-label="Editar ${esc(l.nome)}">✎</button><button class="ico-btn" data-apaga="${l.id}" title="Apagar" aria-label="Apagar ${esc(l.nome)}">🗑</button></div>`;
+  const kcals = j.lanches.map(l => +l.kcal).filter(k => k > 0), menor = kcals.length ? Math.min(...kcals) : 0;
+  const estadoSaldo = r.saldo <= 0 ? 'zerado' : (menor && r.saldo < menor ? 'baixo' : '');
+  const pctComido = r.queimado > 0 ? Math.min(100, r.comido / r.queimado * 100) : (r.comido > 0 ? 100 : 0);
+  const grupos = blocos.filter(b => b.itens), filtro = window.MIMEI_FILTRO || (window.MIMEI_FILTRO = { q: '', g: '' });
+  if (filtro.g && filtro.g !== '*cabe' && !grupos.some(b => b.grupo === filtro.g)) filtro.g = '';
   $('#mm').innerHTML = `
-  <section class="w w-mimei"><header class="w-top"><span class="w-ico">🍺</span><span class="w-tit">ME MIMEI — hoje</span></header>
-   <div class="w-corpo"><div class="lado"><div><div class="num">${fmt(r.saldo)}<span class="suf">KCAL LIVRES</span></div><div class="mini">queimadas ${r.queimado} kcal · comidas ${r.comido} kcal</div></div></div>
-   <div class="mimei-grade">${j.lanches.map(l => `<div class="mimei-card"><img src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><b>${fmt(r.saldo / l.kcal)}</b><span>${esc(l.nome)}</span><small>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</small><button class="btn sec peq" data-comi="${l.id}">Comi 1</button></div>`).join('')}</div></div></section>
+  <section class="w w-mimei"><header class="w-top"><span class="w-ico" aria-hidden="true">🍺</span><span class="w-tit">ME MIMEI — hoje</span></header>
+   <div class="mimei-corpo">
+    <div class="mimei-hero ${estadoSaldo}" role="group" aria-label="Saldo do dia">
+     <div class="mimei-saldo"><b>${fmt(Math.max(0, r.saldo))}</b><span>kcal livres</span></div>
+     <div class="mimei-barra" role="progressbar" aria-label="Calorias comidas sobre as queimadas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pctComido)}"><i style="width:${pctComido}%"></i></div>
+     <div class="mimei-conta"><span>queimadas <b>${r.queimado}</b></span><em aria-hidden="true">−</em><span>comidas <b>${r.comido}</b></span><em aria-hidden="true">=</em><span class="hl">livres <b>${fmt(r.saldo)}</b> kcal</span></div>
+    </div>
+    <div class="mimei-tools">
+     <label class="mimei-busca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input type="search" id="mmBusca" placeholder="Buscar lanche ou sabor" aria-label="Buscar lanche ou sabor" autocomplete="off" enterkeyhint="search" value="${esc(filtro.q)}"><button type="button" id="mmLimpa" class="${filtro.q ? '' : 'mimei-off'}" aria-label="Limpar busca">✕</button></label>
+     <div class="chips mimei-chips" id="mmChips" role="toolbar" aria-label="Filtrar por tipo">${[['', 'Todos', j.lanches.length], ['*cabe', 'Cabem hoje', j.lanches.filter(l => r.saldo >= l.kcal).length], ...grupos.map(b => [b.grupo, b.grupo, b.itens.length])].map(([k, n, c]) => `<button type="button" class="chip ${filtro.g === k ? 'ativo' : ''}" data-filtro="${esc(k)}" aria-pressed="${filtro.g === k}">${esc(n)} <i>${c}</i></button>`).join('')}</div>
+     <div class="mimei-contagem" id="mmConta" aria-live="polite"></div>
+    </div>
+    <div class="mimei-grade" id="mmGrade"></div>
+   </div></section>
   ${j.consumo.length ? widget({ ico: '🧾', cor: '#f5c23b', titulo: 'Comidos hoje', corpo: `<div class="lista">${j.consumo.map(c => `<div class="item"><div class="info"><b>${fmt(+c.qtd)}× ${esc(c.nome)}</b><span>${c.hora} · ${c.origem === 'relogio' ? '⌚ relógio' : '📱 site'}</span></div><div class="dir"><b>${c.kcal} kcal</b></div><button class="ico-btn" data-desfaz="${c.id}" title="Desfazer">↺</button></div>`).join('')}</div>` }) : ''}
   ${widget({ ico: '✏️', cor: '#f0506e', titulo: 'Meus lanches', corpo: `<div class="mini" style="margin-bottom:8px">Tudo o que mudar aqui aparece no relógio na próxima vez que o app abrir (ou em até 1 minuto com ele aberto).</div>
-    <div class="lista" id="mmLista">${j.lanches.map((l, i) => `<div class="item mimei-item"><img class="mimei-ic" src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(l.nome)}</b><span>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</span></div><button class="ico-btn" data-sobe="${i}" ${i ? '' : 'disabled'} title="Subir">↑</button><button class="ico-btn" data-edita="${l.id}" title="Editar">✎</button><button class="ico-btn" data-apaga="${l.id}" title="Apagar">🗑</button></div>`).join('')}</div>
+    <label class="mimei-busca mimei-busca-lista"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input type="search" id="mmBuscaL" placeholder="Buscar em meus lanches" aria-label="Buscar em meus lanches" autocomplete="off" enterkeyhint="search"><button type="button" id="mmLimpaL" class="mimei-off" aria-label="Limpar busca">✕</button></label><div class="mimei-contagem" id="mmContaL" aria-live="polite"></div>
+    <div class="lista" id="mmLista">${blocos.map(b => b.itens ? `<details class="mimei-grupo"${abertos.has('L:' + b.grupo) ? ' open' : ''} data-grupo="L:${esc(b.grupo)}"><summary class="item mimei-item"><span class="mimei-arrasta" aria-hidden="true" title="Arraste para reordenar">⠿</span><img loading="lazy" decoding="async" class="mimei-ic" width="42" height="42" src="${esc(b.itens[0].icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(b.grupo)} · ${b.itens.length} sabores</b><span>${Math.min(...b.itens.map(l => l.kcal))}–${Math.max(...b.itens.map(l => l.kcal))} kcal</span></div><span class="mimei-seta">▾</span></summary><div class="mimei-sabores">${b.itens.map(l => itemLanche(l, l.sabor)).join('')}</div></details>` : itemLanche(b.l, b.l.nome)).join('')}</div>
     <button class="btn" id="mmNovo" style="margin-top:12px">+ Novo lanche</button>` })}
-  ${widget({ ico: '⌚', cor: '#1fa3e3', titulo: 'Instalar no relógio', corpo: `<div class="mini" style="margin-bottom:10px">O app mostra quantos de cada lanche cabem nas suas calorias ativas do dia, com o ícone de cada um. Toque em START no relógio para registrar o que comeu.</div>
+  ${widget({ ico: '⌚', cor: '#1fa3e3', titulo: 'Instalar no relógio (por cabo)', corpo: `<div class="mini" style="margin-bottom:10px">O app mostra quantos de cada lanche cabem nas suas calorias ativas do dia, com o ícone de cada um. Toque em START no relógio para registrar o que comeu.</div>
     <form id="mmApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="mmModelo" list="mmModelos" value="Forerunner® 165 (fr165)" required autocomplete="off"><datalist id="mmModelos"></datalist></div><button class="btn" id="mmAppBt">⬇ Gerar e baixar ME MIMEI</button></form><div id="mmProg" class="mini" style="margin-top:10px"></div>
     ${j.apps.length ? `<div class="lista" style="margin-top:10px">${j.apps.map(a => `<div class="item"><div class="ic">🍺</div><div class="info"><b>ME MIMEI · ${esc(a.modelo)}</b><span>${a.status === 'pronto' ? (a.visto ? 'último uso ' + fmtData(a.visto) : 'ainda não abriu no relógio') : a.status}</span></div>${a.status === 'pronto' ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : ''}<button class="ico-btn" data-rmapp="${a.id}">🗑</button></div>`).join('')}</div>` : ''}` })}`;
 
   const lista = j.lanches;
-  document.querySelectorAll('[data-comi]').forEach(b => b.onclick = async () => { await api('mimei_comi', { id: +b.dataset.comi, qtd: 1 }); toast('Registrado 😋'); renderMimei(); });
+  document.querySelectorAll('details.mimei-grupo').forEach(d => d.ontoggle = () => abertos[d.open ? 'add' : 'delete'](d.dataset.grupo));
+  document.querySelectorAll('[data-edita]').forEach(b => b.onclick = () => editarLanche(lista.find(x => x.id == b.dataset.edita), [...new Set(lista.map(x => x.grupo).filter(Boolean))]));
+  const pintarGrade = () => {
+    const q = semAc(filtro.q.trim()), g = filtro.g; let html, n;
+    if (!q && !g) { html = blocos.map(b => b.itens ? `<details class="mimei-grupo"${abertos.has(b.grupo) ? ' open' : ''} data-grupo="${esc(b.grupo)}"><summary class="mimei-card ${r.saldo >= Math.min(...b.itens.map(l => l.kcal)) ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(b.itens[0].icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'"><b>${fmt(Math.max(0, r.saldo / Math.min(...b.itens.map(l => l.kcal))))}<span class="x">×</span></b><span>${esc(b.grupo)} · ${b.itens.length} sabores</span><small>${Math.min(...b.itens.map(l => l.kcal))}–${Math.max(...b.itens.map(l => l.kcal))} kcal</small><span class="btn sec peq" aria-hidden="true">Sabores ▾</span></summary><div class="mimei-grade">${b.itens.map(l => cardLanche(l, l.sabor)).join('')}</div></details>` : cardLanche(b.l, b.l.nome)).join(''); n = null; }
+    else { const it = j.lanches.filter(l => (!g || (g === '*cabe' ? r.saldo >= l.kcal : l.grupo === g)) && (!q || semAc(`${l.nome} ${l.grupo || ''} ${l.sabor || ''}`).includes(q))); n = it.length; html = it.map(l => cardLanche(l, l.grupo && l.sabor && !q && g !== '*cabe' ? l.sabor : l.nome)).join(''); }
+    const grade = $('#mmGrade'); if (!grade) return;
+    grade.innerHTML = n === 0 ? `<div class="mimei-estado" style="grid-column:1/-1"><div class="i" aria-hidden="true">${g === '*cabe' && !q ? '🫙' : '🔍'}</div><b>${g === '*cabe' && !q ? 'Nada cabe no saldo agora' : 'Nenhum lanche encontrado'}</b><p class="mini">${g === '*cabe' && !q ? 'Mexa-se um pouco para liberar calorias.' : 'Tente outro nome ou limpe os filtros.'}</p>${q || g ? '<button class="btn sec" type="button" id="mmZera">Limpar filtros</button>' : ''}</div>` : html;
+    $('#mmConta').textContent = n == null ? '' : `${n} ${n === 1 ? 'lanche' : 'lanches'}`;
+    grade.querySelectorAll('details.mimei-grupo').forEach(d => d.ontoggle = () => abertos[d.open ? 'add' : 'delete'](d.dataset.grupo));
+    grade.querySelectorAll('[data-comi]').forEach(b => b.onclick = async () => { b.disabled = true; try { await api('mimei_comi', { id: +b.dataset.comi, qtd: 1 }); toast('Registrado 😋'); renderMimei(); } catch (x) { b.disabled = false; toast(x.message || 'Falhou'); } });
+    const z = $('#mmZera'); if (z) z.onclick = () => { filtro.q = ''; filtro.g = ''; $('#mmBusca').value = ''; $('#mmLimpa').classList.add('mimei-off'); document.querySelectorAll('[data-filtro]').forEach(c => { c.classList.toggle('ativo', c.dataset.filtro === ''); c.setAttribute('aria-pressed', c.dataset.filtro === ''); }); pintarGrade(); };
+  };
+  pintarGrade();
+  $('#mmBusca').oninput = e => { filtro.q = e.target.value; $('#mmLimpa').classList.toggle('mimei-off', !filtro.q); pintarGrade(); };
+  $('#mmLimpa').onclick = () => { filtro.q = ''; $('#mmBusca').value = ''; $('#mmLimpa').classList.add('mimei-off'); $('#mmBusca').focus(); pintarGrade(); };
+  document.querySelectorAll('[data-filtro]').forEach(c => c.onclick = () => { filtro.g = c.dataset.filtro; document.querySelectorAll('[data-filtro]').forEach(o => { o.classList.toggle('ativo', o === c); o.setAttribute('aria-pressed', o === c); }); pintarGrade(); });
   document.querySelectorAll('[data-desfaz]').forEach(b => b.onclick = async () => { await api('mimei_consumo_excluir', { id: +b.dataset.desfaz }); renderMimei(); });
   document.querySelectorAll('[data-apaga]').forEach(b => b.onclick = async () => { const l = lista.find(x => x.id == b.dataset.apaga); if (confirm(`Apagar "${l.nome}"?`)) { await api('mimei_excluir', { id: l.id }); renderMimei(); } });
-  document.querySelectorAll('[data-sobe]').forEach(b => b.onclick = async () => { const ids = lista.map(l => l.id), i = +b.dataset.sobe; [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; await api('mimei_ordem', { ids }); renderMimei(); });
+  // ↑ Subir: troca com o vizinho VISÍVEL de cima no DOM (dentro do mesmo grupo de sabores) e manda a ordem completa, como o arrasto
+  const idsDom = () => [...document.querySelectorAll('#mmLista .mimei-item[data-id]')].map(x => +x.dataset.id);
+  const salvarOrdem = async ids => { const y = scrollY; try { await api('mimei_ordem', { ids }); toast('Ordem salva'); } catch (x) { toast(x.message || 'Falhou'); } await renderMimei(); scrollTo(0, y); };
+  const vizCima = it => { let v = it.previousElementSibling; while (v && v.classList.contains('mimei-off')) v = v.previousElementSibling; return v; };
+  document.querySelectorAll('[data-sobe]').forEach(b => { const it = b.closest('.mimei-item'); b.disabled = !it.previousElementSibling; b.onclick = async () => { const v = vizCima(it); if (!v || b.disabled) return; const antes = idsDom().join(); it.parentElement.insertBefore(it, v); const ids = idsDom(); if (ids.join() === antes) return; b.disabled = true; await salvarOrdem(ids); }; });
   document.querySelectorAll('[data-rmapp]').forEach(b => b.onclick = async () => { if (confirm('Excluir este app? O relógio com ele instalado para de atualizar.')) { await api('app_excluir', { id: +b.dataset.rmapp }); renderMimei(); } });
-  document.querySelectorAll('[data-edita]').forEach(b => b.onclick = () => editarLanche(lista.find(x => x.id == b.dataset.edita)));
-  $('#mmNovo').onclick = () => editarLanche(null);
+
+  // busca em "Meus lanches"
+  const filtrarLista = () => {
+    const q = semAc($('#mmBuscaL').value.trim()); let n = 0;
+    document.querySelectorAll('#mmLista .mimei-item[data-id]').forEach(it => { const ok = !q || it.dataset.busca.includes(q); it.classList.toggle('mimei-off', !ok); if (ok) n++; });
+    document.querySelectorAll('#mmLista details.mimei-grupo').forEach(d => { const vis = d.querySelectorAll('.mimei-item[data-id]:not(.mimei-off)').length; d.classList.toggle('mimei-off', !vis); if (q && vis) d.open = true; else if (!q) d.open = abertos.has(d.dataset.grupo); });
+    $('#mmLista').classList.toggle('filtrando', !!q);
+    $('#mmContaL').textContent = q ? (n ? `${n} ${n === 1 ? 'lanche' : 'lanches'}` : 'Nenhum lanche encontrado') : '';
+  };
+  $('#mmBuscaL').oninput = () => { $('#mmLimpaL').classList.toggle('mimei-off', !$('#mmBuscaL').value); filtrarLista(); };
+  $('#mmLimpaL').onclick = () => { $('#mmBuscaL').value = ''; $('#mmLimpaL').classList.add('mimei-off'); $('#mmBuscaL').focus(); filtrarLista(); };
+  // arrastar para reordenar (pointer events: mouse e toque); usa o mesmo mimei_ordem dos botões ↑
+  document.querySelectorAll('#mmLista summary .mimei-arrasta').forEach(h => h.onclick = e => e.preventDefault());
+  document.querySelectorAll('#mmLista .mimei-arrasta').forEach(h => h.onpointerdown = e => {
+    if ($('#mmLista').classList.contains('filtrando') || (e.button && e.pointerType === 'mouse')) return;
+    const un = h.closest('.mimei-sabores > .mimei-item, #mmLista > *'), pai = un.parentElement, antes = [...document.querySelectorAll('#mmLista .mimei-item[data-id]')].map(x => x.dataset.id).join();
+    e.preventDefault(); un.classList.add('mimei-arrastando'); const pega = e.clientY - un.getBoundingClientRect().top;
+    // ouvintes no documento: mover o nó no DOM derruba o pointer capture
+    const mover = ev => {
+      if (ev.pointerId !== e.pointerId) return; ev.preventDefault();
+      // troca quando o item "arrastado" (posição virtual do dedo) cobre metade do vizinho — antes o DEDO tinha de passar do meio do vizinho (~1 item inteiro, 81px nos sabores)
+      const vis = x => x && !x.classList.contains('mimei-off') && x.getBoundingClientRect().height;
+      const topo = ev.clientY - pega, base = topo + un.getBoundingClientRect().height;
+      for (let k = 0; k < 50; k++) {
+        const nx = un.nextElementSibling, pv = un.previousElementSibling, bn = vis(nx) && nx.getBoundingClientRect(), bp = vis(pv) && pv.getBoundingClientRect();
+        if (bn && base > bn.top + bn.height / 2) pai.insertBefore(nx, un);
+        else if (bp && topo < bp.bottom - bp.height / 2) pai.insertBefore(un, pv);
+        else break;
+      }
+      if (ev.clientY < 70) scrollBy(0, -12); else if (ev.clientY > innerHeight - 110) scrollBy(0, 12);
+    };
+    const soltar = async ev => {
+      if (ev.pointerId !== e.pointerId) return;
+      document.removeEventListener('pointermove', mover); document.removeEventListener('pointerup', soltar); document.removeEventListener('pointercancel', soltar);
+      un.classList.remove('mimei-arrastando');
+      const ids = idsDom();
+      if (ids.join() === antes) return;
+      await salvarOrdem(ids);
+    };
+    document.addEventListener('pointermove', mover, { passive: false }); document.addEventListener('pointerup', soltar); document.addEventListener('pointercancel', soltar);
+  });
+  // chips: degradê indicando que há mais à direita
+  const chips = $('#mmChips'), fimChips = () => chips.classList.toggle('fim', chips.scrollLeft + chips.clientWidth >= chips.scrollWidth - 4);
+  chips.onscroll = fimChips; fimChips();
+  // busca/filtros fixos: sombra quando grudam no topo
+  if (window.MIMEI_SCROLL) removeEventListener('scroll', window.MIMEI_SCROLL);
+  window.MIMEI_SCROLL = () => { const t = $('#mm .mimei-tools'); if (!t) { removeEventListener('scroll', window.MIMEI_SCROLL); window.MIMEI_SCROLL = null; return; } const b = t.getBoundingClientRect(), c = t.parentElement.getBoundingClientRect(); t.classList.toggle('fixo', b.top <= parseFloat(getComputedStyle(t).top) + 1 && c.top < b.top - 1); };
+  addEventListener('scroll', window.MIMEI_SCROLL, { passive: true }); window.MIMEI_SCROLL();
+  $('#mmNovo').onclick = () => editarLanche(null, [...new Set(lista.map(x => x.grupo).filter(Boolean))]);
+  ligarPareamento();
   // gerar app
   let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#mmModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
   const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)) || ((l) => l.length === 1 ? l[0] : null)(modelos.filter(m => n(m.nome).startsWith(q))); };
@@ -1064,12 +1200,13 @@ async function renderMimei() {
     } catch (x) { $('#mmProg').textContent = '❌ ' + x.message; $('#mmAppBt').disabled = false; }
   };
 }
-function editarLanche(l) {
+function editarLanche(l, grupos = []) {
   let imagem = null, emoji = l?.emoji || '', bib = null;
   modal(`<h2>${l ? 'Editar lanche' : 'Novo lanche'}</h2><form id="fLanche">
     <div class="mimei-prev" ${l?.icone ? '' : 'style="height:0;margin:0"'} id="lcPrevBox"><img id="lcPrev" src="${esc(l?.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><span id="lcEmojiAtual">${esc(emoji)}</span></div>
     <div class="campo"><label>🔎 Buscar calorias (tabela TACO + Open Food Facts)</label><input id="lcBusca" autocomplete="off" placeholder="Ex.: coxinha, pastel de queijo, doritos"><div id="lcResultados" class="busca-res"></div></div>
     <div class="campo"><label>Nome</label><input name="nome" maxlength="40" required value="${esc(l?.nome || '')}" placeholder="Ex.: Coxinha"></div>
+    <div class="campo"><label>Grupo (opcional — junta sabores, ex.: Cuscuz, Tapioca)</label><input name="grupo" maxlength="40" list="lcGrupos" autocomplete="off" value="${esc(l?.grupo || '')}" placeholder="sem grupo"><datalist id="lcGrupos">${grupos.map(g => `<option value="${esc(g)}">`).join('')}</datalist></div>
     <div class="linha"><div class="campo"><label>Gramas da porção</label><input id="lcGramas" type="number" min="1" max="3000" placeholder="opcional"></div><div class="campo"><label>Calorias (kcal)</label><input name="kcal" type="number" min="1" max="5000" required value="${l?.kcal || ''}"></div></div>
     <div class="campo"><label>Porção (texto)</label><input name="porcao" maxlength="40" value="${esc(l?.porcao || '')}" placeholder="1 unidade"></div>
     <div class="mini" id="lcBase" style="margin:-6px 0 12px"></div>
@@ -1098,7 +1235,7 @@ function editarLanche(l) {
     $('#lcImg').onchange = e => { const f = e.target.files[0]; if (!f) return; if (f.size > 3e6) return toast('Imagem muito grande (máx. 3 MB)'); const rd = new FileReader(); rd.onload = () => { imagem = rd.result; $('#lcPrev').src = imagem; $('#lcPrev').style.visibility = 'visible'; $('#lcEmojiAtual').textContent = ''; }; rd.readAsDataURL(f); };
     $('#fLanche').onsubmit = async e => {
       e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); $('#lcOk').disabled = true; $('#lcOk').textContent = 'Salvando…';
-      try { await api('mimei_salvar', { id: l?.id, nome: f.nome, kcal: +f.kcal, porcao: f.porcao, emoji, imagem, biblioteca: bib }); fecharModal(); toast('Lanche salvo — o relógio atualiza sozinho'); renderMimei(); }
+      try { await api('mimei_salvar', { id: l?.id, nome: f.nome, kcal: +f.kcal, porcao: f.porcao, grupo: f.grupo, emoji, imagem, biblioteca: bib }); fecharModal(); toast('Lanche salvo — o relógio atualiza sozinho'); renderMimei(); }
       catch (x) { toast(x.message, 4000); $('#lcOk').disabled = false; $('#lcOk').textContent = 'Salvar'; }
     };
   });
@@ -1110,7 +1247,7 @@ function renderMais() {
   const grupos = [
     ['Seus dados', [['perfil', ICO.perfilUser, 'Perfil e metas', 'Dados pessoais, metas diárias e zonas de FC'], ['perfil', ICO.sync, 'Integrações', 'Garmin, Strava e sincronização', 'integracoes'], ['dispositivo', ICO.relogio, 'Relógio', 'Bateria, sensores e recursos do aparelho']]],
     ['Análises', [['relatorios', ICO.relatorios, 'Relatórios', 'Forma × fadiga, risco de lesão, sono, correlações'], ['estatisticas', ICO.barras, 'Desempenho', 'Totais, recordes e medalhas'], ['treinos', ICO.semana, 'Treinos e calendário', 'Planeje e marque treinos concluídos']]],
-    ['Apps do relógio', [['app', ICO.app, 'Rastreador', 'GPS, bateria e FC ao vivo no Traccar'], ['app', '📻', 'Walkie-Talkie', 'Canais, mensagens rápidas e SOS', 'walkie'], ['app', '🍺', 'ME MIMEI', 'Quantos lanches cabem nas calorias do dia', 'mimei']]],
+    ['Apps do relógio', [['app', ICO.app, 'Rastreador', 'GPS, bateria e FC ao vivo no Traccar'], ['app', '📻', 'Walkie-Talkie', 'Canais, mensagens rápidas e SOS', 'walkie'], ['app', '🍺', 'ME MIMEI', 'Quantos lanches cabem nas calorias do dia', 'mimei'], ['app', '⌚', 'Omnitrix Ben 10', 'Escolha o alien girando o Omnitrix', 'ben10'], ['app', '🥚', 'Bichinho Virtual', 'Cuide do bichinho: ovo, fome, cocô e sono', 'tama']]],
   ];
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Mais</h1></div>
   <section class="w mais-perfil click" data-tela="perfil"><div class="w-corpo"><div class="avatar">${esc((u.nome || '?')[0].toUpperCase())}</div><div><b>${esc(u.nome || '')}</b><span>${esc(u.email || '')}</span></div><span class="seta">›</span></div></section>
@@ -1138,7 +1275,7 @@ async function renderSimulador(arg) {
   if (appArg) SIM.app = appArg;
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sim')}
   <section class="w"><header class="w-top"><span class="w-ico">🖥️</span><span class="w-tit">Simulador do relógio</span></header><div class="w-corpo">
-    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
+    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador'], ['tama', '🥚', 'Bichinho']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
     <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
     <div class="sim-palco"><canvas id="simCanvas"></canvas></div>
     <div class="mini centro" id="simDica"></div>
@@ -1176,11 +1313,13 @@ async function simIniciarApp() {
   clearTimeout(SIM.timer); SIM.menu = null; SIM.sobre = null;
   const dicas = { mimei: 'Deslize ou use ↑ ↓ ← → para trocar de lanche; START (Enter) abre "Comi" e "Desfazer". Ações valem de verdade.',
     walkie: 'Você conta como um relógio próprio: abra o simulador em outra conta (ex.: jeovana) para conversar. START abre mensagens rápidas, escrever, chamar atenção, SOS e canais.',
+    tama: 'Cuide do bichinho: ↑ ↓ escolhem o ícone, START (Enter) usa, VOLTAR (Esc) cancela. É o mesmo bichinho da aba Bichinho.',
     rastreador: 'Mostra a última leitura real do seu relógio. O simulador não envia posição nem bateria (para não criar dados falsos). MENU (segurar UP) abre Sobre.' };
   $('#simDica') && ($('#simDica').textContent = dicas[SIM.app]);
   if (SIM.app === 'mimei') await simMimeiDados();
   if (SIM.app === 'walkie') await simWalkieIniciar();
   if (SIM.app === 'rastreador') await simRastreadorDados();
+  clearInterval(SIM.tamaTimer); if (SIM.app === 'tama') { tamaCarregar(); tamaSimular(); SIM.tamaTimer = setInterval(() => { if (SIM.app === 'tama' && SIM.canvas) tamaTique(); else clearInterval(SIM.tamaTimer); }, 250); }
   simDesenhar();
 }
 /* ---- ME MIMEI ---- */
@@ -1239,6 +1378,7 @@ function simTecla(t) {
     if (t === 'next' && n) M.sel = (M.sel + 1) % n; else if (t === 'prev' && n) M.sel = (M.sel - 1 + n) % n; else if ((t === 'start' || t === 'menu') && n) simMenuMimei(); }
   if (SIM.app === 'walkie') { const W = SIM.walkie;
     if (t === 'prev') W.desloc = Math.min(W.desloc + 1, Math.max(0, W.mensagens.length - 1)); else if (t === 'next') W.desloc = Math.max(0, W.desloc - 1); else if (t === 'start' || t === 'menu') simMenuWalkie(); }
+  if (SIM.app === 'tama') { tamaBotao({ start: 'start', back: 'back', prev: 'cima', next: 'baixo', menu: 'start' }[t] || 'start'); return simDesenhar(); }
   if (SIM.app === 'rastreador' && t === 'start') { SIM.rastreador.ativo = !SIM.rastreador.ativo; }
   simDesenhar();
 }
@@ -1264,7 +1404,7 @@ function simMenuWalkie() {
 }
 async function simEscolher(it) {
   const pai = SIM.menu; SIM.menu = null;
-  if (it.a === 'sobre') { SIM.sobre = { app: SIM.app === 'mimei' ? 'ME MIMEI' : 'Walkie-Talkie', versao: SIM.app === 'mimei' ? '1.8.0' : '2.3.2', deslocamento: 0 }; return simDesenhar(); }
+  if (it.a === 'sobre') { SIM.sobre = { app: SIM.app === 'mimei' ? 'ME MIMEI' : 'Walkie-Talkie', versao: SIM.app === 'mimei' ? '1.12.0' : '2.3.2', deslocamento: 0 }; return simDesenhar(); }
   if (SIM.app === 'mimei') {
     const M = SIM.mimei, l = M.dados.lanches[M.sel]; M.estado = it.a === 'desfazer' ? 'Desfazendo...' : it.a === 'atualizar' ? 'Atualizando...' : 'Registrando...'; simDesenhar();
     try { if (it.q) await api('mimei_comi', { id: l.id, qtd: it.q }); else if (it.a === 'desfazer') await api('mimei_desfazer', {}); } catch (x) { toast(x.message); }
@@ -1297,6 +1437,7 @@ function simDesenhar() {
   const cor = x => '#' + x.toString(16).padStart(6, '0');
   if (SIM.sobre && typeof simDesenharSobre === 'function') simDesenharSobre(c, w, h, redondo, fonte, cor, SIM.sobre);
   else if (SIM.menu) simDesenharMenu(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'tama') tamaDesenhar(c, w, h);
   else if (SIM.app === 'mimei') simDesenharMimei(c, w, h, redondo, fonte, cor);
   else if (SIM.app === 'walkie' && typeof simDesenharWalkie === 'function') { const W = SIM.walkie, pos = W.canais.findIndex(x => x.id == W.canal);
     simDesenharWalkie(c, w, h, redondo, fonte, cor, { canal: W.nomeCanal || 'Walkie-Talkie', posCanal: pos + 1, totalCanais: W.canais.length, mensagens: W.mensagens, deslocamento: W.desloc, estado: W.estado, atualizacao: false, aviso: W.cfg?.aviso || '' }); }
@@ -1504,4 +1645,447 @@ function simDesenharSobre(c, w, h, redondo, fonte, cor, dados) {
     desenhar(m, cx, y, l[i][2]); y += alt + esp;
   }
   if (i < l.length) seta('v', yFim - fh);
+}
+
+// ---------- Omnitrix Ben 10 (app interativo) ----------
+// sons do Omnitrix (mesmas notas do relógio) e brilho da tela
+let B10AC = null;
+function b10Som(notas) { try { B10AC = B10AC || new (window.AudioContext || window.webkitAudioContext)(); let t = B10AC.currentTime; for (let i = 0; i < notas.length; i += 2) { const d = notas[i + 1] / 1000; if (notas[i]) { const o = B10AC.createOscillator(), g = B10AC.createGain(); o.type = 'square'; o.frequency.value = notas[i]; g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(B10AC.destination); o.start(t); o.stop(t + d); } t += d; } } catch (e) { } }
+function b10Luz(cor) { const cv = document.querySelector('#b10cv'); if (!cv) return; cv.style.transition = 'box-shadow .15s'; cv.style.boxShadow = `0 0 90px 20px ${cor}`; setTimeout(() => { cv.style.transition = 'box-shadow 1.2s'; cv.style.boxShadow = '0 0 40px #22ff4433'; }, 400); }
+
+const B10 = { tema: 0, alien: true, bat: 87, timer: null, aliens: [], img: {}, esc: 0, modo: 'app', estado: 'pronto', fim: 0, quadro: 0, anim: null };
+const b10Img = i => { const a = B10.aliens[i]; if (!a) return null; if (!B10.img[a.slug]) { const im = new Image(); im.onload = () => { const cv = $('#b10cv'); cv && desenharBen10(cv); }; im.src = 'app/ben10/' + a.slug + '.png'; B10.img[a.slug] = im; } return B10.img[a.slug]; };
+function b10Aro(c, cx, cy, r, cor) {
+  const circ = (rr, k) => { c.fillStyle = k; c.beginPath(); c.arc(cx, cy, rr, 0, 7); c.fill(); };
+  circ(r, '#555'); circ(r * .86, '#222'); c.fillStyle = '#999';
+  for (let k = 0; k < 4; k++) { c.save(); c.translate(cx, cy); c.rotate(Math.PI / 4 + k * Math.PI / 2); c.fillRect(r * .87, -r * .07, r * .12, r * .14); c.restore(); }
+  circ(r * .82, '#000'); c.strokeStyle = cor; c.lineWidth = 3; c.beginPath(); c.arc(cx, cy, r * .82, 0, 7); c.stroke();
+}
+function b10Ampulheta(c, cx, cy, r, cor) {
+  const a = r * .5, b = r * .58, ci = r * .07;
+  c.fillStyle = cor; c.beginPath(); [[cx - a, cy - b], [cx + a, cy - b], [cx + ci, cy], [cx + a, cy + b], [cx - a, cy + b], [cx - ci, cy]].forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.fill();
+}
+function b10Texto(c, txt, x, y, maxW, px, cor, peso = 700) {
+  c.fillStyle = cor; let t = px; c.font = `${peso} ${t}px Roboto, sans-serif`;
+  while (c.measureText(txt).width > maxW && t > px * .6) { t--; c.font = `${peso} ${t}px Roboto, sans-serif`; }
+  if (c.measureText(txt).width <= maxW || !txt.includes(' ')) return c.fillText(txt, x, y);
+  const i = txt.indexOf(' '); c.fillText(txt.slice(0, i), x, y - t * .55); c.fillText(txt.slice(i + 1), x, y + t * .55);
+}
+function desenharBen10(cv) {
+  const c = cv.getContext('2d'), W = cv.width, cx = W / 2, cy = W / 2, r = W / 2, d = new Date(), h = d.getHours();
+  const n = B10.aliens.length || 1, al = B10.aliens[B10.esc] || { nome: 'OMNITRIX', cor: '#22FF44' };
+  c.clearRect(0, 0, W, W); c.textAlign = 'center'; c.textBaseline = 'middle';
+  const dd = String(h).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+  if (B10.modo === 'face') {
+    const idx = B10.alien === 'hora' ? h % n : B10.esc, ah = B10.aliens[idx] || al;
+    const rec = B10.bat <= 20, verde = rec ? '#FF2200' : ['#22FF44', '#AAFF00', '#00AA22', ah.cor][B10.tema];
+    b10Aro(c, cx, cy, r, verde); b10Ampulheta(c, cx, cy, r, verde);
+    c.fillStyle = '#000'; c.font = `700 ${r * .36}px Roboto, sans-serif`; c.fillText(dd, cx, cy - r * .34); c.fillText(mm, cx, cy + r * .34);
+    const lx = cx - r * .47, rx = cx + r * .47, fx = `500 ${r * .09}px Roboto, sans-serif`, fp = `700 ${r * .13}px Roboto, sans-serif`;
+    c.font = fx; c.fillStyle = '#bbb'; c.fillText(['DOM', 'SEG', 'TER', 'QUA', 'QUI', 'SEX', 'SÁB'][d.getDay()], lx, cy + r * .04); c.fillText('6.482', rx, cy + r * .04);
+    c.font = fp; c.fillStyle = '#fff'; c.fillText(d.getDate(), lx, cy - r * .1); c.fillStyle = verde; c.fillText(B10.bat + '%', rx, cy - r * .1);
+    c.font = fx; c.fillStyle = '#FF3344'; c.fillText('FC 72', cx, cy + r * .7);
+    b10Texto(c, rec ? 'RECARREGANDO' : B10.alien ? ah.nome.toUpperCase() : 'OMNITRIX', cx, cy - r * .7, r * .8, r * .1, rec ? '#FF2200' : B10.alien ? ah.cor : verde, 500);
+    return;
+  }
+  const est = B10.estado, resta = Math.max(0, Math.round((B10.fim - Date.now()) / 1000)), mmss = s => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  if (est === 'pronto' || est === 'recarga') {
+    const cor = est === 'recarga' ? '#FF2200' : '#22FF44';
+    b10Aro(c, cx, cy, r, cor); b10Ampulheta(c, cx, cy, r, cor);
+    c.fillStyle = '#000'; c.font = `700 ${r * .36}px Roboto, sans-serif`; c.fillText(dd, cx, cy - r * .34); c.fillText(mm, cx, cy + r * .34);
+    b10Texto(c, est === 'recarga' ? 'RECARREGANDO' : al.nome.toUpperCase(), cx, cy - r * .7, r * .8, r * .1, est === 'recarga' ? '#FF2200' : al.cor);
+    b10Texto(c, est === 'recarga' ? mmss(resta) : 'START ESCOLHE', cx, cy + r * .7, r * .8, r * .08, est === 'recarga' ? '#FF2200' : '#bbb', 500);
+  } else if (est === 'transformando') {
+    const p = 1 - B10.quadro / 14; c.fillStyle = p < .7 ? '#22FF44' : '#fff'; c.beginPath(); c.arc(cx, cy, r * .15 + r * 1.3 * p, 0, 7); c.fill();
+    if (p < .7) { c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, r * .1 + r * .9 * p, 0, 7); c.fill(); }
+  } else if (est === 'selecao') {
+    b10Aro(c, cx, cy, r, '#22FF44');
+    for (let i = 0; i < 24; i++) { const an = -Math.PI / 2 + i * 2 * Math.PI / 24 - B10.esc * 2 * Math.PI / n; c.fillStyle = i ? '#226633' : '#22FF44'; c.beginPath(); c.arc(cx + Math.cos(an) * r * .76, cy + Math.sin(an) * r * .76, i ? r * .018 : r * .035, 0, 7); c.fill(); }
+    const abre = B10.giro ? 1 : 1 - B10.quadro / 6;
+    c.fillStyle = '#22FF44'; c.beginPath(); c.arc(cx, cy - r * .04, r * .52 * abre, 0, 7); c.fill();
+    const im = b10Img(B10.esc), t = r * .92, dx = B10.giro ? B10.giro * B10.quadro * r * .1 : 0;
+    if (im && im.complete && (B10.giro || !B10.quadro)) c.drawImage(im, cx - t / 2 + dx, cy - r * .04 - t / 2, t, t);
+    b10Texto(c, al.nome.toUpperCase(), cx, cy + r * .6, r * .9, r * .11, al.cor);
+    c.font = `500 ${r * .07}px Roboto, sans-serif`; c.fillStyle = '#bbb'; c.fillText(`${B10.esc + 1} DE ${n}`, cx, cy - r * .66);
+  } else {
+    const cor = al.cor; c.fillStyle = cor; c.beginPath(); c.arc(cx, cy, r, 0, 7); c.fill(); c.fillStyle = '#000'; c.beginPath(); c.arc(cx, cy, r * .93, 0, 7); c.fill();
+    c.fillStyle = cor; c.beginPath(); c.arc(cx, cy - r * .05, r * .48, 0, 7); c.fill();
+    const im = b10Img(B10.esc), t = r * .92; if (im && im.complete) c.drawImage(im, cx - t / 2, cy - r * .05 - t / 2, t, t);
+    c.font = `500 ${r * .09}px Roboto, sans-serif`; c.fillStyle = '#fff'; c.fillText(dd + ':' + mm, cx, cy - r * .72);
+    b10Texto(c, al.nome.toUpperCase(), cx, cy + r * .56, r * .9, r * .11, cor);
+    c.font = `500 ${r * .08}px Roboto, sans-serif`; c.fillStyle = resta <= 30 ? '#FF2200' : '#bbb'; c.fillText(mmss(resta), cx, cy + r * .78);
+  }
+}
+function b10Tique() {
+  const cv = $('#b10cv'); if (!cv) { clearInterval(B10.anim); B10.anim = null; return; }
+  if (B10.quadro > 0) B10.quadro--; else B10.giro = 0;
+  if (B10.estado === 'transformando' && !B10.quadro) { B10.estado = 'alien'; B10.fim = Date.now() + 600000; b10Som([220, 120, 160, 250]); }
+  if (B10.estado === 'alien' && Date.now() >= B10.fim) b10Acao('fim');
+  if (B10.estado === 'recarga' && Date.now() >= B10.fim) { B10.estado = 'pronto'; b10Som([1200, 80, 0, 40, 1800, 140]); b10Luz('#22ff44'); }
+  desenharBen10(cv);
+}
+function b10Acao(a) {
+  const n = B10.aliens.length; if (B10.modo !== 'app') B10.modo = 'app';
+  if (a === 'start') { if (B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; b10Som([900, 40, 1300, 40, 1900, 70]); b10Luz('#22ff4488'); } else if (B10.estado === 'selecao') { B10.estado = 'transformando'; B10.quadro = 14; navigator.vibrate?.([120, 80, 400]); b10Som([500, 60, 700, 60, 900, 60, 1200, 60, 1500, 60, 1900, 70, 2400, 80, 3000, 260]); b10Luz('#aaffbb'); } }
+  if (a === 'cima' || a === 'baixo') { if (B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; } if (B10.estado === 'selecao') { B10.esc = (B10.esc + (a === 'baixo' ? 1 : -1) + n) % n; B10.giro = a === 'baixo' ? 1 : -1; B10.quadro = 4; b10Som([2200, 18]); b10Lista(); } }
+  if (a === 'voltar') { if (B10.estado === 'selecao') { B10.estado = 'pronto'; b10Som([1600, 40, 1000, 60]); } else if (B10.estado === 'alien' || B10.estado === 'transformando') a = 'fim'; }
+  if (a === 'fim') { B10.estado = 'recarga'; B10.fim = Date.now() + 60000; B10.quadro = 0; b10Som([1400, 120, 0, 60, 1400, 120, 0, 60, 900, 120, 600, 160, 350, 300]); b10Luz('#ff2200'); }
+}
+function b10Lista() {
+  const l = $('#b10Lista'); if (!l) return;
+  l.querySelectorAll('[data-b10a]').forEach(b => b.classList.toggle('ativo', +b.dataset.b10a === B10.esc));
+  $('#b10Nome') && ($('#b10Nome').textContent = `${B10.aliens[B10.esc].nome} · ${B10.aliens[B10.esc].original} (${B10.aliens[B10.esc].serie})`);
+}
+async function renderBen10() {
+  if (!B10.aliens.length) { try { B10.aliens = await fetch('app/ben10/aliens.json?v=2').then(x => x.json()); } catch (e) { } }
+  const a = B10.aliens[B10.esc] || {};
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('ben10')}
+  <section class="w"><header class="w-top"><span class="w-ico">⌚</span><span class="w-tit">Omnitrix Ben 10</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   
+   <canvas id="b10cv" width="360" height="360" style="width:min(300px,80vw);height:auto;border-radius:50%;box-shadow:0 0 40px #22ff4433;touch-action:pan-y;cursor:pointer"></canvas>
+   ${B10.modo === 'app' ? `<div class="chips"><button class="chip" data-b10bt="cima">▲ Cima</button><button class="chip" data-b10bt="start">● START</button><button class="chip" data-b10bt="baixo">▼ Baixo</button><button class="chip" data-b10bt="voltar">↩ Voltar</button></div>
+   <div class="mini" style="text-align:center;max-width:460px">Igual ao relógio do desenho: <b>START</b> (ou toque na tela) abre o mostrador, <b>Cima/Baixo</b> (ou deslizar) gira entre os aliens e <b>START</b> de novo <b>transforma</b> — clarão verde, vibração e a silhueta do alien com o tempo da transformação (10 min). Quando acaba, ou ao apertar <b>Voltar</b>, o Omnitrix fica <b>vermelho recarregando</b> por 1 minuto. O último alien escolhido fica guardado.</div>`
+   : `<div class="chips">${['Clássico', 'Omniverse', 'Ultimatrix', 'Cor do alien'].map((n, i) => `<button class="chip ${B10.tema === i ? 'ativo' : ''}" data-b10tema="${i}">${n}</button>`).join('')}</div>
+   <div class="chips"><button class="chip ${B10.alien === 'hora' ? 'ativo' : ''}" id="b10hora">🕐 Alien da hora</button><button class="chip ${B10.bat <= 20 ? 'ativo' : ''}" id="b10bat">🔋 Simular bateria fraca</button></div>
+   <div class="mini" style="text-align:center;max-width:460px">Mostrador com a hora na ampulheta e o nome do alien em cima. No relógio, o alien do mostrador é escolhido no app <b>Garmin Connect</b> (Configurações do mostrador → <b>Alien escolhido</b>) — mostradores da Garmin não aceitam botões, por isso a escolha girando o Omnitrix fica no app interativo.</div>`}
+   <div class="mini" id="b10Nome" style="text-align:center">${a.nome ? `${a.nome} · ${a.original} (${a.serie})` : ''}</div>
+   <div id="b10Lista" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px;width:100%;max-height:260px;overflow:auto">${B10.aliens.map((x, i) => `<button class="chip ${i === B10.esc ? 'ativo' : ''}" data-b10a="${i}" title="${esc(x.nome)}" style="display:flex;flex-direction:column;align-items:center;padding:4px;min-width:0"><span style="width:44px;height:44px;border-radius:50%;background:#22FF44;display:flex;align-items:center;justify-content:center"><img src="app/ben10/${x.slug}.png" loading="lazy" alt="" style="width:40px;height:40px"></span><span style="font-size:10px;line-height:1.1;white-space:normal;text-align:center">${esc(x.nome)}</span></button>`).join('')}</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="b10App"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="b10Modelo" list="b10Modelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="b10Modelos"></datalist></div>
+   <div class="chips"><button class="btn" data-b10gera="omnitrix">⬇ Baixar Omnitrix</button></div>
+   <div class="mini" id="b10Prog" style="margin-top:8px">Copie o arquivo .prg para a pasta GARMIN/APPS do relógio (cabo USB). O interativo aparece na lista de apps (dá para pôr num atalho de botão); o mostrador, em Aparência.</div></form></div>
+  ${tabbar('app')}</div>`;
+  const cv = $('#b10cv');
+  clearInterval(B10.anim); B10.anim = setInterval(b10Tique, 50); desenharBen10(cv);
+  document.querySelectorAll('[data-b10modo]').forEach(b => b.onclick = () => { B10.modo = b.dataset.b10modo; renderBen10(); });
+  document.querySelectorAll('[data-b10bt]').forEach(b => b.onclick = () => b10Acao(b.dataset.b10bt));
+  document.querySelectorAll('[data-b10tema]').forEach(b => b.onclick = () => { B10.tema = +b.dataset.b10tema; renderBen10(); });
+  document.querySelectorAll('[data-b10a]').forEach(b => b.onclick = () => { B10.esc = +b.dataset.b10a; if (B10.alien === 'hora') B10.alien = true; if (B10.modo === 'app' && B10.estado === 'pronto') { B10.estado = 'selecao'; B10.quadro = 6; } b10Lista(); });
+  $('#b10hora') && ($('#b10hora').onclick = () => { B10.alien = B10.alien === 'hora' ? true : 'hora'; renderBen10(); });
+  $('#b10bat') && ($('#b10bat').onclick = () => { B10.bat = B10.bat <= 20 ? 87 : 15; renderBen10(); });
+  cv.onclick = () => B10.modo === 'app' && b10Acao('start');
+  let x0 = null; cv.ontouchstart = e => { x0 = e.touches[0].clientX; }; cv.ontouchend = e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) > 30 && B10.modo === 'app') { e.preventDefault(); b10Acao(dx < 0 ? 'baixo' : 'cima'); } };
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#b10Modelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(p => n(p) === q)) || ((l) => l.length === 1 ? l[0] : null)(modelos.filter(m => n(m.nome).startsWith(q))); };
+  $('#b10App').onsubmit = e => e.preventDefault();
+  document.querySelectorAll('[data-b10gera]').forEach(bt => bt.onclick = async e => {
+    e.preventDefault(); const m = achar($('#b10Modelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bts = document.querySelectorAll('[data-b10gera]'); bts.forEach(b => b.disabled = true);
+    $('#b10Prog').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('ben10_app', { modelo: m.id, variante: bt.dataset.b10gera });
+      const esperar = async (n = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#b10Prog').innerHTML = `✅ É hora do herói! Copie para GARMIN/APPS. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bts.forEach(b => b.disabled = false); return; }
+        if (s.status === 'erro' || n > 90) { $('#b10Prog').textContent = '❌ ' + (s.erro || 'Demorou demais'); bts.forEach(b => b.disabled = false); return; }
+        setTimeout(() => esperar(n + 1), 2000); };
+      esperar();
+    } catch (x) { $('#b10Prog').textContent = '❌ ' + x.message; bts.forEach(b => b.disabled = false); }
+  });
+}
+
+// ---------- links dos pacotes da Connect IQ Store (app/loja-*) ----------
+let LOJAS = null;
+async function pintarLojas() {
+  const el = $('#lojaLinks'); if (!el) return;
+  if (!LOJAS) { const r = await apiGet('lojas').catch(() => null); LOJAS = r?.lojas || []; }
+  if (!LOJAS.length || !$('#lojaLinks')) return;
+  $('#lojaLinks').innerHTML = `<section class="w" style="margin-bottom:12px"><header class="w-top"><span class="w-ico">🏪</span><span class="w-tit">Arquivos para a Connect IQ Store</span></header><div class="lista">${LOJAS.map(l => `<a class="item" href="${esc(l.url)}" target="_blank" rel="noopener" style="text-decoration:none;color:inherit">${l.icone ? `<img src="${esc(l.icone)}" alt="" width="42" height="42" style="border-radius:10px">` : '<div class="ic">📦</div>'}<div class="info"><b>${esc(l.titulo)}</b><span>Atualizado ${esc(l.data)} · abrir página ↗</span></div><span class="seta">›</span></a>`).join('')}</div></section>`;
+}
+
+// ---------- Bichinho Virtual (mesma lógica e mesmos desenhos do app do relógio) ----------
+const TAMA_SPR = {
+  EGG: [384, 960, 2016, 4080, 8184, 16380, 15420, 31806, 31134, 31710, 31806, 32764, 16380, 8184, 2016, 0],
+  BEBE: [0, 0, 0, 0, 0, 2016, 2064, 4104, 5160, 4104, 5064, 4104, 2064, 2016, 0, 0],
+  CRIANCA: [0, 0, 2016, 2064, 4104, 9252, 9252, 8196, 8772, 8580, 4104, 4080, 2064, 6168, 0, 0],
+  JOVEM: [8196, 12300, 12276, 8196, 16386, 19506, 19506, 16386, 16770, 16962, 8196, 8184, 4680, 4680, 13932, 0],
+  ADULTO: [24582, 20490, 20466, 16386, 32769, 39993, 37929, 39993, 33153, 40965, 37833, 17442, 16380, 8772, 8772, 30318],
+  RANZINZA: [8772, 13932, 16380, 16386, 32769, 38937, 35889, 32769, 32769, 34785, 34833, 32769, 16386, 16380, 6168, 14364],
+  ANJO: [2016, 2064, 2016, 0, 2016, 2064, 4680, 4104, 4488, 4104, 12300, 20490, 4104, 5736, 6552, 0],
+  COCO: [0, 24, 36, 110, 65, 221, 131, 255],
+  CORACAO: [108, 255, 255, 126, 60, 24, 0, 0],
+  CORACAO_V: [108, 146, 130, 68, 40, 16, 0, 0],
+  CAVEIRA: [126, 255, 153, 153, 255, 102, 126, 90],
+  ZZZ: [240, 32, 64, 240, 15, 2, 4, 15],
+  COMIDA: [24, 60, 126, 126, 255, 129, 129, 255],
+  DOCE: [129, 219, 126, 90, 126, 219, 129, 0],
+  I_COMER: [164, 172, 236, 76, 68, 68, 68, 68],
+  I_LUZ: [56, 68, 130, 130, 68, 56, 56, 16],
+  I_BRINCAR: [60, 90, 153, 255, 255, 153, 90, 60],
+  I_REMEDIO: [1, 2, 6, 14, 28, 56, 80, 128],
+  I_LIMPAR: [48, 88, 120, 48, 126, 255, 126, 0],
+  I_STATUS: [255, 129, 189, 129, 177, 129, 255, 0],
+  BEBETCHI: [0, 0, 0, 960, 1056, 2640, 2064, 2448, 1056, 972, 1060, 2068, 2072, 2016, 576, 1632],
+  BEBE2: [0, 0, 960, 1056, 2064, 2640, 2064, 3024, 1056, 960, 1056, 2064, 1056, 960, 0, 0],
+  MARUTCHI: [0, 0, 2016, 2064, 4104, 9828, 9828, 8196, 9156, 4104, 4080, 1056, 1056, 3120, 0, 0],
+  BICOTCHI: [0, 0, 4032, 4128, 8208, 9832, 8207, 8207, 8208, 4128, 4032, 1152, 1152, 3264, 0, 0],
+  ORELHAS: [12300, 12300, 14364, 8184, 8196, 19506, 19506, 16386, 17346, 8196, 8184, 2448, 2448, 6552, 0, 0],
+  ESPINHO: [384, 960, 2016, 8190, 8193, 17200, 17200, 16384, 16768, 16960, 8196, 8184, 4680, 12876, 0, 0],
+  GATOTCHI: [24582, 20490, 20466, 16386, 32769, 39993, 37929, 39993, 33153, 40965, 37833, 17442, 16380, 8772, 8772, 30318],
+  PATOTCHI: [4032, 4128, 8208, 19656, 19656, 16392, 16415, 16415, 16392, 8208, 8208, 16368, 4672, 4672, 12912, 0],
+  BLOBTCHI: [0, 2016, 4080, 8184, 9828, 9828, 8196, 8580, 8196, 8184, 4080, 2016, 576, 1632, 0, 0],
+  VERMETCHI: [0, 0, 1920, 2112, 5792, 4128, 2112, 1920, 768, 1536, 3072, 6144, 12288, 24576, 32767, 0],
+  VELHOTCHI: [960, 1056, 2064, 2640, 2064, 2448, 1056, 3120, 5064, 4104, 5064, 2064, 1056, 1056, 3120, 0],
+  FANTASMA: [0, 2016, 2064, 4104, 4680, 4104, 4488, 4104, 4104, 4104, 4104, 5544, 6744, 0, 0, 0],
+  TUMBA: [0, 960, 1056, 2064, 3024, 2640, 3024, 2064, 2448, 2448, 2064, 4080, 8184, 16380, 0, 0],
+  CORACAO_P: [108, 255, 126, 56, 0, 0, 0, 0],
+  I_DISCIPLINA: [60, 66, 153, 165, 153, 153, 66, 60],
+  I_ATENCAO: [24, 24, 24, 24, 24, 0, 24, 24],
+  ROBOTCHI: [384, 384, 4080, 4104, 5736, 5736, 4104, 5064, 8184, 8196, 11316, 8196, 8184, 3120, 3120, 7224],
+  MASCARATCHI: [0, 2016, 2064, 4104, 16383, 11313, 16383, 4104, 4488, 4104, 2064, 2016, 576, 1632, 0, 0],
+  PRATO: [0, 0, 8160, 8208, 12240, 8208, 8160, 4032, 0, 0, 0, 0, 0, 0, 0, 0],
+};
+const TAMA_LCD = '#a8b58a', TAMA_PIX = '#243018', TAMA_OFF = '#8c9a70', TAMA_CASCA = '#e84a8a';
+const TAMA_ICONES = ['I_COMER', 'I_LUZ', 'I_BRINCAR', 'I_REMEDIO', 'I_LIMPAR', 'I_DISCIPLINA', 'I_STATUS', 'I_ATENCAO'];
+// 0 ovo · 1 bebê · 2 criança · 3 e 4 adolescentes · 5 a 10 adultos · 11 secreto · 12 morto
+const TAMA_NOMES = ['OVO', 'BOLINHA', 'REDONDO', 'PONTINHAS', 'BIQUINHO', 'GATINHO', 'ROBOZINHO', 'MASCARADO', 'PATINHO', 'MINHOCA', 'GOSMINHA', 'VEIO', 'ANJINHO'];
+const TAMA_SPRPET = ['EGG', 'BEBETCHI', 'MARUTCHI', 'ESPINHO', 'BICOTCHI', 'GATOTCHI', 'ROBOTCHI', 'MASCARATCHI', 'PATOTCHI', 'VERMETCHI', 'BLOBTCHI', 'VELHOTCHI', 'FANTASMA'];
+const TAMA_DORMIR = [22, 20, 20, 21, 21, 22, 22, 23, 22, 22, 22, 22, 22], TAMA_ACORDAR = [9, 9, 9, 9, 9, 9, 9, 11, 9, 9, 10, 9, 9];
+const TAMA_PESOMIN = [5, 5, 10, 20, 20, 30, 30, 30, 30, 10, 30, 30, 5];
+const TAMA_RFOME = [70, 30, 45, 60, 60, 70, 70, 45, 70, 60, 45, 70, 70], TAMA_RFELIZ = [60, 25, 40, 55, 55, 65, 65, 40, 65, 55, 40, 65, 65];
+const TAMA_RCOCO = [180, 45, 90, 150, 150, 180, 180, 120, 180, 150, 120, 180, 180];
+const TAMA = { tela: 'principal', sel: -1, sub: 0, q: 0, posX: 8, dirX: 1, anim: '', animQ: 0, animTxt: '', rod: 0, acertos: 0, lado: 0, escolha: 0, mostra: 0, chamava: false, anim2: null, p: null };
+let TAMAC = null;
+function tamaSom(notas) { if (TAMA.p && TAMA.p.somLig === 0) return; try { TAMAC = TAMAC || new (window.AudioContext || window.webkitAudioContext)(); let t = TAMAC.currentTime; for (let i = 0; i < notas.length; i += 2) { const d = notas[i + 1] / 1000; if (notas[i]) { const o = TAMAC.createOscillator(), g = TAMAC.createGain(); o.type = 'square'; o.frequency.value = notas[i]; g.gain.setValueAtTime(0.07, t); g.gain.exponentialRampToValueAtTime(0.001, t + d); o.connect(g).connect(TAMAC.destination); o.start(t); o.stop(t + d); } t += d; } } catch (e) { } }
+const tamaBip = () => tamaSom([2000, 30]);
+function tamaNovoOvo() { const a = Math.floor(Date.now() / 1000); TAMA.p = { per: 0, nasc: a, ultimo: a, idade: 0, fome: 2, feliz: 2, peso: 5, coco: 0, doente: 0, doses: 0, luz: 1, disc: 0, somLig: 1, erroC: 0, erroD: 0, erroCrianca: 0, birra: 0, aFome: 0, aFeliz: 0, aCoco: 0, tZero: 0, tFome0: 0, tDoente: 0, tLuz: 0, tBir: 0 }; tamaSalvar(); }
+function tamaCarregar() { try { const d = JSON.parse(localStorage.getItem('tama2') || 'null'); if (d && d.nasc) { TAMA.p = d; return; } } catch (e) { } tamaNovoOvo(); }
+function tamaSalvar() { try { localStorage.setItem('tama2', JSON.stringify(TAMA.p)); } catch (e) { } }
+function tamaDormindo(t) { const p = TAMA.p; if (!p || p.per === 0 || p.per === 12) return false; const h = new Date(t * 1000).getHours(), d = TAMA_DORMIR[p.per], a = TAMA_ACORDAR[p.per]; return d > a ? (h >= d || h < a) : (h >= d && h < a); }
+// o ícone de atenção acende por fome, tristeza, birra ou luz acesa na hora de dormir (a doença não avisa)
+function tamaChamando() { const p = TAMA.p; if (!p || p.per === 0 || p.per === 12) return false; if (tamaDormindo(Math.floor(Date.now() / 1000))) return p.luz === 1; return p.fome === 0 || p.feliz === 0 || p.birra === 1; }
+function tamaEvoluir() {
+  const p = TAMA.p;
+  if (p.per === 1 && p.idade >= 65) { p.per = 2; p.erroCrianca = p.erroC; }
+  else if (p.per === 2 && p.idade >= 3 * 1440) { p.per = (p.erroC - p.erroCrianca) <= 2 ? 3 : 4; p.erroCrianca = p.erroC; }
+  else if ((p.per === 3 || p.per === 4) && p.idade >= 6 * 1440) {
+    if (p.per === 3 && p.erroC <= 2) p.per = p.erroD === 0 ? 5 : p.erroD === 1 ? 6 : 7;
+    else p.per = p.erroD <= 1 ? 8 : p.erroD <= 3 ? 9 : 10;
+  } else if (p.per === 7 && p.disc === 0 && p.erroC <= 3 && p.idade >= 10 * 1440) p.per = 11;
+}
+function tamaPasso(t) {
+  const p = TAMA.p;
+  p.idade += 5; tamaEvoluir();
+  if (tamaDormindo(t)) { if (p.luz === 1) { p.tLuz += 5; if (p.tLuz === 15) p.erroC++; } else p.tLuz = 0; return; }
+  p.tLuz = 0;
+  p.aFome += 5; if (p.aFome >= TAMA_RFOME[p.per]) { p.aFome = 0; if (p.fome > 0) p.fome--; }
+  p.aFeliz += 5; if (p.aFeliz >= TAMA_RFELIZ[p.per]) { p.aFeliz = 0; if (p.feliz > 0) p.feliz--; }
+  p.aCoco += 5; if (p.aCoco >= TAMA_RCOCO[p.per]) { p.aCoco = 0; if (p.coco < 4) p.coco++; }
+  if (!p.birra && p.fome > 0 && p.feliz > 0 && !p.doente && Math.random() < 1 / 36) { p.birra = 1; p.tBir = 0; }
+  if (p.birra === 1) { p.tBir += 5; if (p.tBir >= 15) { p.erroD++; p.birra = 0; p.tBir = 0; } }
+  if (p.fome === 0 || p.feliz === 0) { p.tZero += 5; if (p.tZero === 15) p.erroC++; } else p.tZero = 0;
+  p.tFome0 = p.fome === 0 ? p.tFome0 + 5 : 0;
+  if (!p.doente && (p.coco >= 4 || p.tFome0 >= 360 || p.peso >= 90)) { p.doente = 1; p.doses = 2; }
+  p.tDoente = p.doente === 1 ? p.tDoente + 5 : 0;
+  const limite = Math.max(8, 25 - p.erroC - 2 * p.erroD);
+  if (p.tFome0 >= 720 || p.tDoente >= 1440 || p.idade / 1440 >= limite) p.per = 12;
+}
+function tamaSimular() {
+  const p = TAMA.p, agora = Math.floor(Date.now() / 1000);
+  if (p.per === 0) { if (agora - p.nasc < 300) { p.ultimo = agora; return; } p.per = 1; p.idade = 0; p.ultimo = p.nasc + 300; tamaSom([1047, 120, 1319, 120, 1568, 120, 2093, 300]); }
+  if (p.per === 12) { p.ultimo = agora; return; }
+  if (agora - p.ultimo > 7 * 86400) p.ultimo = agora - 7 * 86400;
+  const antes = p.per;
+  while (agora - p.ultimo >= 300 && p.per !== 12) { p.ultimo += 300; tamaPasso(p.ultimo); }
+  if (p.per === 12) tamaSom([784, 300, 659, 300, 523, 300, 392, 700]);
+  else if (p.per !== antes) { tamaSom([523, 100, 659, 100, 784, 100, 1047, 250]); tamaAnim('feliz', 12, 'CRESCEU!'); }
+  tamaSalvar();
+}
+const tamaAnim = (a, q, txt) => { TAMA.tela = 'anim'; TAMA.anim = a; TAMA.animQ = q; TAMA.animTxt = txt || ''; };
+function tamaTique() {
+  TAMA.q++;
+  if (TAMA.q % 240 === 0) tamaSimular();
+  if (TAMA.animQ > 0 && --TAMA.animQ === 0) { TAMA.tela = 'principal'; TAMA.anim = ''; tamaSalvar(); }
+  if (TAMA.q % 4 === 0 && TAMA.tela === 'principal') {
+    const maxX = TAMA.p.coco === 0 ? 16 : TAMA.p.coco <= 2 ? 8 : 0;
+    if (Math.random() < 0.34) TAMA.dirX = -TAMA.dirX;
+    TAMA.posX += TAMA.dirX * 2; if (TAMA.posX < 0) { TAMA.posX = 0; TAMA.dirX = 1; } if (TAMA.posX > maxX) { TAMA.posX = maxX; TAMA.dirX = -1; }
+    const pr = tamaChamando();
+    if (pr && !TAMA.chamava) { tamaSom([2400, 80, 0, 60, 2400, 80, 0, 60, 2400, 80]); navigator.vibrate?.([80, 60, 80]); }
+    TAMA.chamava = pr;
+  }
+  if (TAMA.tela === 'jogo' && TAMA.mostra > 0 && --TAMA.mostra === 0) tamaRodada();
+  tamaPintar();
+}
+function tamaRodada() {
+  const p = TAMA.p;
+  if (TAMA.rod >= 5) {
+    if (p.peso > TAMA_PESOMIN[p.per]) p.peso--;
+    if (TAMA.acertos >= 3) { if (p.feliz < 4) p.feliz++; p.tZero = 0; tamaAnim('feliz', 12, TAMA.acertos + '/5 GANHOU'); tamaSom([1047, 100, 1319, 100, 1568, 250]); }
+    else { tamaAnim('triste', 10, TAMA.acertos + '/5 PERDEU'); tamaSom([523, 150, 392, 300]); }
+    tamaSalvar(); return;
+  }
+  TAMA.rod++; TAMA.lado = Math.random() < 0.5 ? -1 : 1; TAMA.escolha = 0;
+}
+function tamaComer(qual) {
+  const p = TAMA.p;
+  if (qual === 0) { if (p.fome >= 4) { tamaAnim('triste', 8, 'CHEIO!'); return tamaSom([300, 200]); } p.fome++; p.peso++; }
+  else { if (p.feliz < 4) p.feliz++; p.peso += 2; }
+  if (p.peso > 99) p.peso = 99;
+  p.tZero = 0; tamaAnim(qual === 0 ? 'comida' : 'doce', 12, ''); tamaSom([1200, 60, 0, 120, 1200, 60, 0, 120, 1200, 60]); tamaSalvar();
+}
+// 0 comer · 1 luz · 2 brincar · 3 remédio · 4 limpar · 5 bronca · 6 status
+function tamaUsar(i) {
+  const p = TAMA.p, dorme = tamaDormindo(Math.floor(Date.now() / 1000));
+  if (i === 6) { TAMA.tela = 'status'; TAMA.sub = 0; return; }
+  if (p.per === 0) return tamaSom([400, 120]);
+  if (i === 1) { p.luz = 1 - p.luz; p.tLuz = 0; return tamaSalvar(); }
+  if (p.luz === 0) return tamaSom([400, 120]);
+  if (i === 5) {
+    if (p.birra === 1) { p.birra = 0; p.tBir = 0; if (p.disc < 100) p.disc += 25; tamaAnim('bronca', 10, 'DISCIPLINA ' + p.disc + '%'); tamaSom([300, 90, 0, 60, 300, 90]); }
+    else { if (p.feliz > 0) p.feliz--; tamaAnim('triste', 10, 'SEM MOTIVO'); tamaSom([300, 200]); }
+    return tamaSalvar();
+  }
+  if (dorme && (i === 0 || i === 2)) { tamaAnim('dorme', 8, 'ZZZ...'); return tamaSom([300, 200]); }
+  if (i === 0) { TAMA.tela = 'comer'; TAMA.sub = 0; return; }
+  if (i === 2) { if (p.doente === 1) { tamaAnim('triste', 8, 'DOENTE'); return tamaSom([300, 200]); } TAMA.tela = 'jogo'; TAMA.rod = 0; TAMA.acertos = 0; return tamaRodada(); }
+  if (i === 3) {
+    if (p.doente === 1) { p.doses--; if (p.doses <= 0) { p.doente = 0; p.tDoente = 0; p.doses = 0; tamaAnim('remedio', 10, 'CUROU!'); tamaSom([880, 80, 1175, 80, 1760, 200]); } else { tamaAnim('remedio', 10, 'FALTA ' + p.doses); tamaSom([880, 80, 1175, 120]); } }
+    else { tamaAnim('triste', 8, 'NÃO PRECISA'); tamaSom([300, 200]); }
+    return tamaSalvar();
+  }
+  if (i === 4) { if (p.coco > 0) { p.coco = 0; tamaAnim('limpar', 12, ''); tamaSom([1500, 40, 1700, 40, 1900, 40, 2100, 80]); tamaSalvar(); } else tamaSom([400, 120]); }
+}
+function tamaBotao(b) {
+  tamaBip(); const p = TAMA.p;
+  if (TAMA.tela === 'anim') return;
+  if (p.per === 12) { if (b === 'start') { tamaNovoOvo(); TAMA.tela = 'principal'; TAMA.sel = -1; tamaSom([1568, 80, 2093, 160]); } return tamaPintar(); }
+  if (TAMA.tela === 'status') {
+    if (b === 'back') TAMA.tela = 'principal';
+    else if (b === 'start' && TAMA.sub === 4) { p.somLig = 1 - p.somLig; tamaSalvar(); }
+    else TAMA.sub = (TAMA.sub + (b === 'cima' ? 4 : 1)) % 5;
+    return tamaPintar();
+  }
+  if (TAMA.tela === 'comer') { if (b === 'back') TAMA.tela = 'principal'; else if (b === 'start') tamaComer(TAMA.sub); else TAMA.sub = 1 - TAMA.sub; return tamaPintar(); }
+  if (TAMA.tela === 'jogo') {
+    if (b === 'back') TAMA.tela = 'principal';
+    else if (TAMA.mostra === 0 && (b === 'cima' || b === 'baixo')) { TAMA.escolha = b === 'cima' ? -1 : 1; TAMA.mostra = 5; if (TAMA.escolha === TAMA.lado) { TAMA.acertos++; tamaSom([1568, 60, 2093, 100]); } else tamaSom([392, 150]); }
+    return tamaPintar();
+  }
+  if (b === 'back') { TAMA.sel = -1; return tamaPintar(); }
+  if (b === 'cima') TAMA.sel = TAMA.sel <= 0 ? 6 : TAMA.sel - 1;
+  else if (b === 'baixo') TAMA.sel = TAMA.sel >= 6 ? 0 : TAMA.sel + 1;
+  else if (TAMA.sel < 0) TAMA.sel = 0;
+  else tamaUsar(TAMA.sel);
+  tamaPintar();
+}
+const tamaSprPet = () => TAMA_SPR[TAMA_SPRPET[TAMA.p.per]];
+function tamaSpr(c, linhas, larg, x0, y0, p, espelha) {
+  const g = p >= 4 ? 1 : 0;
+  for (let y = 0; y < linhas.length; y++) { const l = linhas[y]; if (!l) continue;
+    for (let x = 0; x < larg; x++) if ((l >> (larg - 1 - x)) & 1) c.fillRect(x0 + (espelha ? larg - 1 - x : x) * p, y0 + y * p, p - g, p - g); }
+}
+// desenha a tela do bichinho num canvas de w x h (mesma arte do relógio)
+function tamaDesenhar(c, w, h) {
+  if (!TAMA.p) tamaCarregar();
+  const p0 = TAMA.p, cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2, agora = Math.floor(Date.now() / 1000);
+  c.fillStyle = TAMA_CASCA; c.fillRect(0, 0, w, h);
+  c.fillStyle = '#f27bae'; c.beginPath(); c.arc(cx - r * .55, cy - r * .62, r * .1, 0, 7); c.fill();
+  const lw = Math.round(r * 1.36), lh = Math.round(r * 1.1), lx = cx - lw / 2, ly = cy - lh / 2;
+  const chama = tamaChamando() && TAMA.q % 4 < 2;
+  const arred = (x, y, ww, hh, rr, cor) => { c.fillStyle = cor; c.beginPath(); c.roundRect(x, y, ww, hh, rr); c.fill(); };
+  arred(lx - 6, ly - 6, lw + 12, lh + 12, 16, chama ? '#ffe14d' : '#7a1f48');
+  arred(lx, ly, lw, lh, 10, TAMA_LCD);
+  const ip = Math.max(2, Math.floor(lw / 76)), faixa = ip * 11, areaH = lh - 2 * faixa;
+  const p = Math.max(2, Math.floor(Math.min(lw / 34, areaH / 17))), ay = ly + faixa + (areaH - 16 * p) / 2;
+  for (let i = 0; i < 8; i++) {
+    const col = i % 4, lin = i < 4 ? 0 : 1, pad = lw / 14, ix = lx + pad + (lw - 2 * pad - 8 * ip) * col / 3, iy = lin === 0 ? ly + ip * 2 : ly + lh - ip * 10;
+    c.fillStyle = (i === 7 ? chama : i === TAMA.sel) ? TAMA_PIX : TAMA_OFF;
+    tamaSpr(c, TAMA_SPR[TAMA_ICONES[i]], 8, ix, iy, ip, false);
+    if (i === TAMA.sel && i !== 7) c.fillRect(ix, lin === 0 ? iy + ip * 9 : iy - ip - 2, ip * 8, 2);
+  }
+  c.fillStyle = TAMA_PIX;
+  const fonte = Math.max(9, Math.round(p * 2.2)), yTopo = ly + faixa - fonte;
+  const txt = (t, x, y, al) => { c.font = `${fonte}px Roboto, Arial, sans-serif`; c.textAlign = al || 'center'; c.textBaseline = 'middle'; c.fillText(t, x, y); };
+  const quadro = TAMA.q % 2, meio = Math.max(2, Math.floor(p / 2));
+  if (p0.per === 12) {
+    tamaSpr(c, TAMA_SPR.FANTASMA, 16, cx - 14 * p, ay - (Math.floor(TAMA.q / 4) % 2) * p, p, false);
+    tamaSpr(c, TAMA_SPR.TUMBA, 16, cx + p, ay, p, false);
+    txt('START: NOVO OVO', cx, ay + 16 * p); return;
+  }
+  if (TAMA.tela === 'status') {
+    txt(['IDADE ' + Math.floor(p0.idade / 1440) + ' ANOS', 'FOME', 'FELIZ', 'DISCIPLINA', TAMA_NOMES[p0.per]][TAMA.sub], cx, ay + 3 * p);
+    if (TAMA.sub === 0) txt('PESO ' + p0.peso + 'g', cx, ay + 11 * p);
+    else if (TAMA.sub === 3) txt(p0.disc + '%', cx, ay + 11 * p);
+    else if (TAMA.sub === 4) txt(p0.somLig === 1 ? 'SOM LIGADO' : 'SOM DESLIGADO', cx, ay + 11 * p);
+    else { const n = TAMA.sub === 1 ? p0.fome : p0.feliz, hp = Math.max(2, Math.floor(p * 3 / 4)); for (let k = 0; k < 4; k++) tamaSpr(c, k < n ? TAMA_SPR.CORACAO : TAMA_SPR.CORACAO_V, 8, cx - 16 * p + k * 8 * p + 2 * p, ay + 8 * p, hp, false); }
+    txt((TAMA.sub + 1) + '/5', cx, yTopo); return;
+  }
+  if (TAMA.tela === 'comer') { txt((TAMA.sub === 0 ? '> ' : '  ') + 'REFEIÇÃO', cx, ay + 4 * p); txt((TAMA.sub === 1 ? '> ' : '  ') + 'DOCE', cx, ay + 12 * p); return; }
+  if (p0.luz === 0) { c.fillStyle = TAMA_PIX; c.fillRect(lx + 4, ay - p, lw - 8, 18 * p); if (tamaDormindo(agora)) { c.fillStyle = TAMA_LCD; tamaSpr(c, TAMA_SPR.ZZZ, 8, cx + 6 * p, ay + (Math.floor(TAMA.q / 4) % 2) * p, p, false); } return; }
+  if (TAMA.tela === 'jogo') {
+    const lado = TAMA.mostra > 0 ? TAMA.lado : 0;
+    tamaSpr(c, tamaSprPet(), 16, cx - 8 * p + lado * 6 * p, ay, p, lado < 0);
+    txt(TAMA.rod + '/5', lx + 8, yTopo, 'left');
+    txt(TAMA.mostra > 0 ? (TAMA.escolha === TAMA.lado ? 'ACERTOU!' : 'ERROU') : 'CIMA=ESQ  BAIXO=DIR', cx, ay + 16 * p);
+    return;
+  }
+  if (TAMA.tela === 'anim') {
+    if (TAMA.anim === 'comida' || TAMA.anim === 'doce') {
+      const etapa = Math.floor((12 - TAMA.animQ) / 4), linhas = TAMA_SPR[TAMA.anim === 'comida' ? 'COMIDA' : 'DOCE'].map((l, k) => k < etapa * 3 ? 0 : l);
+      tamaSpr(c, linhas, 8, cx - 16 * p, ay + 8 * p, p, false); tamaSpr(c, tamaSprPet(), 16, cx - 6 * p, ay + quadro * p, p, true);
+    } else if (TAMA.anim === 'limpar') {
+      const lx2 = (12 - TAMA.animQ) * 3; tamaSpr(c, tamaSprPet(), 16, cx - 16 * p, ay, p, false);
+      for (let yy = 0; yy < 16; yy++) c.fillRect(cx - 16 * p + lx2 * p, ay + yy * p, p - 1, p - 1);
+    } else if (TAMA.anim === 'remedio') { tamaSpr(c, tamaSprPet(), 16, cx - 4 * p, ay, p, false); tamaSpr(c, TAMA_SPR.I_REMEDIO, 8, cx - 16 * p + quadro * p, ay + 4 * p, p, true); }
+    else if (TAMA.anim === 'feliz') { tamaSpr(c, tamaSprPet(), 16, cx - 8 * p, ay + (quadro === 0 ? p : -p), p, false); if (!quadro) { tamaSpr(c, TAMA_SPR.CORACAO, 8, cx + 8 * p, ay - p, meio, false); tamaSpr(c, TAMA_SPR.CORACAO, 8, cx - 12 * p, ay, meio, false); } }
+    else if (TAMA.anim === 'bronca') { tamaSpr(c, tamaSprPet(), 16, cx - 8 * p + (quadro === 0 ? -p : p), ay, p, quadro === 1); tamaSpr(c, TAMA_SPR.I_ATENCAO, 8, cx + 9 * p, ay, meio, false); }
+    else if (TAMA.anim === 'dorme') { tamaSpr(c, tamaSprPet(), 16, cx - 12 * p, ay, p, false); tamaSpr(c, TAMA_SPR.ZZZ, 8, cx + 5 * p, ay - quadro * p, p, false); }
+    else tamaSpr(c, tamaSprPet(), 16, cx - 8 * p, ay, p, quadro === 1);
+    if (TAMA.animTxt) { c.fillStyle = TAMA_PIX; txt(TAMA.animTxt, cx, yTopo); }
+    return;
+  }
+  if (p0.per === 0) {
+    tamaSpr(c, TAMA_SPR.EGG, 16, cx - 8 * p + (Math.floor(TAMA.q / 4) % 2 ? p : -p), ay, p, false);
+    const falta = Math.max(0, 300 - (agora - p0.nasc));
+    txt(Math.floor(falta / 60) + ':' + String(falta % 60).padStart(2, '0'), lx + lw - 8, yTopo, 'right');
+    if (!falta) tamaSimular();
+  } else if (tamaDormindo(agora)) {
+    tamaSpr(c, tamaSprPet(), 16, cx - 12 * p, ay, p, false); tamaSpr(c, TAMA_SPR.ZZZ, 8, cx + 5 * p, ay - (Math.floor(TAMA.q / 4) % 2) * p, p, false);
+  } else {
+    tamaSpr(c, tamaSprPet(), 16, cx - 16 * p + TAMA.posX * p, ay + (Math.floor(TAMA.q / 4) % 2) * p / 2, p, TAMA.dirX < 0);
+    if (p0.doente === 1 && TAMA.q % 8 < 5) tamaSpr(c, TAMA_SPR.CAVEIRA, 8, cx - 16 * p, ay - p, meio, false);
+    if (p0.birra === 1 && TAMA.q % 4 < 2) tamaSpr(c, TAMA_SPR.I_ATENCAO, 8, cx + 11 * p, ay - p, meio, false);
+  }
+  for (let k = 0; k < p0.coco; k++) tamaSpr(c, TAMA_SPR.COCO, 8, cx + 16 * p - 8 * p * (Math.floor(k / 2) + 1) + ((Math.floor(TAMA.q / 4) + k) % 2) * meio, ay + (k % 2 === 0 ? 8 : 0) * p, p, false);
+}
+function tamaPintar() { const cv = document.querySelector('#tamaCv'); if (cv) { const c = cv.getContext('2d'); tamaDesenhar(c, cv.width, cv.height); } else if (typeof SIM === 'object' && SIM.app === 'tama' && SIM.canvas) simDesenhar(); }
+async function renderTama() {
+  tamaCarregar(); tamaSimular();
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('tama')}
+  <section class="w"><header class="w-top"><span class="w-ico">🥚</span><span class="w-tit">Bichinho Virtual</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <canvas id="tamaCv" width="360" height="360" style="width:min(300px,80vw);height:auto;border-radius:50%;box-shadow:0 0 40px #e84a8a33;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-tamabt="cima">▲ Cima</button><button class="chip" data-tamabt="start">● START</button><button class="chip" data-tamabt="baixo">▼ Baixo</button><button class="chip" data-tamabt="back">↩ Voltar</button></div>
+   <div class="mini" style="text-align:center;max-width:520px">Como nos bichinhos de 1996: <b>1 dia real = 1 ano de vida</b>. O ovo choca em 5 minutos, vira bebê (1 hora), criança (até 3 anos), adolescente (até 6 anos) e então adulto.<br>
+   <b>Qual adulto ele vira depende de você.</b> Erro de cuidado é deixar fome ou felicidade em zero por 15 minutos, ou a luz acesa na hora de dormir. Erro de disciplina é não dar bronca quando ele chama de birra (chamar com os corações cheios). Cuidado impecável dá o <b>Gatinho</b>; descuido leva ao <b>Robozinho</b>, <b>Mascarado</b>, <b>Patinho</b>, <b>Minhoca</b> ou <b>Gosminha</b>. Existe um <b>secreto</b>: chegue ao Mascarado com disciplina 0% e cuide bem até os 10 anos.<br>
+   Cocô acumulado (4) adoece, e a <b>caveira não toca alarme</b> — fique de olho. O remédio precisa de <b>2 doses</b>. Ele morre de fome (12 h), de doença (24 h) ou de velhice, e quanto mais erros, menos tempo de vida.<br>
+   Ícones: 🍴 comer (refeição ou doce) · 💡 luz · ⚽ brincar (5 rodadas de esquerda/direita, tira 1 g) · 💉 remédio · 🦆 limpar · 😠 bronca · 📊 status (idade, peso, corações, disciplina, nome e som) · ❗ atenção.<br>
+   O bichinho do site e o do relógio são separados.</div>
+   <div class="chips"><button class="chip" id="tamaZera">🥚 Começar um ovo novo</button></div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="tamaApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="tamaModelo" list="tamaModelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="tamaModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="tamaGera">⬇ Baixar Bichinho</button></div>
+   <div class="mini" id="tamaProg"></div></form></div>
+  ${tabbar('app')}</div>`;
+  clearInterval(TAMA.anim2); TAMA.anim2 = setInterval(tamaTique, 250); tamaPintar();
+  document.querySelectorAll('[data-tamabt]').forEach(b => b.onclick = () => tamaBotao(b.dataset.tamabt));
+  $('#tamaZera').onclick = () => { tamaNovoOvo(); TAMA.tela = 'principal'; TAMA.sel = -1; tamaSom([1568, 80, 2093, 160]); tamaPintar(); };
+  const cv = $('#tamaCv'); cv.onclick = () => tamaBotao('start');
+  let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; }; cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); tamaBotao(dy > 0 ? 'cima' : 'baixo'); } };
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).then(l => { modelos = l; $('#tamaModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#tamaApp').onsubmit = e => e.preventDefault();
+  $('#tamaGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#tamaModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#tamaGera'); bt.disabled = true; $('#tamaProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('tama_app', { modelo: m.id });
+      const esperar = async (n = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#tamaProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || n > 90) { $('#tamaProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(n + 1), 2000); };
+      esperar();
+    } catch (x) { $('#tamaProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
 }
