@@ -1,4 +1,4 @@
-const VERSAO = 'garmin-v29'; // painel web 2.1.0
+const VERSAO = 'garmin-v57'; // 3.5.0 — app Próximo Ônibus (aba Apps + Simulador)
 const TILES = 'garmin-tiles';
 const SHELL = ['/garmin/', '/garmin/index.php', '/garmin/manifest.json', '/garmin/icons/icon-192.png', '/garmin/icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'];
@@ -9,6 +9,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (url.pathname.includes('/garmin/app/loja-')) return; // pagina/arquivos da loja: direto da rede, sem cache (o .iq tem 5 MB)
   if (url.pathname.includes('/garmin/api') || url.pathname.includes('/garmin/gpx/')) return; // rede sempre
+  if (url.pathname.includes('/agendamentos/relogio_onibus.php')) return; // horários de ônibus: sempre da rede (nunca um cache velho)
   if (url.hostname.includes('tile.openstreetmap') || url.hostname.includes('basemaps')) {
     e.respondWith(caches.open(TILES).then(async c => { const r = await c.match(e.request); if (r) return r; try { const n = await fetch(e.request); if (n.ok) c.put(e.request, n.clone()); return n; } catch (x) { return r || Response.error(); } }));
     return;

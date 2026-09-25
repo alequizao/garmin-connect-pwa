@@ -82,6 +82,15 @@ Bichinho virtual no estilo dos aparelhinhos de 1996, feito em pixel art desenhad
 ### 🟢 Omnitrix (relógio alienígena)
 App interativo: START abre o mostrador, cima e baixo giram entre **59 silhuetas**, e START transforma — com clarão, raios girando, vibração e sons. A transformação dura 10 minutos, com bipe e piscar vermelho nos últimos 10 segundos, e depois o aparelho recarrega por 1 minuto. Acompanha um mostrador de relógio no mesmo tema.
 
+### ⛽ Gasolina Perto
+Os postos mais baratos perto de você (preços da SEFAZ-AL), com distância, seta apontando para o posto, troca de combustível e glance com o menor preço. Leve: ~21 KB no Forerunner 55.
+
+### 🚌 Próximo Ônibus
+Até 4 favoritos de linha + ponto, "chega em X min" ao vivo (GPS dos ônibus) ou pela tabela programada, próximos horários, "Perto de mim" e alerta 2 min antes. Favoritos configuráveis no painel.
+
+### 🏋️ Força · 😴 Sono · 🧭 Painel Total
+Contador de repetições para musculação, análise da noite 100% offline no relógio e um mostrador com hora, FC, passos, clima e mais na mesma tela.
+
 ### Apps do relógio gerados sob medida
 Na aba **Apps**, cada pessoa digita o nome do dispositivo e o modelo do relógio (lista com 159 modelos Garmin), e o servidor **compila o `.prg` com a chave dela embutida** em cerca de 30 s.
 
@@ -112,6 +121,9 @@ Login com limite de tentativas, sessão renovada no login, **"Esqueci minha senh
 ├── bichinho-connectiq/                                  # fonte do Bichinho Virtual (Monkey C)
 ├── omnitrix-connectiq/                                  # fonte do Omnitrix interativo (Monkey C)
 ├── ben10-mostrador-connectiq/                           # fonte do mostrador do mesmo tema (Monkey C)
+├── gasolina-connectiq/                                  # fonte do Gasolina Perto (Monkey C)
+├── onibus-connectiq/                                    # fonte do Próximo Ônibus (Monkey C)
+├── forca-connectiq/  sono-connectiq/  painel-connectiq/ # Força, Sono e Painel Total (Monkey C)
 │   (servicos/strava_upload.py envia os treinos ao Strava)
 └── docs/                                                # schema.sql, exemplo do .ini, instalação, telas
 ```

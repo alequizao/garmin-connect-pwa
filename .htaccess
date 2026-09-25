@@ -28,3 +28,11 @@ Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STR
 Header set Cache-Control "no-cache" "expr=%{QUERY_STRING} !~ /v=/"
 </FilesMatch>
 </IfModule>
+
+# o HTML aponta para o bundle versionado: nunca pode ficar em cache (index.php: nunca cachear)
+<IfModule mod_headers.c>
+<FilesMatch "^index\.php$">
+Header set Cache-Control "no-cache, no-store, must-revalidate"
+Header set Pragma "no-cache"
+</FilesMatch>
+</IfModule>

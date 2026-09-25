@@ -7,16 +7,144 @@ session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 
-$acao = $_GET['acao'] ?? $_POST['acao'] ?? '';
 $in = [];
 if (($_SERVER['CONTENT_TYPE'] ?? '') && str_contains($_SERVER['CONTENT_TYPE'], 'application/json')) {
   $in = json_decode(file_get_contents('php://input'), true) ?: [];
 } else { $in = $_POST; }
+$acao = $_GET['acao'] ?? $_POST['acao'] ?? (is_array($in) && isset($in['acao']) ? (string)$in['acao'] : '');
 function out($d, $code = 200) { http_response_code($code); echo json_encode($d, JSON_UNESCAPED_UNICODE); exit; }
 function erro($m, $code = 400) { out(['ok' => false, 'erro' => $m], $code); }
-function uid() { return (int)($_SESSION['uid'] ?? 0); }
+// quem pode ver os dados de quem (Alequizão vê o relógio da Jeovana)
+const VISUALIZA = [1 => [3]];
+// relógio de cada pessoa (nº de série) — cada aba mostra só o próprio relógio
+const RELOGIO_DONO = [1 => '9H9184908', 3 => '6VF024451'];
+// período pedido pelo app (?de=AAAA-MM-DD&ate=AAAA-MM-DD) + agrupamento automático para os gráficos
+function periodoParams($padraoDias = 30) {
+  $ok = fn($d) => is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d) && strtotime($d);
+  $ate = $ok($_GET['ate'] ?? null) ? $_GET['ate'] : hoje();
+  $de = $ok($_GET['de'] ?? null) ? $_GET['de'] : date('Y-m-d', strtotime($ate . ' -' . ($padraoDias - 1) . ' days'));
+  if ($de > $ate) [$de, $ate] = [$ate, $de];
+  if ((strtotime($ate) - strtotime($de)) / 86400 > 3660) $de = date('Y-m-d', strtotime($ate . ' -3660 days'));
+  $dias = (int)round((strtotime($ate) - strtotime($de)) / 86400) + 1;
+  $agrup = $dias <= 31 ? 'dia' : ($dias <= 190 ? 'semana' : 'mes');
+  $sqlGrupo = ['dia' => "DATE_FORMAT(inicio, '%Y-%m-%d')", 'semana' => "YEARWEEK(inicio, 1)", 'mes' => "DATE_FORMAT(inicio, '%Y-%m')"][$agrup];
+  $grupos = []; $t = strtotime($de); $fim = strtotime($ate);
+  if ($agrup === 'semana') $t = strtotime('monday this week', $t);
+  if ($agrup === 'mes') $t = strtotime(date('Y-m-01', $t));
+  while ($t <= $fim) {
+    if ($agrup === 'dia') { $grupos[] = ['k' => date('Y-m-d', $t), 'rot' => date('d/m', $t)]; $t = strtotime('+1 day', $t); }
+    elseif ($agrup === 'semana') { $grupos[] = ['k' => date('oW', $t), 'rot' => date('d/m', $t)]; $t = strtotime('+1 week', $t); }
+    else { $grupos[] = ['k' => date('Y-m', $t), 'rot' => date('m/y', $t)]; $t = strtotime('+1 month', $t); }
+  }
+  return ['de' => $de, 'ate' => $ate, 'dias' => $dias, 'agrup' => $agrup, 'sql_grupo' => $sqlGrupo, 'grupos' => $grupos];
+}
+// dados de uma pessoa num período (usado pela aba da pessoa e pela aba Casal)
+function dadosPeriodo($id, $P) {
+  $pdo = db(); $de = $P['de']; $ate = $P['ate'];
+  $st = $pdo->prepare("SELECT data, tipo, valor FROM metricas WHERE usuario_id=? AND data BETWEEN ? AND ?"); $st->execute([$id, $de, $ate]);
+  $serie = []; foreach ($st as $r) $serie[$r['data']][$r['tipo']] = (float)$r['valor'];
+  $st = $pdo->prepare("SELECT tipo, COUNT(*) n, SUM(distancia_m) d, SUM(duracao_s) t, SUM(calorias) c FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ? GROUP BY tipo ORDER BY t DESC"); $st->execute([$id, $de, $ate]); $porTipo = $st->fetchAll();
+  $st = $pdo->prepare("SELECT {$P['sql_grupo']} g, SUM(distancia_m) d, SUM(duracao_s) t, SUM(calorias) c, COUNT(*) n FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ? GROUP BY g"); $st->execute([$id, $de, $ate]);
+  $grupos = []; foreach ($st as $r) $grupos[$r['g']] = $r;
+  $st = $pdo->prepare("SELECT HOUR(inicio) h, COUNT(*) n FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ? GROUP BY h"); $st->execute([$id, $de, $ate]);
+  $horarios = array_fill(0, 24, 0); foreach ($st as $r) $horarios[(int)$r['h']] = (int)$r['n'];
+  $st = $pdo->prepare("SELECT COUNT(*) n, COALESCE(SUM(distancia_m),0) d, COALESCE(SUM(duracao_s),0) t, COALESCE(SUM(calorias),0) c, MAX(distancia_m) maior, AVG(fc_media) fc, MIN(NULLIF(ritmo_medio,0)) ritmo FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ?"); $st->execute([$id, $de, $ate]); $total = $st->fetch();
+  return ['serie' => $serie, 'por_tipo' => $porTipo, 'grupos' => $grupos, 'horarios' => $horarios, 'total' => $total];
+}
+// menor registeredDate do mesmo nº de série entre todas as contas do app (a Garmin não informa data de fabricação)
+function primeiraAtivacao($serie) {
+  if (!$serie) return null; static $cache = null;
+  if ($cache === null) { $cache = []; foreach (db()->query("SELECT json FROM garmin_dados WHERE tipo='devices'") as $r) foreach (json_decode($r['json'], true) ?: [] as $d) { $sn = $d['serialNumber'] ?? ''; $t = isset($d['registeredDate']) ? intdiv((int)$d['registeredDate'], 1000) : 0; if ($sn && $t && (!isset($cache[$sn]) || $t < $cache[$sn])) $cache[$sn] = $t; } }
+  return $cache[$serie] ?? null;
+}
+function relogioDe($uid, $devs) {
+  foreach ($devs ?: [] as $d) if (($d['serialNumber'] ?? '') === (RELOGIO_DONO[$uid] ?? '-')) return $d;
+  return null;
+}
+function uidReal() { return (int)($_SESSION['uid'] ?? 0); }
+function uid() { $r = uidReal(); $v = (int)($_SESSION['ver_uid'] ?? 0); return ($v && in_array($v, VISUALIZA[$r] ?? [], true)) ? $v : $r; }
+function pessoas() {
+  $ids = array_merge([uidReal()], VISUALIZA[uidReal()] ?? []);
+  $st = db()->prepare('SELECT id, nome FROM usuarios WHERE id IN (' . implode(',', array_map('intval', $ids)) . ') ORDER BY id'); $st->execute();
+  return $st->fetchAll();
+}
 function exigeLogin() { if (!uid()) erro('Não autenticado', 401); }
 function hoje() { return date('Y-m-d'); }
+
+// dados do mapa de uma pessoa: posição atual (melhor fonte), trilha 24 h, LiveTrack e rotas das atividades
+function mapaDados(int $u): array {
+  $pdo = db();
+  $tem = fn($t) => true; // tabelas criadas na instalação
+  $cands = [];
+  $relogio = null;
+  if ($tem('relogio_leituras')) {
+    $st = $pdo->prepare("SELECT * FROM relogio_leituras WHERE usuario_id=? ORDER BY id DESC LIMIT 1"); $st->execute([$u]); $relogio = $st->fetch() ?: null;
+    $st = $pdo->prepare("SELECT lat, lon, COALESCE(fix_ts, UNIX_TIMESTAMP(recebido)) ts, alt, vel, fc FROM relogio_leituras WHERE usuario_id=? AND lat IS NOT NULL ORDER BY id DESC LIMIT 1"); $st->execute([$u]);
+    if ($r = $st->fetch()) $cands[] = ['fonte' => 'App no relógio', 'lat' => +$r['lat'], 'lon' => +$r['lon'], 'ts' => (int)$r['ts'], 'fc' => $r['fc']];
+  }
+  $live = null; $livePts = [];
+  if ($tem('livetrack_sessoes')) {
+    $live = $pdo->query("SELECT * FROM livetrack_sessoes WHERE usuario_id=$u ORDER BY (status='ativa') DESC, atualizado DESC LIMIT 1")->fetch() ?: null;
+    if ($live) {
+      $st = $pdo->prepare("SELECT ts, lat, lon, alt, vel, fc, dist FROM livetrack_pontos WHERE sessao_id=? ORDER BY ts"); $st->execute([$live['id']]); $livePts = $st->fetchAll();
+      if ($livePts) { $p = end($livePts); $cands[] = ['fonte' => 'LiveTrack', 'lat' => +$p['lat'], 'lon' => +$p['lon'], 'ts' => intdiv((int)$p['ts'], 1000), 'fc' => $p['fc']]; }
+    }
+  }
+  // rotas simplificadas ficam em cache (garmin_dados tipo 'rota') — não relê o JSON completo a cada atualização do mapa
+  $st = $pdo->prepare("SELECT a.id, a.nome, a.tipo, a.inicio, a.distancia_m, g.json rota FROM atividades a LEFT JOIN garmin_dados g ON g.usuario_id=a.usuario_id AND g.tipo='rota' AND g.chave=a.id
+    WHERE a.usuario_id=? AND a.pontos IS NOT NULL ORDER BY a.inicio DESC LIMIT 300"); $st->execute([$u]);
+  $rotas = [];
+  foreach ($st->fetchAll() as $i => $a) {
+    $c = $a['rota'] ? json_decode($a['rota'], true) : null;
+    if (!$c) {
+      $p2 = $pdo->prepare("SELECT pontos FROM atividades WHERE id=?"); $p2->execute([$a['id']]);
+      $pts = array_values(array_filter(json_decode($p2->fetchColumn(), true) ?: [], fn($p) => isset($p['lat'])));
+      if (!$pts) continue;
+      $passo = max(1, (int)ceil(count($pts) / 250)); $ll = [];
+      foreach ($pts as $k => $p) if ($k % $passo === 0 || $k === count($pts) - 1) $ll[] = [round($p['lat'], 5), round($p['lon'], 5)];
+      $f = end($pts); $c = ['ll' => $ll, 'fim' => ['lat' => $f['lat'], 'lon' => $f['lon'], 'ts' => intdiv((int)($f['t'] ?? 0), 1000), 'fc' => $f['fc'] ?? null]];
+      $pdo->prepare("INSERT INTO garmin_dados (usuario_id, tipo, chave, data, json) VALUES (?, 'rota', ?, ?, ?) ON DUPLICATE KEY UPDATE json=VALUES(json)")->execute([$u, $a['id'], substr($a['inicio'], 0, 10), json_encode($c)]);
+    }
+    if ($i === 0) $cands[] = ['fonte' => 'Última atividade (' . $a['nome'] . ')'] + $c['fim'];
+    $rotas[] = ['id' => (int)$a['id'], 'nome' => $a['nome'], 'tipo' => $a['tipo'], 'inicio' => $a['inicio'], 'distancia_m' => +$a['distancia_m'], 'll' => $c['ll']];
+  }
+  usort($cands, fn($a, $b) => $b['ts'] <=> $a['ts']);
+  $trilha = [];
+  if ($tem('relogio_leituras')) { $st = $pdo->prepare("SELECT lat, lon, COALESCE(fix_ts, UNIX_TIMESTAMP(recebido)) ts FROM relogio_leituras WHERE usuario_id=? AND lat IS NOT NULL AND recebido > NOW() - INTERVAL 24 HOUR ORDER BY id"); $st->execute([$u]); $trilha = $st->fetchAll(); }
+  return ['atual' => $cands[0] ?? null, 'fontes' => $cands, 'relogio' => $relogio, 'live' => $live, 'live_pontos' => $livePts, 'trilha24h' => $trilha, 'rotas' => $rotas];
+}
+
+// reverse geocode (Nominatim) com cache em garmin_dados e throttle 1 req/s — usado na tela ao vivo, no Casal e nas atividades
+function ruaDe(float $lat, float $lon, ?int $uid = null): array {
+  $lat = round($lat, 5); $lon = round($lon, 5);
+  $vazio = ['rua' => null, 'bairro' => null, 'cidade' => null];
+  if (!$lat || !$lon) return $vazio;
+  $uid = $uid ?? uidReal();
+  $chave = $lat . ',' . $lon;
+  $c = db()->prepare("SELECT json FROM garmin_dados WHERE usuario_id=? AND tipo='rua' AND chave=? LIMIT 1");
+  $c->execute([$uid, $chave]);
+  if ($j = $c->fetchColumn()) { $r = json_decode($j, true) ?: []; if (!empty($r['rua'])) { unset($r['ts']); return array_merge($vazio, $r); } }
+  $lock = sys_get_temp_dir() . '/nominatim_last';
+  $last = is_file($lock) ? (float)@file_get_contents($lock) : 0;
+  $esp = 1.05 - (microtime(true) - $last); if ($esp > 0 && $esp < 3) usleep((int)($esp * 1e6));
+  @file_put_contents($lock, microtime(true));
+  $url = "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&addressdetails=1&accept-language=pt-BR&lat=$lat&lon=$lon";
+  $resp = false;
+  if (function_exists('curl_init')) { $ch = curl_init($url); curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 7, CURLOPT_FOLLOWLOCATION => true, CURLOPT_USERAGENT => 'alequizao.com-garmin/1.0 (alequizao.dev@gmail.com)']); $resp = curl_exec($ch); curl_close($ch); }
+  if ($resp === false) { $ctx = stream_context_create(['http' => ['timeout' => 7, 'header' => "User-Agent: alequizao.com-garmin/1.0 (alequizao.dev@gmail.com)\r\n"]]); $resp = @file_get_contents($url, false, $ctx); }
+  $out = $vazio;
+  if ($resp && ($a = json_decode($resp, true)) && isset($a['address'])) {
+    $ad = $a['address'];
+    $out['rua'] = $ad['road'] ?? $ad['pedestrian'] ?? $ad['footway'] ?? $ad['path'] ?? $ad['cycleway'] ?? $ad['residential'] ?? ($a['name'] ?: null);
+    $out['bairro'] = $ad['suburb'] ?? $ad['neighbourhood'] ?? $ad['quarter'] ?? $ad['city_district'] ?? null;
+    $out['cidade'] = $ad['city'] ?? $ad['town'] ?? $ad['village'] ?? $ad['municipality'] ?? null;
+  }
+  if ($out['rua'] !== null) db()->prepare("INSERT INTO garmin_dados (usuario_id,tipo,chave,data,json) VALUES (?,'rua',?,CURDATE(),?) ON DUPLICATE KEY UPDATE json=VALUES(json)")->execute([$uid, $chave, json_encode($out + ['ts' => time()])]);
+  return $out;
+}
+
+// vendo outra pessoa: só leitura (não altera dados dela)
+if (uidReal() && uid() !== uidReal() && $_SERVER['REQUEST_METHOD'] === 'POST' && !in_array($acao, ['ver_como', 'sair', 'sincronizar_agora'], true)) erro('Você está vendo os dados de outra pessoa — volte para o seu perfil para alterar.', 403);
 
 try {
 switch ($acao) {
@@ -43,7 +171,7 @@ case 'login': {
   if (!$u || !password_verify($senha, $u['senha'])) { db()->prepare("INSERT INTO login_falhas (ip, email) VALUES (?,?)")->execute([$ip, $email]); erro('E-mail ou senha inválidos.', 401); }
   db()->prepare("DELETE FROM login_falhas WHERE email=? OR quando < NOW() - INTERVAL 1 DAY")->execute([$email]);
   session_regenerate_id(true);
-  $_SESSION['uid'] = (int)$u['id'];
+  $_SESSION['uid'] = (int)$u['id']; unset($_SESSION['ver_uid']);
   out(['ok' => true, 'usuario' => usuario()]);
 }
 case 'senha_esqueci': {
@@ -81,7 +209,64 @@ case 'senha_redefinir': {
   out(['ok' => true, 'usuario' => usuario()]);
 }
 case 'sair': { $_SESSION = []; session_destroy(); setcookie('garminsess', '', ['expires' => 1, 'path' => '/garmin/', 'secure' => true, 'httponly' => true, 'samesite' => 'Lax']); out(['ok' => true]); }
-case 'eu': { if (!uid()) out(['ok' => false, 'logado' => false]); out(['ok' => true, 'logado' => true, 'usuario' => usuario(), 'metas' => metas()]); }
+case 'eu': { if (!uid()) out(['ok' => false, 'logado' => false]); out(['ok' => true, 'logado' => true, 'usuario' => usuario(), 'metas' => metas(), 'pessoas' => pessoas(), 'vendo' => uid(), 'eu_id' => uidReal()]); }
+case 'periodo': {
+  exigeLogin(); $P = periodoParams(7); $u = uid();
+  $st = db()->prepare("SELECT id, tipo, nome, inicio, duracao_s, distancia_m, calorias, fc_media FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ? ORDER BY inicio DESC LIMIT 60"); $st->execute([$u, $P['de'], $P['ate']]);
+  out(['ok' => true, 'de' => $P['de'], 'ate' => $P['ate'], 'dias' => $P['dias'], 'agrup' => $P['agrup'], 'grupos' => $P['grupos'], 'atividades' => $st->fetchAll(), 'usuario' => usuario(), 'metas' => metas()] + (function ($d) { $d['g'] = $d['grupos']; unset($d['grupos']); return $d; })(dadosPeriodo($u, $P)));
+}
+case 'casal': {
+  exigeLogin(); $pdo = db(); $P = periodoParams(30); $hoje = $P['ate']; $iniSem = $P['de']; $res = [];
+  foreach (pessoas() as $p) {
+    $id = (int)$p['id'];
+    $st = $pdo->prepare("SELECT tipo, valor, extra FROM metricas WHERE usuario_id=? AND data=?"); $st->execute([$id, $hoje]);
+    $m = []; foreach ($st as $r) { $m[$r['tipo']] = (float)$r['valor']; if ($r['tipo'] === 'sono' && $r['extra']) $m['sono_extra'] = json_decode($r['extra'], true); }
+    $st = $pdo->prepare("SELECT COUNT(*) n, COALESCE(SUM(distancia_m),0) d, COALESCE(SUM(duracao_s),0) t, COALESCE(SUM(calorias),0) c FROM atividades WHERE usuario_id=? AND DATE(inicio) BETWEEN ? AND ?"); $st->execute([$id, $iniSem, $hoje]); $sem = $st->fetch();
+    $st = $pdo->prepare("SELECT tipo, nome, inicio, distancia_m, duracao_s FROM atividades WHERE usuario_id=? ORDER BY inicio DESC LIMIT 1"); $st->execute([$id]); $ult = $st->fetch() ?: null;
+    $st = $pdo->prepare("SELECT json FROM garmin_dados WHERE usuario_id=? AND tipo='devices' ORDER BY atualizado DESC LIMIT 1"); $st->execute([$id]); $j = $st->fetchColumn();
+    $d = relogioDe($id, $j ? json_decode($j, true) : []);
+    $st = $pdo->prepare("SELECT ultimo_sync FROM integracoes WHERE usuario_id=? AND servico='garmin'"); $st->execute([$id]);
+    // séries para os gráficos comparativos (período escolhido no app)
+    $st2 = $pdo->prepare("SELECT HOUR(ts) h, ROUND(AVG(bpm)) bpm FROM fc_amostras WHERE usuario_id=? AND DATE(ts)=? GROUP BY HOUR(ts)"); $st2->execute([$id, $hoje]);
+    $fcHora = array_fill(0, 24, null); foreach ($st2 as $r) $fcHora[(int)$r['h']] = (int)$r['bpm'];
+    $extra = dadosPeriodo($id, $P) + ['fc_hora' => $fcHora];
+    $res[] = ['id' => $id, 'nome' => $p['nome'], 'hoje' => $m, 'semana' => $sem, 'ultima' => $ult, 'ultimo_sync' => $st->fetchColumn() ?: null,
+      'relogio' => $d ? ['nome' => $d['displayName'] ?? $d['productDisplayName'] ?? '', 'firmware' => $d['currentFirmwareVersion'] ?? null, 'registrado' => isset($d['registeredDate']) ? intdiv($d['registeredDate'], 1000) : null, 'primeira' => primeiraAtivacao($d['serialNumber'] ?? null)] : null] + $extra;
+  }
+  out(['ok' => true, 'pessoas' => $res, 'de' => $P['de'], 'ate' => $P['ate'], 'dias' => $P['dias'], 'agrup' => $P['agrup'], 'grupos' => $P['grupos']]);
+}
+case 'bem_estar': case 'bem_estar_casal': {
+  // índice de bem-estar (0-100) e humor automático — calculado por /opt/garmin-sync/bem_estar.py
+  exigeLogin();
+  $ok = fn($d) => preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)$d);
+  $ate = $ok($_GET['ate'] ?? '') ? $_GET['ate'] : hoje(); $de = $ok($_GET['de'] ?? '') ? $_GET['de'] : date('Y-m-d', strtotime($ate . ' -29 days'));
+  $ids = $acao === 'bem_estar_casal' ? array_map(fn($p) => (int)$p['id'], pessoas()) : [uid()];
+  $res = [];
+  foreach ($ids as $id) {
+    $st = db()->prepare("SELECT data, indice, humor_auto, humor_manual, COALESCE(humor_manual, humor_auto) humor, confianca, motivos, fatores FROM bem_estar WHERE usuario_id=? AND data BETWEEN ? AND ? ORDER BY data");
+    $st->execute([$id, $de, $ate]);
+    $dias = array_map(function ($r) { $r['motivos'] = json_decode($r['motivos'] ?: '[]', true); $r['fatores'] = json_decode($r['fatores'] ?: 'null', true); $r['indice'] = $r['indice'] === null ? null : (int)$r['indice']; return $r; }, $st->fetchAll());
+    $st = db()->prepare("SELECT nome FROM usuarios WHERE id=?"); $st->execute([$id]);
+    $res[] = ['id' => $id, 'nome' => $st->fetchColumn(), 'dias' => $dias];
+  }
+  out(['ok' => true, 'de' => $de, 'ate' => $ate, 'pessoas' => $res]);
+}
+case 'humor_salvar': {
+  // correção manual do humor do dia (vazio = volta para o automático)
+  exigeLogin();
+  $data = preg_match('/^\d{4}-\d{2}-\d{2}$/', (string)($in['data'] ?? '')) ? $in['data'] : hoje();
+  $h = in_array($in['humor'] ?? '', ['otimo', 'bem', 'normal', 'baixo', 'dificil'], true) ? $in['humor'] : null;
+  db()->prepare("INSERT INTO bem_estar (usuario_id, data, humor_manual) VALUES (?,?,?) ON DUPLICATE KEY UPDATE humor_manual=VALUES(humor_manual)")->execute([uid(), $data, $h]);
+  out(['ok' => true]);
+}
+case 'ver_como': {
+  exigeLogin();
+  $id = (int)($in['id'] ?? 0);
+  if ($id === uidReal() || !$id) unset($_SESSION['ver_uid']);
+  elseif (in_array($id, VISUALIZA[uidReal()] ?? [], true)) $_SESSION['ver_uid'] = $id;
+  else erro('Sem permissão para ver essa pessoa.', 403);
+  out(['ok' => true, 'usuario' => usuario(), 'metas' => metas(), 'pessoas' => pessoas(), 'vendo' => uid(), 'eu_id' => uidReal()]);
+}
 
 case 'perfil_salvar': {
   exigeLogin();
@@ -165,10 +350,13 @@ case 'fc_listar': {
 case 'atividades_listar': {
   exigeLogin();
   $tipo = $_GET['tipo'] ?? ''; $lim = min(200, (int)($_GET['limite'] ?? 50)); $off = (int)($_GET['offset'] ?? 0);
-  $sql = "SELECT id,uid,tipo,nome,inicio,fim,duracao_s,tempo_movimento_s,distancia_m,calorias,fc_media,fc_max,velocidade_media,velocidade_max,ritmo_medio,elevacao_ganho,elevacao_perda,passos,cadencia,esforco,clima FROM atividades WHERE usuario_id=?";
+  $sql = "SELECT a.id,a.uid,a.tipo,a.nome,a.inicio,a.fim,a.duracao_s,a.tempo_movimento_s,a.distancia_m,a.calorias,a.fc_media,a.fc_max,a.velocidade_media,a.velocidade_max,a.ritmo_medio,a.elevacao_ganho,a.elevacao_perda,a.passos,a.cadencia,a.esforco,a.clima,
+      JSON_UNQUOTE(JSON_EXTRACT(gd.json,'$.inicio.rua')) AS rua_inicio
+    FROM atividades a LEFT JOIN garmin_dados gd ON gd.usuario_id=a.usuario_id AND gd.tipo='rua_atividade' AND gd.chave=a.id
+    WHERE a.usuario_id=?";
   $p = [uid()];
-  if ($tipo) { $sql .= " AND tipo=?"; $p[] = $tipo; }
-  $sql .= " ORDER BY inicio DESC LIMIT $lim OFFSET $off";
+  if ($tipo) { $sql .= " AND a.tipo=?"; $p[] = $tipo; }
+  $sql .= " ORDER BY a.inicio DESC LIMIT $lim OFFSET $off";
   $st = db()->prepare($sql); $st->execute($p);
   out(['ok' => true, 'itens' => $st->fetchAll()]);
 }
@@ -178,6 +366,10 @@ case 'atividade_obter': {
   $a = $st->fetch(); if (!$a) erro('Não encontrada', 404);
   $a['pontos'] = $a['pontos'] ? json_decode($a['pontos'], true) : [];
   $a['voltas'] = $a['voltas'] ? json_decode($a['voltas'], true) : [];
+  // rua de início/fim salva no momento da gravação (se houver)
+  $rq = db()->prepare("SELECT json FROM garmin_dados WHERE usuario_id=? AND tipo='rua_atividade' AND chave=? LIMIT 1");
+  $rq->execute([uid(), (string)$a['id']]);
+  $a['ruas'] = ($rj = $rq->fetchColumn()) ? json_decode($rj, true) : null;
   out(['ok' => true, 'atividade' => $a]);
 }
 case 'atividade_salvar': {
@@ -197,6 +389,14 @@ case 'atividade_salvar': {
   $data = substr($a['inicio'], 0, 10);
   recalcularDia($data);
   verificarMedalhas();
+  // rua de início e fim (reverse geocode, cacheado) — guardada em garmin_dados p/ mostrar no detalhe
+  $pg = array_values(array_filter(is_array($pontos) ? $pontos : [], fn($p) => isset($p['lat'], $p['lon'])));
+  if ($pg) {
+    $ri = ruaDe((float)$pg[0]['lat'], (float)$pg[0]['lon']);
+    $pf = end($pg); $rf = count($pg) > 1 ? ruaDe((float)$pf['lat'], (float)$pf['lon']) : $ri;
+    db()->prepare("INSERT INTO garmin_dados (usuario_id,tipo,chave,data,json) VALUES (?,'rua_atividade',?,?,?) ON DUPLICATE KEY UPDATE json=VALUES(json)")
+      ->execute([uid(), $id, $data, json_encode(['inicio' => $ri, 'fim' => $rf])]);
+  }
   out(['ok' => true, 'id' => $id, 'novas_medalhas' => $GLOBALS['novasMedalhas'] ?? []]);
 }
 case 'atividade_editar': {
@@ -386,8 +586,8 @@ case 'dispositivo': {
   $g1 = function ($tipo) use ($pdo, $u) { $st = $pdo->prepare("SELECT json, atualizado FROM garmin_dados WHERE usuario_id=? AND tipo=? ORDER BY atualizado DESC LIMIT 1"); $st->execute([$u, $tipo]); $r = $st->fetch(); return $r ? json_decode($r['json'], true) : null; };
   $st = $pdo->prepare("SELECT status, erro, ultimo_sync FROM integracoes WHERE usuario_id=? AND servico='garmin'"); $st->execute([$u]); $integ = $st->fetch() ?: null;
   $devs = $g1('devices') ?: []; $dev = null;
-  foreach ($devs as $d) if (!empty($d['primaryActivityTrackerIndicator'])) $dev = $d;
-  $dev = $dev ?: ($devs[0] ?? null);
+  $dev = relogioDe($u, $devs);
+  if (!$dev && !isset(RELOGIO_DONO[$u])) { foreach ($devs as $d) if (!empty($d['primaryActivityTrackerIndicator'])) $dev = $d; $dev = $dev ?: ($devs[0] ?? null); }
   $recursos = [];
   if ($dev) foreach ($dev as $k => $v) if ($v === true && (str_ends_with($k, 'Capable') || in_array($k, ['hasOpticalHeartRate', 'wifi', 'bluetoothLowEnergyDevice', 'appSupport']))) $recursos[] = $k;
   $st = $pdo->prepare("SELECT * FROM relogio_leituras WHERE usuario_id=? ORDER BY id DESC LIMIT 1"); $st->execute([$u]); $ult = $st->fetch() ?: null; if ($ult) unset($ult['json']);
@@ -399,7 +599,7 @@ case 'dispositivo': {
   $lu = $g1('device_last_used');
   out(['ok' => true, 'integracao' => $integ, 'dispositivo' => $dev ? [
       'nome' => $dev['displayName'] ?? $dev['productDisplayName'] ?? 'Relógio Garmin', 'modelo' => $dev['deviceTypeSimpleName'] ?? null, 'imagem' => $dev['imageUrl'] ?? null,
-      'firmware' => $dev['currentFirmwareVersion'] ?? null, 'serie' => $dev['serialNumber'] ?? null, 'sku' => $dev['productSku'] ?? null, 'registrado' => isset($dev['registeredDate']) ? intdiv($dev['registeredDate'], 1000) : null,
+      'firmware' => $dev['currentFirmwareVersion'] ?? null, 'serie' => $dev['serialNumber'] ?? null, 'sku' => $dev['productSku'] ?? null, 'registrado' => isset($dev['registeredDate']) ? intdiv($dev['registeredDate'], 1000) : null, 'primeira' => primeiraAtivacao($dev['serialNumber'] ?? null),
       'categorias' => $dev['deviceCategories'] ?? [], 'zonas' => $dev['supportedHrZones'] ?? [], 'max_treinos' => $dev['maxWorkoutCount'] ?? null, 'status' => $dev['deviceStatus'] ?? null,
       'ultimo_upload' => isset($lu['lastUsedDeviceUploadTime']) ? intdiv($lu['lastUsedDeviceUploadTime'], 1000) : null, 'recursos' => $recursos] : null,
     'leitura' => $ult, 'serie24h' => $serie, 'envios24h' => $envios24, 'apps' => $apps, 'livetrack' => $live, 'atividades_garmin' => $atvGarmin,
@@ -494,6 +694,24 @@ case 'walkie_app': {
   out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
 }
 
+case 'mimei_stats': {
+  /* ME MIMEI 1.16.0: estatísticas de uso do app da loja — só o administrador (conta 1, sem "ver como") */
+  if (uidReal() !== 1) erro('Só para o administrador', 403);
+  $q = fn($sql) => db()->query($sql)->fetchAll();
+  $ativos = $q("SELECT d, COUNT(DISTINCT ap) n FROM (SELECT data d, aparelho ap FROM mimei_dias WHERE usuario_id=0 AND data >= CURDATE() - INTERVAL 29 DAY UNION SELECT data, aparelho FROM mimei_consumo WHERE usuario_id=0 AND data >= CURDATE() - INTERVAL 29 DAY) x GROUP BY d ORDER BY d");
+  $vistos = $q("SELECT DATE(visto) d, COUNT(*) n FROM mimei_aparelhos WHERE visto >= CURDATE() - INTERVAL 29 DAY GROUP BY d ORDER BY d");
+  out(['ok' => true,
+    'total' => (int)db()->query("SELECT COUNT(*) FROM mimei_aparelhos")->fetchColumn(),
+    'ativos7' => (int)db()->query("SELECT COUNT(*) FROM mimei_aparelhos WHERE visto >= NOW() - INTERVAL 7 DAY")->fetchColumn(),
+    'ativos' => $ativos, 'vistos' => $vistos,
+    'lanches' => $q("SELECT nome, COUNT(*) n, ROUND(SUM(qtd),1) qtd FROM mimei_consumo WHERE usuario_id=0 GROUP BY nome ORDER BY n DESC LIMIT 15"),
+    'origens' => $q("SELECT COALESCE(origem,'?') k, COUNT(*) n FROM mimei_consumo WHERE usuario_id=0 GROUP BY k ORDER BY n DESC"),
+    'paises' => $q("SELECT COALESCE(NULLIF(TRIM(SUBSTRING_INDEX(localidade, ',', -1)),''),'?') k, COUNT(*) n FROM mimei_aparelhos GROUP BY k ORDER BY n DESC"),
+    'idiomas' => $q("SELECT COALESCE(idioma,'?') k, COUNT(*) n FROM mimei_aparelhos GROUP BY k ORDER BY n DESC"),
+    'versoes' => $q("SELECT COALESCE(versao,'?') k, COUNT(*) n FROM mimei_aparelhos GROUP BY k ORDER BY n DESC"),
+    'modelos' => $q("SELECT COALESCE(modelo,'?') k, COUNT(*) n FROM mimei_aparelhos GROUP BY k ORDER BY n DESC LIMIT 15"),
+    'pares' => (int)(db()->query("SHOW TABLES LIKE 'mimei_pares'")->fetchColumn() ? db()->query("SELECT COUNT(*) FROM mimei_pares WHERE status='ok'")->fetchColumn() : 0)]);
+}
 case 'mimei_estado': {
   exigeLogin(); require_once __DIR__ . '/lib_mimei.php'; mimeiSemear(uid());
   $st = db()->prepare("SELECT id, nome, qtd, kcal, origem, DATE_FORMAT(criado, '%H:%i') hora FROM mimei_consumo WHERE usuario_id=? AND data=CURDATE() ORDER BY id DESC"); $st->execute([uid()]);
@@ -637,6 +855,80 @@ case 'tama_app': {
   db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Bichinho Virtual', NULL, ?, ?, 'pendente', 'tama')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
   out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
 }
+case 'locais_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Meus Locais', NULL, ?, ?, 'pendente', 'locais')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'sono': {
+  exigeLogin();
+  require_once __DIR__ . '/lib_sono.php';
+  out(['ok' => true, 'noites' => sonoNoites(db(), uid(), max(1, min(30, (int)($_GET['dias'] ?? 8))))]);
+}
+case 'sono_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Sono', NULL, ?, ?, 'pendente', 'sono')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'painel_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Painel Total', NULL, ?, ?, 'pendente', 'painel')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'forca_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Forca', NULL, ?, ?, 'pendente', 'forca')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'gasolina_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Gasolina Perto', NULL, ?, ?, 'pendente', 'gasolina')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+/* ---- Próximo Ônibus (app Garmin) · Desenvolvido por Alequizao <alequizao.dev@gmail.com> ----
+   Favoritos (linha + ponto) escolhidos no painel; o app gerado com token os sincroniza por onibus_favs.
+   Os horários vêm de /agendamentos/relogio_onibus.php (projeto dos ônibus). */
+case 'onibus_app': {
+  exigeLogin();
+  $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
+  if (!in_array((string)($in['modelo'] ?? ''), $modelos, true)) erro('Modelo de relógio não suportado');
+  db()->prepare("INSERT INTO relogio_apps (usuario_id, nome, device, modelo, token, status, tipo) VALUES (?, 'Próximo Ônibus', NULL, ?, ?, 'pendente', 'onibus')")->execute([uid(), $in['modelo'], bin2hex(random_bytes(16))]);
+  out(['ok' => true, 'id' => (int)db()->lastInsertId()]);
+}
+case 'onibus_favs_ler': {
+  exigeLogin(); onibusFavsTabela();
+  $st = db()->prepare("SELECT favs FROM onibus_favoritos WHERE usuario_id=?"); $st->execute([uid()]);
+  out(['ok' => true, 'favs' => json_decode((string)$st->fetchColumn(), true) ?: []]);
+}
+case 'onibus_favs_salvar': {
+  exigeLogin(); onibusFavsTabela();
+  $l = []; $corta = fn($s, $n) => mb_strlen($s = trim(preg_replace('/\s+/u', ' ', (string)$s))) > $n ? rtrim(mb_substr($s, 0, $n - 1)) . '.' : $s;
+  foreach (array_slice(is_array($in['favs'] ?? null) ? $in['favs'] : [], 0, 4) as $f) {
+    $id = (int)($f['id'] ?? 0); $stop = strtolower((string)($f['stop'] ?? ''));
+    if ($id < 1 || !preg_match('/^[0-9a-f-]{36}$/', $stop)) erro('Favorito inválido');
+    $l[] = ['id' => $id, 'stop' => $stop, 'cod' => $corta($f['cod'] ?? '', 6), 'destino' => $corta($f['destino'] ?? '', 18), 'ponto' => $corta($f['ponto'] ?? '', 22)];
+  }
+  db()->prepare("INSERT INTO onibus_favoritos (usuario_id, favs) VALUES (?, ?) ON DUPLICATE KEY UPDATE favs=VALUES(favs)")->execute([uid(), json_encode($l, JSON_UNESCAPED_UNICODE)]);
+  out(['ok' => true, 'favs' => $l]);
+}
+case 'onibus_favs': {   // público: o relógio manda o token embutido no app gerado pelo painel; resposta mínima em listas
+  onibusFavsTabela();
+  $t = (string)($_GET['t'] ?? '');
+  if (!preg_match('/^[0-9a-f]{32}$/', $t)) erro('token inválido');
+  $st = db()->prepare("SELECT f.favs FROM relogio_apps a JOIN onibus_favoritos f ON f.usuario_id=a.usuario_id WHERE a.token=? AND a.tipo='onibus' LIMIT 1"); $st->execute([$t]);
+  $favs = json_decode((string)$st->fetchColumn(), true) ?: [];
+  echo json_encode(['f' => array_map(fn($f) => [(int)$f['id'], $f['stop'], $f['cod'], $f['destino'], $f['ponto']], $favs)], JSON_UNESCAPED_UNICODE); exit;
+}
 case 'mimei_app': {
   exigeLogin();
   $modelos = array_column(json_decode((string)@file_get_contents(__DIR__ . '/app/modelos.json'), true) ?: [], 'id');
@@ -682,7 +974,8 @@ case 'app_baixar': {
   $r = $st->fetch() ?: erro('App ainda não está pronto', 404);
   $arq = __DIR__ . '/app/builds/' . $r['token'] . '.prg'; if (!is_file($arq)) erro('Arquivo não encontrado', 404);
   header('Content-Type: application/octet-stream'); header('Content-Length: ' . filesize($arq));
-  header('Content-Disposition: attachment; filename="' . ($r['tipo'] === 'ben10' ? 'OmnitrixBen10' : ($r['tipo'] === 'omnitrix' ? 'Omnitrix' : ($r['tipo'] === 'tama' ? 'Bichinho' : ($r['tipo'] === 'mimei' ? 'MeMimei' : ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome'])))))) . '.prg"');
+  if ($r['tipo'] === 'onibus') { header('Content-Disposition: attachment; filename="ProximoOnibus.prg"'); readfile($arq); exit; }
+  header('Content-Disposition: attachment; filename="' . ($r['tipo'] === 'gasolina' ? 'GasolinaPerto' : ($r['tipo'] === 'painel' ? 'PainelTotal' : ($r['tipo'] === 'ben10' ? 'OmnitrixBen10' : ($r['tipo'] === 'omnitrix' ? 'Omnitrix' : ($r['tipo'] === 'tama' ? 'Bichinho' : ($r['tipo'] === 'forca' ? 'Forca' : ($r['tipo'] === 'sono' ? 'Sono' : ($r['tipo'] === 'locais' ? 'MeusLocais' : ($r['tipo'] === 'mimei' ? 'MeMimei' : ($r['device'] ? 'Rastreador-' . $r['device'] : 'WalkieTalkie-' . preg_replace('/[^A-Za-z0-9]/', '', $r['nome']))))))))))) . '.prg"');
   readfile($arq); exit;
 }
 
@@ -708,46 +1001,64 @@ case 'ao_vivo': {
   out(['ok' => true, 'relogio' => $r, 'segundos' => $r ? time() - $ag : null, 'versao' => md5($v->fetchColumn())]);
 }
 
-case 'mapa': {
-  exigeLogin(); $u = uid(); $pdo = db();
-  $tem = fn($t) => true; // tabelas criadas na instalação
-  $cands = [];
-  $relogio = null;
-  if ($tem('relogio_leituras')) {
-    $st = $pdo->prepare("SELECT * FROM relogio_leituras WHERE usuario_id=? ORDER BY id DESC LIMIT 1"); $st->execute([$u]); $relogio = $st->fetch() ?: null;
-    $st = $pdo->prepare("SELECT lat, lon, COALESCE(fix_ts, UNIX_TIMESTAMP(recebido)) ts, alt, vel, fc FROM relogio_leituras WHERE usuario_id=? AND lat IS NOT NULL ORDER BY id DESC LIMIT 1"); $st->execute([$u]);
-    if ($r = $st->fetch()) $cands[] = ['fonte' => 'App no relógio', 'lat' => +$r['lat'], 'lon' => +$r['lon'], 'ts' => (int)$r['ts'], 'fc' => $r['fc']];
-  }
-  $live = null; $livePts = [];
-  if ($tem('livetrack_sessoes')) {
-    $live = $pdo->query("SELECT * FROM livetrack_sessoes WHERE usuario_id=$u ORDER BY (status='ativa') DESC, atualizado DESC LIMIT 1")->fetch() ?: null;
-    if ($live) {
-      $st = $pdo->prepare("SELECT ts, lat, lon, alt, vel, fc, dist FROM livetrack_pontos WHERE sessao_id=? ORDER BY ts"); $st->execute([$live['id']]); $livePts = $st->fetchAll();
-      if ($livePts) { $p = end($livePts); $cands[] = ['fonte' => 'LiveTrack', 'lat' => +$p['lat'], 'lon' => +$p['lon'], 'ts' => intdiv((int)$p['ts'], 1000), 'fc' => $p['fc']]; }
+case 'mapa': { exigeLogin(); out(['ok' => true] + mapaDados(uid())); }
+case 'mapa_casal': {
+  // posição e rotas de cada pessoa que este login pode ver (aba Casal do mapa)
+  exigeLogin(); $res = [];
+  foreach (pessoas() as $p) $res[] = ['id' => (int)$p['id'], 'nome' => $p['nome']] + mapaDados((int)$p['id']);
+  out(['ok' => true, 'pessoas' => $res]);
+}
+case 'gravar_remoto': {
+  // Web "Gravar" -> enfileira comando para o app Rastreador iniciar/parar a gravação no relógio.
+  // O relógio lê esse comando na próxima resposta do relogio.php (a cada 30s com o app aberto).
+  exigeLogin();
+  $sport = preg_replace('/[^a-z]/', '', strtolower((string)($in['sport'] ?? 'caminhada')));
+  if ($sport === '') $sport = 'caminhada';
+  $cmd = !empty($in['parar']) ? 'parar' : 'iniciar';
+  db()->prepare("INSERT INTO garmin_dados (usuario_id,tipo,chave,data,json) VALUES (?,'cmd_relogio','pendente',CURDATE(),?)
+    ON DUPLICATE KEY UPDATE json=VALUES(json), data=CURDATE()")->execute([uidReal(), json_encode(['cmd' => $cmd, 'sport' => $sport, 'ts' => time()])]);
+  out(['ok' => true, 'comando' => $cmd, 'sport' => $sport]);
+}
+case 'rua': {
+  exigeLogin();
+  out(['ok' => true] + ruaDe((float)($_GET['lat'] ?? $in['lat'] ?? 0), (float)($_GET['lon'] ?? $in['lon'] ?? 0)));
+}
+case 'casal_ativos': {
+  // quem (dos que este login pode ver) está EM ATIVIDADE agora, pela fonte do relógio (Rastreador) ou LiveTrack.
+  // Consulta enxuta (só última leitura) para poder ser chamada de tempos em tempos via AJAX.
+  exigeLogin(); $pdo = db(); $res = [];
+  foreach (pessoas() as $p) {
+    $pid = (int)$p['id'];
+    if ($pid === uidReal()) continue; // só o(s) parceiro(s), não você mesmo
+    $st = $pdo->prepare("SELECT COALESCE(fix_ts, UNIX_TIMESTAMP(recebido)) ts, lat, lon, vel, fc, passos, body_battery FROM relogio_leituras WHERE usuario_id=? ORDER BY id DESC LIMIT 1");
+    $st->execute([$pid]); $r = $st->fetch() ?: null;
+    $lt = $pdo->query("SELECT status FROM livetrack_sessoes WHERE usuario_id=$pid ORDER BY (status='ativa') DESC, atualizado DESC LIMIT 1")->fetch() ?: null;
+    $ltPt = null;
+    if ($lt && $lt['status'] === 'ativa') {
+      $q = $pdo->prepare("SELECT lp.ts, lp.lat, lp.lon, lp.vel, lp.fc FROM livetrack_pontos lp JOIN livetrack_sessoes s ON s.id=lp.sessao_id WHERE s.usuario_id=? ORDER BY lp.ts DESC LIMIT 1");
+      $q->execute([$pid]); $ltPt = $q->fetch() ?: null;
     }
+    $tsRel = $r ? (int)$r['ts'] : 0;
+    $tsLt = $ltPt ? intdiv((int)$ltPt['ts'], 1000) : 0;
+    $usaLt = $tsLt > $tsRel;
+    $ts = max($tsRel, $tsLt);
+    $ha = $ts ? time() - $ts : null;
+    $vel = (float)($usaLt ? ($ltPt['vel'] ?? 0) : ($r['vel'] ?? 0));
+    $fc = $usaLt ? ($ltPt['fc'] ?? null) : ($r['fc'] ?? null);
+    $lat = $usaLt ? ($ltPt['lat'] ?? null) : ($r['lat'] ?? null);
+    $lon = $usaLt ? ($ltPt['lon'] ?? null) : ($r['lon'] ?? null);
+    $ltAtiva = (bool)($lt && $lt['status'] === 'ativa');
+    // "ativo agora": leitura recente (< 5 min) e (LiveTrack ativo OU em movimento: vel > 1,4 m/s ≈ caminhada)
+    $ativo = $ha !== null && $ha < 300 && ($ltAtiva || $vel > 1.4);
+    $rua = ($ativo && $lat !== null && $lon !== null) ? ruaDe((float)$lat, (float)$lon, $pid) : ['rua' => null, 'bairro' => null];
+    $res[] = ['id' => $pid, 'nome' => $p['nome'], 'ativo' => $ativo, 'fonte' => $usaLt ? 'LiveTrack' : 'Relógio',
+      'ha' => $ha, 'vel_kmh' => round($vel * 3.6, 1), 'fc' => $fc !== null ? (int)$fc : null,
+      'lat' => $lat !== null ? (float)$lat : null, 'lon' => $lon !== null ? (float)$lon : null,
+      'rua' => $rua['rua'], 'bairro' => $rua['bairro'],
+      'passos' => ($r && $r['passos'] !== null) ? (int)$r['passos'] : null,
+      'body_battery' => ($r && $r['body_battery'] !== null) ? (int)$r['body_battery'] : null, 'livetrack' => $ltAtiva];
   }
-  // rotas simplificadas ficam em cache (garmin_dados tipo 'rota') — não relê o JSON completo a cada atualização do mapa
-  $st = $pdo->prepare("SELECT a.id, a.nome, a.tipo, a.inicio, a.distancia_m, g.json rota FROM atividades a LEFT JOIN garmin_dados g ON g.usuario_id=a.usuario_id AND g.tipo='rota' AND g.chave=a.id
-    WHERE a.usuario_id=? AND a.pontos IS NOT NULL ORDER BY a.inicio DESC LIMIT 300"); $st->execute([$u]);
-  $rotas = [];
-  foreach ($st->fetchAll() as $i => $a) {
-    $c = $a['rota'] ? json_decode($a['rota'], true) : null;
-    if (!$c) {
-      $p2 = $pdo->prepare("SELECT pontos FROM atividades WHERE id=?"); $p2->execute([$a['id']]);
-      $pts = array_values(array_filter(json_decode($p2->fetchColumn(), true) ?: [], fn($p) => isset($p['lat'])));
-      if (!$pts) continue;
-      $passo = max(1, (int)ceil(count($pts) / 250)); $ll = [];
-      foreach ($pts as $k => $p) if ($k % $passo === 0 || $k === count($pts) - 1) $ll[] = [round($p['lat'], 5), round($p['lon'], 5)];
-      $f = end($pts); $c = ['ll' => $ll, 'fim' => ['lat' => $f['lat'], 'lon' => $f['lon'], 'ts' => intdiv((int)($f['t'] ?? 0), 1000), 'fc' => $f['fc'] ?? null]];
-      $pdo->prepare("INSERT INTO garmin_dados (usuario_id, tipo, chave, data, json) VALUES (?, 'rota', ?, ?, ?) ON DUPLICATE KEY UPDATE json=VALUES(json)")->execute([$u, $a['id'], substr($a['inicio'], 0, 10), json_encode($c)]);
-    }
-    if ($i === 0) $cands[] = ['fonte' => 'Última atividade (' . $a['nome'] . ')'] + $c['fim'];
-    $rotas[] = ['id' => (int)$a['id'], 'nome' => $a['nome'], 'tipo' => $a['tipo'], 'inicio' => $a['inicio'], 'distancia_m' => +$a['distancia_m'], 'll' => $c['ll']];
-  }
-  usort($cands, fn($a, $b) => $b['ts'] <=> $a['ts']);
-  $trilha = [];
-  if ($tem('relogio_leituras')) { $st = $pdo->prepare("SELECT lat, lon, COALESCE(fix_ts, UNIX_TIMESTAMP(recebido)) ts FROM relogio_leituras WHERE usuario_id=? AND lat IS NOT NULL AND recebido > NOW() - INTERVAL 24 HOUR ORDER BY id"); $st->execute([$u]); $trilha = $st->fetchAll(); }
-  out(['ok' => true, 'atual' => $cands[0] ?? null, 'fontes' => $cands, 'relogio' => $relogio, 'live' => $live, 'live_pontos' => $livePts, 'trilha24h' => $trilha, 'rotas' => $rotas]);
+  out(['ok' => true, 'pessoas' => $res]);
 }
 
 case 'livetrack_add': {
@@ -899,6 +1210,7 @@ function usuario() {
   return $u;
 }
 function relogioAppsTabela() { }
+function onibusFavsTabela() { static $ok = false; if ($ok) return; $ok = true; db()->exec("CREATE TABLE IF NOT EXISTS onibus_favoritos (usuario_id INT PRIMARY KEY, favs TEXT NOT NULL, atualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP) DEFAULT CHARSET=utf8mb4"); }
 function walkieDono(int $canal): void { $st = db()->prepare("SELECT criado_por FROM walkie_canais WHERE id=?"); $st->execute([$canal]); if ((int)$st->fetchColumn() !== uid()) erro('Só quem criou o canal pode fazer isso', 403); }
 function walkieMembro(int $canal): void { $st = db()->prepare("SELECT 1 FROM walkie_membros WHERE canal_id=? AND usuario_id=?"); $st->execute([$canal, uid()]); if (!$st->fetchColumn()) erro('Você não participa deste canal', 403); }
 function metas() { $st = db()->prepare("SELECT * FROM metas WHERE usuario_id=?"); $st->execute([uid()]); return $st->fetch() ?: []; }

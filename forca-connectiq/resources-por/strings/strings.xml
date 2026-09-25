@@ -1,0 +1,9 @@
+<strings>
+  <string id="AppName">Força</string>
+  <string id="reps_label">Repetições</string>
+  <string id="reps_units">reps</string>
+  <string id="peso_label">Peso</string>
+  <string id="peso_units">kg</string>
+  <string id="vol_label">Volume</string>
+  <string id="vol_units">kg</string>
+</strings>

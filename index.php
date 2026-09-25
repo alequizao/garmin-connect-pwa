@@ -8,7 +8,8 @@ $vjs = filemtime(__DIR__.'/'.$js); ?>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Garmin Connect</title>
-<meta name="theme-color" content="#141414">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0a0a0b">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f2f2f7">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">

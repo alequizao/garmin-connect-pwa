@@ -143,11 +143,12 @@ function mimeiSabor(string $nome, ?string $grupo): string {
   return mb_strtoupper(mb_substr($s, 0, 1)) . mb_substr($s, 1);
 }
 
+/* 1.17.0: 'zero' = bebida zero/sem açúcar — registra as kcal reais, mas não entra na conversão "cabem N" */
 function mimeiLanches(int $uid, string $base = ''): array {
-  $st = db()->prepare("SELECT id, nome, grupo, porcao, kcal, emoji, icone, UNIX_TIMESTAMP(atualizado) v FROM mimei_lanches WHERE usuario_id=? AND ativo=1 ORDER BY ordem, id");
+  $st = db()->prepare("SELECT id, nome, grupo, porcao, kcal, zero, emoji, icone, UNIX_TIMESTAMP(atualizado) v FROM mimei_lanches WHERE usuario_id=? AND ativo=1 ORDER BY ordem, id");
   $st->execute([$uid]);
   return array_map(fn($l) => ['id' => (int)$l['id'], 'nome' => $l['nome'], 'grupo' => $l['grupo'] !== null && $l['grupo'] !== '' ? $l['grupo'] : null,
-    'sabor' => mimeiSabor($l['nome'], $l['grupo']), 'porcao' => $l['porcao'], 'kcal' => (int)$l['kcal'], 'emoji' => $l['emoji'],
+    'sabor' => mimeiSabor($l['nome'], $l['grupo']), 'porcao' => $l['porcao'], 'kcal' => (int)$l['kcal'], 'zero' => (bool)$l['zero'], 'emoji' => $l['emoji'],
     'icone' => $l['icone'] ? $base . 'app/mimei/' . $uid . '/' . $l['icone'] : null], $st->fetchAll());
 }
 

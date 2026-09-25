@@ -48,7 +48,7 @@ async function boot() {
   window.addEventListener('offline', () => { S.online = false; avisoOffline(); });
   if (!S.online) avisoOffline();
   const tokenRedef = new URLSearchParams(location.search).get('redefinir'); if (tokenRedef) return renderRedefinir(tokenRedef);
-  try { const j = await apiGet('eu'); if (j.logado) { S.usuario = j.usuario; S.metas = j.metas; iniciarApp(); } else renderLogin(); }
+  try { const j = await apiGet('eu'); if (j.logado) { S.usuario = j.usuario; S.metas = j.metas; S.pessoas = j.pessoas || []; S.vendo = j.vendo; S.euId = j.eu_id; iniciarApp(); } else renderLogin(); }
   catch { const u = store.get('usuario'); if (u) { S.usuario = u; S.metas = store.get('metas', {}); iniciarApp(); } else renderLogin(); }
 }
 function avisoOffline() { if (!$('.off')) { const d = document.createElement('div'); d.className = 'off'; d.textContent = 'Sem conexão — os dados serão sincronizados depois'; document.body.appendChild(d); } }
@@ -96,16 +96,16 @@ function renderLogin(registro = false) {
   $('#alt').onclick = e => { e.preventDefault(); renderLogin(!registro); };
   $('#fLogin').onsubmit = async e => {
     e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
-    try { const j = await api(registro ? 'registrar' : 'login', f); S.usuario = j.usuario; const eu = await apiGet('eu'); S.metas = eu.metas; iniciarApp(); } catch (x) { toast(x.message); }
+    try { const j = await api(registro ? 'registrar' : 'login', f); S.usuario = j.usuario; const eu = await apiGet('eu'); S.metas = eu.metas; S.pessoas = eu.pessoas || []; S.vendo = eu.vendo; S.euId = eu.eu_id; iniciarApp(); } catch (x) { toast(x.message); }
   };
 }
 
 /* ---------- navegação ---------- */
 /* ---------- rotas web: cada tela tem endereço próprio (#/tela/arg) — refresh e "voltar" mantêm o lugar ---------- */
 const TITULOS = { inicio: 'Meu dia', atividades: 'Atividades', atividade: 'Atividade', mapa: 'Mapa', gravar: 'Gravar', saude: 'Saúde', app: 'Apps', mais: 'Mais', perfil: 'Perfil',
-  estatisticas: 'Desempenho', relatorios: 'Relatórios', treinos: 'Treinos', metrica: 'Histórico', dispositivo: 'Relógio' };
+  estatisticas: 'Desempenho', relatorios: 'Relatórios', treinos: 'Treinos', metrica: 'Histórico', dispositivo: 'Relógio', depressao: 'Depressão' };
 const TELAS = () => ({ inicio: renderInicio, atividades: renderAtividades, gravar: renderGravar, saude: renderSaude, perfil: renderPerfil, atividade: renderAtividadeDetalhe, estatisticas: renderEstatisticas,
-  treinos: renderTreinos, metrica: renderMetricaHistorico, mapa: renderMapa, app: renderApp, dispositivo: renderDispositivo, relatorios: renderRelatorios, mais: renderMais });
+  treinos: renderTreinos, metrica: renderMetricaHistorico, mapa: renderMapa, app: renderApp, dispositivo: renderDispositivo, relatorios: renderRelatorios, mais: renderMais, depressao: renderDepressao });
 function rotaAtual() {
   const m = location.hash.match(/^#\/([a-z_]+)(?:\/([^?#]*))?/);
   return m && TELAS()[m[1]] ? { tela: m[1], arg: m[2] ? decodeURIComponent(m[2]) : undefined } : null;
@@ -151,6 +151,31 @@ const ICO = {
   mais: svg('<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'),
   perfilUser: svg('<circle cx="12" cy="8.5" r="4"/><path d="M4.5 20.5a7.5 7.5 0 0 1 15 0"/>'),
   relogio: svg('<rect x="7" y="2.5" width="10" height="4" rx="1"/><rect x="7" y="17.5" width="10" height="4" rx="1"/><circle cx="12" cy="12" r="6"/><path d="M12 9.5V12l1.8 1.2"/>'),
+  // ícones de linha dos apps e da aba Depressão (substituem emojis no menu/seletor)
+  depressao: svg('<path d="M15.5 20.5V18c2-1 3.5-3.1 3.5-5.7A6.5 6.5 0 0 0 6.1 9.4c-.3 1.5-1.1 2.3-1.7 3.2-.3.5-.2 1 .3 1.2l1.3.5V17a2 2 0 0 0 2 2h1.5"/><path d="M7.6 11h1.2l.9-1.9 1.4 3.4 1-1.5H14"/>'),
+  rastreador: svg('<path d="M12 21s6.5-5.6 6.5-10.5A6.5 6.5 0 0 0 5.5 10.5C5.5 15.4 12 21 12 21z"/><circle cx="12" cy="10.3" r="2.4"/>'),
+  walkie: svg('<rect x="6.5" y="8.5" width="9" height="12.5" rx="2"/><path d="M12.5 8.5V5l4-1.2v3.4"/><path d="M14 12h2M14 15h1.5"/><circle cx="10" cy="13" r="1.6"/>'),
+  mimei: svg('<path d="M4 11c0-3.3 3.6-5.5 8-5.5s8 2.2 8 5.5zM4 14.2h16M5 17.5h14a3 3 0 0 1-3 2.5H8a3 3 0 0 1-3-2.5z"/>'),
+  ben10: svg('<circle cx="12" cy="12" r="4"/><path d="M12 8V4.5M12 19.5V16M8 12H4.5M19.5 12H16"/><path d="M7 3.5h10M7 20.5h10"/>'),
+  tama: svg('<path d="M12 3c3 0 5.5 5 5.5 9a5.5 5.5 0 0 1-11 0c0-4 2.5-9 5.5-9z"/><circle cx="10" cy="12" r=".7" fill="currentColor" stroke="none"/><circle cx="14" cy="12" r=".7" fill="currentColor" stroke="none"/>'),
+  forca: svg('<path d="M4 9v6M6.5 7.5v9M17.5 7.5v9M20 9v6M6.5 12h11"/>'),
+  painel: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9h17M7.5 13h4M7.5 16h7"/>'),
+  locais: svg('<path d="M5 16.5V13l1.7-4.1a2 2 0 0 1 1.85-1.2h6.9a2 2 0 0 1 1.85 1.2L19 13v3.5"/><path d="M4 13h16"/><circle cx="7.6" cy="16.6" r="1.4"/><circle cx="16.4" cy="16.6" r="1.4"/>'),
+  traccar: svg('<circle cx="12" cy="12" r="2"/><path d="M8.2 15.8a5.7 5.7 0 0 1 0-7.6M15.8 8.2a5.7 5.7 0 0 1 0 7.6M5.6 18.4a9.2 9.2 0 0 1 0-12.8M18.4 5.6a9.2 9.2 0 0 1 0 12.8"/>'),
+  sim: svg('<rect x="3.5" y="4.5" width="17" height="12" rx="2"/><path d="M9 20h6M12 16.5V20"/>'),
+  onibus: svg('<rect x="5" y="3.5" width="14" height="15" rx="3"/><path d="M5 11h14M8 7h8M7.5 18.5v2M16.5 18.5v2"/><circle cx="8.5" cy="14.5" r="1"/><circle cx="15.5" cy="14.5" r="1"/>'),
+  gasolina: svg('<path d="M5 20.5V5.5A1.5 1.5 0 0 1 6.5 4h6A1.5 1.5 0 0 1 14 5.5v15M3.5 20.5h12M7 7h5v3.5H7z"/><path d="M14 13h1.5a1.5 1.5 0 0 1 1.5 1.5v2.5a1.5 1.5 0 0 0 3 0V9.5L17 6.5"/>'),
+  // ícones de ação (substituem emojis nos botões só-ícone)
+  add: svg('<path d="M12 5v14M5 12h14"/>'),
+  lixo: svg('<path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13"/>'),
+  editar: svg('<path d="M4 20h4.5L20 8.5 15.5 4 4 15.5z"/><path d="M14 5.5L18.5 10"/>'),
+  enviar: svg('<path d="M4.5 12L20 4.5l-4 15-3.4-5.6z"/><path d="M12.6 13.9L20 4.5"/>'),
+  sino: svg('<path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/>'),
+  micro: svg('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5M9 20.5h6"/>'),
+  copiar: svg('<rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2.5"/>'),
+  alvo: svg('<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.6"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>'),
+  antena: svg('<path d="M12 11.5V21M8.6 9.4a5 5 0 0 1 6.8 0M6.2 7a8.5 8.5 0 0 1 11.6 0"/><circle cx="12" cy="10.4" r="1.3" fill="currentColor" stroke="none"/>'),
+  baixar: svg('<path d="M12 4v10M8 10.5l4 4 4-4M5 19h14"/>'),
 };
 
 /* widget no estilo "Meu dia" do Garmin Connect: faixa de título, barra de meta, corpo e canto de meta batida */
@@ -171,6 +196,196 @@ function anelFC(bpm, min = 40, max = 200) {
 }
 
 /* ---------- INÍCIO (Meu dia) ---------- */
+// aba Casal: os dois relógios lado a lado (cada coluna só com os dados de uma pessoa)
+async function renderCasal() {
+  const PER = periodoAtual(), pc = PER.tipo === 'dia' ? { de: somaDias(PER.ate, -29), ate: PER.ate } : { de: PER.de, ate: PER.ate };
+  const j = await apiGet('casal', pc).catch(() => null);
+  if (!j || !j.ok) { $('#dash').innerHTML = '<div class="vazio">Sem conexão</div>'; return; }
+  const P = j.pessoas, n = v => v == null ? '--' : fmtNum(Math.round(v));
+  const linha = (rot, f) => `<tr><th>${rot}</th>${P.map(p => `<td>${f(p)}</td>`).join('')}</tr>`;
+  const km = m => (m / 1000).toFixed(1).replace('.', ',') + ' km';
+  $('#dash').innerHTML = `<section class="w"><div class="w-corpo"><table class="casal"><thead><tr><th></th>${P.map(p => `<th>${esc(p.nome)}<div class="mini">${esc(p.relogio?.nome || '')}</div></th>`).join('')}</tr></thead><tbody>
+    <tr class="sec"><th colspan="${P.length + 1}">${j.ate === hojeISO() ? 'HOJE' : 'DIA ' + fmtDataCurta(j.ate)}</th></tr>
+    ${linha('Passos', p => n(p.hoje.passos))}
+    ${linha('Calorias ativas', p => n(p.hoje.calorias_ativas) + ' kcal')}
+    ${linha('Min. intensidade', p => n(p.hoje.minutos_intensidade))}
+    ${linha('Body Battery', p => n(p.hoje.energia))}
+    ${linha('Estresse', p => n(p.hoje.stress))}
+    ${linha('FC repouso', p => n(p.hoje.fc_repouso) + ' bpm')}
+    ${linha('Sono', p => p.hoje.sono ? horasMin(p.hoje.sono) + (p.hoje.sono_extra?.deitou ? `<div class="mini">${p.hoje.sono_extra.deitou}–${p.hoje.sono_extra.acordou}</div>` : '') : '--')}
+    ${linha('SpO2', p => p.hoje.spo2 ? n(p.hoje.spo2) + '%' : '--')}
+    <tr class="sec"><th colspan="${P.length + 1}">PERÍODO · ${fmtDataCurta(j.de)} a ${fmtDataCurta(j.ate)}</th></tr>
+    ${linha('Atividades', p => p.semana.n)}
+    ${linha('Distância', p => km(+p.semana.d))}
+    ${linha('Tempo', p => fmtTempo(+p.semana.t))}
+    ${linha('Última atividade', p => p.ultima ? `${esc(p.ultima.nome)}<div class="mini">${fmtData(p.ultima.inicio)}</div>` : '--')}
+    <tr class="sec"><th colspan="${P.length + 1}">RELÓGIO</th></tr>
+    ${linha('Ativado em', p => p.relogio?.registrado ? new Date(p.relogio.registrado * 1000).toLocaleDateString('pt-BR') : '--')}
+    ${linha('Tempo de vida', p => p.relogio?.registrado ? tempoDeVida(p.relogio.registrado) : '--')}
+    ${linha('1ª ativação conhecida', p => p.relogio?.primeira ? new Date(p.relogio.primeira * 1000).toLocaleDateString('pt-BR') : '--')}
+    ${linha('Vida desde a 1ª ativação', p => p.relogio?.primeira ? tempoDeVida(p.relogio.primeira) : '--')}
+    ${linha('Firmware', p => esc(p.relogio?.firmware || '--'))}
+    ${linha('Sincronizado', p => p.ultimo_sync ? fmtData(p.ultimo_sync) : '--')}
+  </tbody></table><div class="mini" style="margin-top:8px">A Garmin não informa data de fabricação nem o primeiro liga do aparelho — a data mais antiga disponível é o registro na conta.</div></div></section><div id="casalGraf"></div>`;
+  graficosCasal(j);
+}
+const horasMin = h => { const m = Math.round(h * 60); return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`; };
+const COR_P = ['#1c9ddc', '#f0506e']; // validado (CVD/contraste) nos temas claro e escuro
+// barras lado a lado: uma cor por pessoa
+function grafDuplo(cv, grupos, labels, fmt) {
+  const c = cv.getContext('2d'), W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2; c.clearRect(0, 0, W, H);
+  const mx = Math.max(1, ...grupos.flat().map(v => +v || 0)), n = labels.length, gap = W / n, bw = gap * 0.8 / grupos.length;
+  grupos.forEach((vals, k) => vals.forEach((v, i) => { const h = (+v || 0) / mx * (H - 60), x = i * gap + gap * 0.1 + k * bw; c.fillStyle = COR_P[k]; c.beginPath(); c.roundRect(x, H - 34 - h, bw - 3, Math.max(h, 1), 5); c.fill(); }));
+  c.fillStyle = '#9aa0a6'; c.font = '19px sans-serif'; c.textAlign = 'center';
+  labels.forEach((l, i) => { if (n <= 12 || i % Math.ceil(n / 12) === 0) c.fillText(l, i * gap + gap / 2, H - 8); });
+  c.textAlign = 'left'; c.fillText(fmt ? fmt(mx) : Math.round(mx), 4, 20);
+}
+function graficosCasal(j) {
+  const P = j.pessoas, nomes = P.map(p => p.nome.split(' ')[0]);
+  const dias = listaDias(j.de, j.ate), rotPer = `${j.dias} dias`, rotAg = { dia: 'por dia', semana: 'por semana', mes: 'por mês' }[j.agrup];
+  const rotDia = dias.map(d => d.slice(8) + '/' + d.slice(5, 7));
+  const legenda = `<div class="mini centro">${P.map((p, k) => `<span style="color:${COR_P[k]}">■</span> ${esc(nomes[k])}`).join(' &nbsp; ')}</div>`;
+  const media = a => { const v = a.filter(x => x != null); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
+  const soma = a => a.reduce((x, y) => x + (y || 0), 0);
+  const fmtV = (v, u) => v == null ? '--' : (Math.abs(v) >= 100 ? fmtNum(Math.round(v)) : (Math.round(v * 10) / 10).toString().replace('.', ',')) + (u || '');
+  const vence = (vals, maior) => { const ok = vals.filter(v => v != null); if (ok.length < 2 || vals[0] === vals[1]) return -1; return (maior ? vals[0] > vals[1] : vals[0] < vals[1]) ? 0 : 1; };
+  const placar = [0, 0]; const blocos = [];
+  // métricas diárias (30 dias)
+  const MET = [['passos', 'Passos', '', 'media', true], ['calorias_ativas', 'Calorias ativas', ' kcal', 'media', true], ['minutos_intensidade', 'Minutos de intensidade', ' min', 'media', true],
+    ['sono', 'Sono', ' h', 'media', true], ['energia', 'Body Battery', '', 'media', true], ['stress', 'Estresse médio', '', 'media', false], ['fc_repouso', 'FC em repouso', ' bpm', 'media', false],
+    ['andares', 'Andares subidos', '', 'media', true], ['spo2', 'Oxigenação (SpO2)', '%', 'media', true], ['agua', 'Água', ' ml', 'media', true], ['peso', 'Peso', ' kg', 'media', null]];
+  MET.forEach(([t, tit, u, ag, maior], idx) => {
+    const series = P.map(p => dias.map(d => p.serie?.[d]?.[t] ?? null));
+    if (!series.flat().some(v => v != null)) return;
+    const res = series.map(v => ag === 'soma' ? soma(v) : media(v)); const w = maior == null ? -1 : vence(res, maior); if (w >= 0) placar[w]++;
+    blocos.push(widget({ ico: '📈', cor: '#c9ced6', titulo: `${tit} · ${rotPer}`, corpo: `<div class="casal-res">${P.map((p, k) => `<div${w === k ? ' class="ganhou"' : ''}><b style="color:${COR_P[k]}">${fmtV(res[k], u)}</b><span class="mini">${esc(nomes[k])} · ${ag === 'soma' ? 'total' : 'média/dia'}${w === k ? ' 🏆' : ''}</span></div>`).join('')}</div><canvas class="graf" id="cg${idx}"></canvas>${legenda}` }));
+    blocos._f = blocos._f || []; blocos._f.push(() => grafLinha($('#cg' + idx), series.map((v, k) => ({ v, cor: COR_P[k] })), { fmt: v => fmtV(v) }));
+  });
+  // FC de hoje por hora
+  if (P.some(p => p.fc_hora?.some(v => v != null))) {
+    blocos.push(widget({ ico: ICO.coracao, cor: '#f0506e', titulo: `Frequência cardíaca de ${j.ate === hojeISO() ? 'hoje' : fmtDataCurta(j.ate)} (média por hora)`, corpo: `<canvas class="graf" id="cgFc"></canvas><div class="mini centro">0h → 23h</div>${legenda}` }));
+    blocos._f.push(() => grafLinha($('#cgFc'), P.map((p, k) => ({ v: p.fc_hora, cor: COR_P[k] }))));
+  }
+  // semanas: distância, tempo, calorias, nº de atividades
+  [['d', `Distância ${rotAg}`, m => (m / 1000).toFixed(0) + ' km', 1], ['t', `Tempo de treino ${rotAg}`, s => fmtTempo(s), 1], ['c', `Calorias de treino ${rotAg}`, v => fmtNum(Math.round(v)), 1], ['n', `Atividades ${rotAg}`, v => Math.round(v), 1]].forEach(([k, tit, f], i) => {
+    const g = P.map(p => j.grupos.map(s => +(p.grupos?.[s.k]?.[k] || 0)));
+    const tot = g.map(soma), w = vence(tot, true); if (w >= 0) placar[w]++;
+    blocos.push(widget({ ico: '📊', cor: '#1fa3e3', titulo: `${tit} · ${rotPer}`, corpo: `<div class="casal-res">${P.map((p, q) => `<div${w === q ? ' class="ganhou"' : ''}><b style="color:${COR_P[q]}">${f(tot[q])}</b><span class="mini">${esc(nomes[q])} · total${w === q ? ' 🏆' : ''}</span></div>`).join('')}</div><canvas class="graf" id="cs${i}"></canvas>${legenda}` }));
+    blocos._f.push(() => grafDuplo($('#cs' + i), g, j.grupos.map(s => s.rot), f));
+  });
+  // esportes (30 dias)
+  const tipos = [...new Set(P.flatMap(p => (p.por_tipo || []).map(x => x.tipo)))];
+  if (tipos.length) {
+    const g = P.map(p => tipos.map(t => +((p.por_tipo || []).find(x => x.tipo === t)?.t || 0) / 60));
+    blocos.push(widget({ ico: ICO.atividades, cor: '#3ddc84', titulo: `Minutos por esporte · ${rotPer}`, corpo: `<canvas class="graf" id="cgTipo"></canvas>${legenda}<table class="casal">${tipos.map((t, i) => `<tr><th>${esc(ESPORTES[t]?.n || t)}</th>${P.map((p, k) => { const r = (p.por_tipo || []).find(x => x.tipo === t); return `<td>${r ? `${r.n}× · ${(+r.d / 1000).toFixed(1).replace('.', ',')} km` : '--'}</td>`; }).join('')}</tr>`).join('')}</table>` }));
+    blocos._f.push(() => grafDuplo($('#cgTipo'), g, tipos.map(t => (ESPORTES[t]?.n || t).slice(0, 8)), v => Math.round(v) + ' min'));
+  }
+  // horário preferido de treino
+  if (P.some(p => p.horarios?.some(Boolean))) {
+    blocos.push(widget({ ico: '🕒', cor: '#f5c23b', titulo: `Horário dos treinos · ${rotPer}`, corpo: `<canvas class="graf" id="cgHora"></canvas>${legenda}` }));
+    blocos._f.push(() => grafDuplo($('#cgHora'), P.map(p => p.horarios), [...Array(24)].map((_, h) => h + 'h')));
+  }
+  // recordes e totais
+  const TOT = [['n', 'Atividades (total)', v => fmtNum(+v), true], ['d', 'Distância total', v => (v / 1000).toFixed(1).replace('.', ',') + ' km', true], ['t', 'Tempo total', v => fmtTempo(+v), true], ['c', 'Calorias em treinos', v => fmtNum(Math.round(v)) + ' kcal', true], ['maior', 'Maior distância', v => (v / 1000).toFixed(2).replace('.', ',') + ' km', true], ['fc', 'FC média nos treinos', v => Math.round(v) + ' bpm', null], ['ritmo', 'Melhor ritmo', v => `${Math.floor(v)}:${String(Math.round(v % 1 * 60)).padStart(2, '0')} /km`, false]];
+  blocos.push(widget({ ico: ICO.medalha, cor: '#f5c23b', titulo: `Totais e recordes · ${rotPer}`, corpo: `<table class="casal"><tr><th></th>${P.map((p, k) => `<th style="color:${COR_P[k]}">${esc(nomes[k])}</th>`).join('')}</tr>${TOT.map(([k, tit, f, maior]) => { const v = P.map(p => p.total?.[k] != null ? +p.total[k] : null); const w = maior == null ? -1 : vence(v, maior); if (w >= 0) placar[w]++; return `<tr><th>${tit}</th>${v.map((x, q) => `<td>${x != null && x ? f(x) : '--'}${w === q ? ' 🏆' : ''}</td>`).join('')}</tr>`; }).join('')}</table>` }));
+  const pl = widget({ ico: '🏆', cor: '#f5c23b', titulo: 'Placar do casal', corpo: `<div class="casal-res">${P.map((p, k) => `<div${placar[k] > placar[1 - k] ? ' class="ganhou"' : ''}><b style="color:${COR_P[k]};font-size:34px">${placar[k]}</b><span class="mini">${esc(nomes[k])}</span></div>`).join('')}</div><div class="mini centro">vitórias nas comparações abaixo (${fmtDataCurta(j.de)} a ${fmtDataCurta(j.ate)})</div>` });
+  $('#casalGraf').innerHTML = pl + blocos.join('');
+  (blocos._f || []).forEach(f => f());
+}
+/* ---------- filtro de período da tela inicial (dia, semana, mês, meses, ano, personalizado) ---------- */
+const PERIODOS = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês'], ['meses3', '3 meses'], ['meses6', '6 meses'], ['ano', 'Ano'], ['custom', 'Personalizado']];
+const somaDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + n); return hojeISO(d); };
+const fmtDataCurta = iso => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}${iso.slice(0, 4) !== String(new Date().getFullYear()) ? '/' + iso.slice(2, 4) : ''}` : '--';
+function listaDias(de, ate) { const r = []; for (let d = de; d <= ate && r.length < 3700; d = somaDias(d, 1)) r.push(d); return r; }
+function periodoAtual() {
+  const p = S.per || (S.per = store.get('periodo', { tipo: 'dia' }) || { tipo: 'dia' }), hoje = hojeISO();
+  if (!PERIODOS.some(x => x[0] === p.tipo)) p.tipo = 'dia';
+  const volta = { semana: 6, mes: 29, meses3: 89, meses6: 179, ano: 364 }[p.tipo];
+  if (p.tipo === 'dia') { const dia = p.dia && p.dia <= hoje ? p.dia : hoje; return { tipo: 'dia', de: dia, ate: dia }; }
+  if (p.tipo === 'custom') { let de = p.de || somaDias(hoje, -29), ate = p.ate || hoje; if (de > ate) [de, ate] = [ate, de]; return { tipo: 'custom', de, ate }; }
+  return { tipo: p.tipo, de: somaDias(hoje, -volta), ate: hoje };
+}
+function salvarPeriodo(p) { S.per = p; store.set('periodo', p); }
+function periodoRotulo() {
+  const P = periodoAtual();
+  if (P.tipo === 'dia') return P.ate === hojeISO() ? new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }) : new Date(P.ate + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  return `${fmtDataCurta(P.de)} a ${fmtDataCurta(P.ate)} · ${listaDias(P.de, P.ate).length} dias`;
+}
+function barraPeriodo() {
+  const P = periodoAtual();
+  return `<div class="periodos">${PERIODOS.map(([k, n]) => `<button class="per-bt${P.tipo === k ? ' on' : ''}" data-per="${k}">${n}</button>`).join('')}</div>
+    ${P.tipo === 'dia' ? `<div class="per-nav"><button class="per-seta" data-dia="-1">‹</button><input type="date" id="perDia" value="${P.ate}" max="${hojeISO()}"><button class="per-seta" data-dia="1"${P.ate >= hojeISO() ? ' disabled' : ''}>›</button></div>` : ''}
+    ${P.tipo === 'custom' ? `<form class="per-nav" id="perCustom"><input type="date" name="de" value="${P.de}" max="${hojeISO()}"><span class="mini">até</span><input type="date" name="ate" value="${P.ate}" max="${hojeISO()}"><button class="btn peq">Aplicar</button></form>` : ''}`;
+}
+function ligarPeriodo() {
+  document.querySelectorAll('.per-bt').forEach(b => b.onclick = () => { const p = { ...(S.per || {}), tipo: b.dataset.per }; if (p.tipo === 'dia') p.dia = hojeISO(); salvarPeriodo(p); renderInicio(); });
+  document.querySelectorAll('.per-seta').forEach(b => b.onclick = () => { const P = periodoAtual(); const dia = somaDias(P.ate, +b.dataset.dia); if (dia > hojeISO()) return; salvarPeriodo({ ...S.per, tipo: 'dia', dia }); renderInicio(); });
+  const di = $('#perDia'); if (di) di.onchange = () => { if (di.value) { salvarPeriodo({ ...S.per, tipo: 'dia', dia: di.value > hojeISO() ? hojeISO() : di.value }); renderInicio(); } };
+  const fc = $('#perCustom'); if (fc) fc.onsubmit = e => { e.preventDefault(); const f = Object.fromEntries(new FormData(fc)); if (!f.de || !f.ate) return toast('Escolha as duas datas'); salvarPeriodo({ ...S.per, tipo: 'custom', de: f.de, ate: f.ate }); renderInicio(); };
+}
+// aba da pessoa em períodos maiores que um dia: resumo + gráficos do período
+async function renderPeriodoPessoa(PER) {
+  const j = await apiGet('periodo', { de: PER.de, ate: PER.ate }).catch(() => null);
+  if (!j || !j.ok) { $('#dash').innerHTML = '<div class="vazio"><div class="i">📡</div>Sem conexão</div>'; return; }
+  if (j.usuario) S.usuario = j.usuario;
+  const dias = listaDias(j.de, j.ate), rotAg = { dia: 'por dia', semana: 'por semana', mes: 'por mês' }[j.agrup], t = j.total || {};
+  const fmtV = (v, u) => v == null ? '--' : (Math.abs(v) >= 100 ? fmtNum(Math.round(v)) : (Math.round(v * 10) / 10).toString().replace('.', ',')) + (u || '');
+  const km = m => ((+m || 0) / 1000).toFixed(1).replace('.', ',') + ' km';
+  const blocos = [], fs = [];
+  blocos.push(widget({ ico: ICO.atividades, cor: '#3ddc84', titulo: `Resumo · ${fmtDataCurta(j.de)} a ${fmtDataCurta(j.ate)}`, corpo: kv([['ATIVIDADES', fmtNum(+t.n || 0)], ['DISTÂNCIA', km(t.d)], ['TEMPO', fmtTempo(+t.t || 0)], ['CALORIAS DE TREINO', fmtNum(Math.round(+t.c || 0)) + ' kcal'], ['MAIOR DISTÂNCIA', t.maior ? km(t.maior) : '--'], ['FC MÉDIA NOS TREINOS', t.fc ? Math.round(t.fc) + ' bpm' : '--']]) }));
+  const MET = [['passos', 'Passos', '', '#1fa3e3', 1], ['calorias_ativas', 'Calorias ativas', ' kcal', '#ff8a00', 1], ['minutos_intensidade', 'Minutos de intensidade', ' min', '#3ddc84', 1], ['sono', 'Sono', ' h', '#8a6cff', 0],
+    ['energia', 'Body Battery', '', '#3cc7a8', 0], ['stress', 'Estresse', '', '#f5c23b', 0], ['fc_repouso', 'FC em repouso', ' bpm', '#f0506e', 0], ['andares', 'Andares', '', '#c9ced6', 1], ['spo2', 'SpO2', '%', '#00a0df', 0], ['agua', 'Água', ' ml', '#00a0df', 1], ['peso', 'Peso', ' kg', '#c9ced6', 0]];
+  MET.forEach(([k, tit, u, cor, somar], i) => {
+    const v = dias.map(d => j.serie?.[d]?.[k] ?? null), ok = v.filter(x => x != null); if (!ok.length) return;
+    const tot = ok.reduce((a, b) => a + b, 0), med = tot / ok.length;
+    blocos.push(widget({ ico: '📈', cor, titulo: tit, corpo: kv([...(somar ? [['TOTAL', fmtV(tot, u)]] : []), ['MÉDIA/DIA', fmtV(med, u)], ['MÍN', fmtV(Math.min(...ok), u)], ['MÁX', fmtV(Math.max(...ok), u)], ['DIAS COM DADOS', `${ok.length}/${dias.length}`]]) + `<canvas class="graf" id="pg${i}"></canvas>` }));
+    fs.push(() => grafLinha($('#pg' + i), [{ v, cor, area: true }], { fmt: x => fmtV(x) }));
+  });
+  if (j.grupos.length > 1 && +t.n) [['d', 'Distância', m => (m / 1000).toFixed(1).replace('.', ',') + ' km', '#00a0df'], ['t', 'Tempo de treino', x => fmtTempo(x), '#3ddc84'], ['n', 'Atividades', x => Math.round(x), '#f5c23b']].forEach(([k, tit, f, cor], i) => {
+    const vals = j.grupos.map(g => +(((j.g || {})[g.k] || {})[k] || 0));
+    blocos.push(widget({ ico: '📊', cor, titulo: `${tit} ${rotAg}`, corpo: `<canvas class="graf" id="pb${i}"></canvas><div class="mini centro">total: ${f(vals.reduce((a, b) => a + b, 0))}</div>` }));
+    fs.push(() => grafBarras($('#pb' + i), vals, cor, 0, j.grupos.map(g => g.rot).map((r, q, a) => a.length <= 12 || q % Math.ceil(a.length / 12) === 0 ? r : '')));
+  });
+  if (j.por_tipo?.length) blocos.push(widget({ ico: '🏅', cor: '#3ddc84', titulo: 'Por esporte', corpo: `<table class="casal">${j.por_tipo.map(r => `<tr><th>${(ESPORTES[r.tipo] || ESPORTES.outro).i} ${esc(ESPORTES[r.tipo]?.n || r.tipo)}</th><td>${r.n}×</td><td>${km(r.d)}</td><td>${fmtTempo(+r.t)}</td></tr>`).join('')}</table>` }));
+  if (j.atividades?.length) blocos.push(widget({ ico: ICO.atividades, cor: '#1fa3e3', titulo: `Atividades (${j.atividades.length}${j.atividades.length >= 60 ? '+' : ''})`, corpo: `<table class="casal">${j.atividades.map(a => `<tr class="click" data-tela="atividade" data-arg="${a.id}"><th>${(ESPORTES[a.tipo] || ESPORTES.outro).i} ${esc(a.nome)}<div class="mini">${fmtData(a.inicio)}</div></th><td>${+a.distancia_m ? km(a.distancia_m) : '--'}</td><td>${fmtTempo(+a.duracao_s)}</td></tr>`).join('')}</table>` }));
+  if (blocos.length === 1 && !+t.n) blocos.push('<div class="vazio"><div class="i">📭</div>Nenhum dado neste período</div>');
+  $('#dash').innerHTML = blocos.join('');
+  fs.forEach(f => f());
+}
+// troca entre os relógios/pessoas que este login pode ver (ex.: Alex FR165 / Jeovana FR55)
+function seletorPessoa() {
+  if (!S.pessoas || S.pessoas.length < 2) return '';
+  const rel = { 1: 'FR165', 3: 'FR55' };
+  return `<div class="pessoas">${S.pessoas.map(p => `<button class="pessoa-bt${+p.id === +S.vendo && !S.casal ? ' on' : ''}" data-id="${p.id}">${esc(p.nome)}${rel[p.id] ? ` <small>${rel[p.id]}</small>` : ''}</button>`).join('')}<button class="pessoa-bt${S.casal ? ' on' : ''}" data-id="casal">💑 Casal</button></div>${+S.vendo !== +S.euId && !S.casal ? `<div class="pessoa-aviso">👀 Vendo os dados de ${esc(S.usuario.nome)} — só leitura</div>` : ''}`;
+}
+/* ---------- BEM-ESTAR / HUMOR automático (estimativa pelos dados do relógio) ---------- */
+const HUMORES = { otimo: ['😄', 'Ótimo', '#3ddc84'], bem: ['🙂', 'Bem', '#8bd450'], normal: ['😐', 'Normal', '#f5c23b'], baixo: ['🙁', 'Pra baixo', '#ff8a00'], dificil: ['😢', 'Dia difícil', '#ff4d4f'] };
+async function bemEstarBloco(PER) {
+  const box = $('#bemEstar'); if (!box) return;
+  const de = PER.tipo === 'dia' ? somaDias(PER.ate, -29) : PER.de, ate = PER.ate;
+  const j = await apiGet(S.casal ? 'bem_estar_casal' : 'bem_estar', { de, ate }).catch(() => null);
+  if (!j || !j.ok || !$('#bemEstar')) return;
+  const dias = listaDias(j.de, j.ate), P = j.pessoas;
+  const doDia = (p, d) => p.dias.find(x => x.data === d);
+  const cartao = (p, k) => {
+    const r = PER.tipo === 'dia' ? doDia(p, ate) : null, vals = p.dias.filter(x => x.indice != null);
+    const med = vals.length ? Math.round(vals.reduce((a, x) => a + x.indice, 0) / vals.length) : null;
+    const ind = r ? r.indice : med, hk = r ? r.humor : (ind == null ? null : ind >= 70 ? 'otimo' : ind >= 58 ? 'bem' : ind >= 42 ? 'normal' : ind >= 30 ? 'baixo' : 'dificil');
+    const H = HUMORES[hk] || ['🤔', 'Sem dados', '#9aa0a6'];
+    const cont = {}; p.dias.forEach(x => x.humor && (cont[x.humor] = (cont[x.humor] || 0) + 1));
+    return `<div class="be-p"><div class="be-top"><span class="be-emo">${H[0]}</span><div><div class="be-nome">${P.length > 1 ? esc(p.nome.split(' ')[0]) + ' · ' : ''}<b style="color:${H[2]}">${H[1]}</b></div>
+      <div class="mini">${ind != null ? `índice ${ind}/100` : 'sem dados suficientes'}${r ? ` · ${r.humor_manual ? 'corrigido por você' : 'automático'} · confiança ${r.confianca ?? '--'}%` : PER.tipo !== 'dia' ? ' · média do período' : ''}</div></div></div>
+      ${r?.motivos?.length ? `<ul class="be-mot">${r.motivos.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}
+      ${PER.tipo !== 'dia' ? `<div class="be-cont">${Object.keys(HUMORES).map(h => `<span title="${HUMORES[h][1]}">${HUMORES[h][0]} ${cont[h] || 0}</span>`).join('')}</div>` : ''}
+      ${PER.tipo === 'dia' && !S.casal && +S.vendo === +S.euId ? `<div class="be-corr"><span class="mini">Errou? Toque como você está:</span>${Object.keys(HUMORES).map(h => `<button data-humor="${h}" class="${r?.humor_manual === h ? 'on' : ''}" title="${HUMORES[h][1]}">${HUMORES[h][0]}</button>`).join('')}${r?.humor_manual ? '<button data-humor="" title="Voltar ao automático">↺</button>' : ''}</div>` : ''}</div>`;
+  };
+  box.innerHTML = widget({ ico: '💭', cor: '#b28cff', titulo: PER.tipo === 'dia' ? 'Bem-estar e humor' : 'Bem-estar e humor no período',
+    corpo: `${S.casal ? `<div class="be-casal">${P.map(cartao).join('')}</div>` : cartao(P[0], 0)}
+      <canvas class="graf" id="gBem"></canvas><div class="mini centro">${P.length > 1 ? P.map((p, k) => `<span style="color:${COR_P[k]}">■</span> ${esc(p.nome.split(' ')[0])}`).join(' &nbsp; ') + ' · ' : ''}índice ${PER.tipo === 'dia' ? 'dos últimos 30 dias' : 'no período'} (0–100)</div>
+      <div class="mini" style="margin-top:6px">Estimativa pelos dados do relógio (sono, HRV, estresse, Body Battery, FC e movimento), comparada com o normal de cada pessoa. Não mede emoção — é um sinal para perguntar como a pessoa está.</div>` });
+  grafLinha($('#gBem'), P.map((p, k) => ({ v: dias.map(d => doDia(p, d)?.indice ?? null), cor: P.length > 1 ? COR_P[k] : '#b28cff', area: P.length === 1 })), { min: 0, max: 100 });
+  box.querySelectorAll('[data-humor]').forEach(b => b.onclick = async () => { try { await api('humor_salvar', { data: ate, humor: b.dataset.humor }); toast(b.dataset.humor ? 'Humor anotado — isso ajuda a calibrar' : 'Voltou para o automático'); bemEstarBloco(PER); } catch (x) { toast(x.message); } });
+}
 async function renderInicio(silencioso) {
   if (!(silencioso === true && $('#dash'))) app.innerHTML = `<div class="tela tela-dia">
     <div class="barra-topo">
@@ -179,10 +394,18 @@ async function renderInicio(silencioso) {
       <button class="relogio-bt" data-tela="dispositivo" title="Relógio"><span id="dotRelogio" class="dot"></span>${ICO.relogio}</button>
       <button class="bt-ico" id="btSync" title="Sincronizar">${ICO.sync}</button>
     </div>
-    <div class="dia-sub"><span>${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}</span><button class="link" data-tela="estatisticas">DESEMPENHO ›</button></div>
-    <div id="dash"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('inicio')}</div>`;
+    ${seletorPessoa()}${barraPeriodo()}<div class="dia-sub"><span>${periodoRotulo()}</span><button class="link" data-tela="estatisticas">DESEMPENHO ›</button></div>
+    <div id="bemEstar"></div><div id="casalVivo" class="casal-vivo"></div><div id="dash"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('inicio')}</div>`;
+  document.querySelectorAll('.pessoa-bt').forEach(b => b.onclick = async () => { S.casal = b.dataset.id === 'casal'; try { const j = await api('ver_como', { id: S.casal ? S.euId : +b.dataset.id }); S.usuario = j.usuario; S.metas = j.metas; S.pessoas = j.pessoas; S.vendo = j.vendo; S.euId = j.eu_id; store.del('dash'); renderInicio(); } catch (x) { toast(x.message); } });
   $('#btSync').onclick = async e => { e.currentTarget.classList.add('girando'); try { await api('sincronizar_agora', {}); toast('Sincronizando com a Garmin…'); } catch (x) { toast(x.message); } setTimeout(() => $('#btSync')?.classList.remove('girando'), 2500); };
-  let d; try { d = await apiGet('dashboard'); S.dash = d; store.set('dash', d); } catch { d = store.get('dash'); }
+  ligarPeriodo();
+  bemEstarBloco(periodoAtual());
+  CasalVivo.iniciar();
+  if (S.casal) return renderCasal();
+  const PER = periodoAtual();
+  if (PER.tipo !== 'dia') return renderPeriodoPessoa(PER);
+  const ehHoje = PER.ate === hojeISO();
+  let d; try { d = await apiGet('dashboard', ehHoje ? {} : { data: PER.ate }); S.dash = d; if (ehHoje) store.set('dash', d); } catch { d = ehHoje ? store.get('dash') : null; }
   if (!d || !d.ok) { $('#dash').innerHTML = '<div class="vazio"><div class="i">📡</div>Sem dados offline</div>'; return; }
   S.metas = d.metas; S.usuario = d.usuario;
   const h = d.hoje, m = d.metas; const passos = Math.max(h.passos || 0, Podometro.total());
@@ -227,6 +450,7 @@ function tabbar(ativa) {
   const t = [['inicio', 'Meu dia'], ['atividades', 'Atividades'], ['mapa', 'Mapa'], ['gravar', 'Gravar'], ['saude', 'Saúde'], ['app', 'Apps'], ['mais', 'Mais']];
   // no computador a barra lateral também mostra os atalhos do menu Mais
   const extras = [['relatorios', 'Relatórios', ICO.relatorios], ['estatisticas', 'Desempenho', ICO.barras], ['treinos', 'Treinos', ICO.semana], ['dispositivo', 'Relógio', ICO.relogio], ['perfil', 'Perfil', ICO.perfilUser]];
+  if (+S.euId === 1) extras.splice(3, 0, ['depressao', 'Depressão', '🧠']); // aba privada (só Alequizão) — visível também na barra lateral do desktop
   return `<nav class="tabbar">${t.map(([k, n]) => `<button class="${k === marcada ? 'ativo' : ''} ${k === 'gravar' ? 'gravar' : ''} ${k === 'mais' ? 'so-celular' : ''}" data-tela="${k}"><span class="i">${ICO[k] || ICO.app}</span><span class="n">${n}</span></button>`).join('')}
     <div class="so-desktop lateral-sep">Mais</div>${extras.map(([k, n, ic]) => `<button class="so-desktop ${S.tela === k ? 'ativo' : ''}" data-tela="${k}"><span class="i">${ic}</span><span class="n">${n}</span></button>`).join('')}</nav>`;
 }
@@ -346,7 +570,7 @@ async function renderSaude() {
 
 /* ---------- ATIVIDADES ---------- */
 async function renderAtividades(filtro = '') {
-  app.innerHTML = `<div class="tela"><div class="topo"><h1>Atividades</h1><div class="acoes"><button class="ico-btn" id="bImp" title="Importar GPX">📥</button><button class="ico-btn" id="bMan" title="Adicionar manual">+</button></div></div>
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Atividades</h1><div class="acoes"><button class="ico-btn" id="bImp" title="Importar GPX" aria-label="Importar GPX">${ICO.baixar}</button><button class="ico-btn" id="bMan" title="Adicionar manual" aria-label="Adicionar manual">${ICO.add}</button></div></div>
   <div class="chips"><span class="chip ${!filtro ? 'ativo' : ''}" data-f="">Todas</span>${Object.entries(ESPORTES).slice(0, 8).map(([k, v]) => `<span class="chip ${filtro === k ? 'ativo' : ''}" data-f="${k}">${v.i} ${v.n}</span>`).join('')}</div><div id="lst" class="card"><div class="mini centro">Carregando…</div></div>${tabbar('atividades')}</div>`;
   document.querySelectorAll('.chip[data-f]').forEach(c => c.onclick = () => renderAtividades(c.dataset.f));
   $('#bImp').onclick = importarGPX; $('#bMan').onclick = atividadeManual;
@@ -355,7 +579,7 @@ async function renderAtividades(filtro = '') {
   if (!j.itens.length && !pend.length) { $('#lst').innerHTML = '<div class="vazio"><div class="i">🏃</div>Nenhuma atividade ainda.<br><br><button class="btn peq" data-tela="gravar">Gravar agora</button></div>'; return; }
   $('#lst').className = 'card lista';
   $('#lst').innerHTML = pend.map(a => `<div class="item"><div class="ic">⏳</div><div class="info"><b>${esc(a.nome)}</b><span>Aguardando sincronização</span></div><div class="dir"><b>${fmtDist(a.distancia_m)}</b>${fmtTempo(a.duracao_s)}</div></div>`).join('') +
-    j.itens.map(a => `<div class="item" data-tela="atividade" data-arg="${a.id}"><div class="ic">${ESPORTES[a.tipo]?.i || '⭐'}</div><div class="info"><b>${esc(a.nome)}</b><span>${fmtData(a.inicio)}${a.fc_media ? ' · ❤️ ' + a.fc_media : ''}</span></div><div class="dir"><b>${a.distancia_m > 0 ? fmtDist(a.distancia_m) : fmtNum(a.calorias) + ' kcal'}</b>${fmtTempo(a.duracao_s)}${a.ritmo_medio && a.tipo !== 'ciclismo' ? ' · ' + fmtRitmo(a.ritmo_medio) : a.velocidade_media && a.tipo === 'ciclismo' ? ' · ' + (+a.velocidade_media).toFixed(1) + ' km/h' : ''}</div></div>`).join('');
+    j.itens.map(a => `<div class="item" data-tela="atividade" data-arg="${a.id}"><div class="ic">${ESPORTES[a.tipo]?.i || '⭐'}</div><div class="info"><b>${esc(a.nome)}</b><span>${fmtData(a.inicio)}${a.fc_media ? ' · ❤️ ' + a.fc_media : ''}${a.rua_inicio ? ' · 📍 ' + esc(a.rua_inicio) : ''}</span></div><div class="dir"><b>${a.distancia_m > 0 ? fmtDist(a.distancia_m) : fmtNum(a.calorias) + ' kcal'}</b>${fmtTempo(a.duracao_s)}${a.ritmo_medio && a.tipo !== 'ciclismo' ? ' · ' + fmtRitmo(a.ritmo_medio) : a.velocidade_media && a.tipo === 'ciclismo' ? ' · ' + (+a.velocidade_media).toFixed(1) + ' km/h' : ''}</div></div>`).join('');
 }
 function importarGPX() { modal(`<h2>📥 Importar GPX</h2><div class="campo"><label>Esporte</label><select id="impTipo">${Object.entries(ESPORTES).map(([k, v]) => `<option value="${k}">${v.i} ${v.n}</option>`).join('')}</select></div><div class="campo"><label>Arquivo .gpx (Garmin, Strava, etc.)</label><input type="file" id="impArq" accept=".gpx,application/gpx+xml"></div><button class="btn" id="impOk">Importar</button>`, () => { $('#impOk').onclick = async () => { const f = $('#impArq').files[0]; if (!f) return toast('Escolha um arquivo'); const gpx = await f.text(); try { const j = await api('importar_gpx', { gpx, tipo: $('#impTipo').value }); fecharModal(); toast('Importada!'); navegar('atividade', j.id); } catch (x) { toast(x.message); } }; }); }
 function atividadeManual() {
@@ -384,7 +608,7 @@ async function renderAtividadeDetalhe(id) {
   for (let i = 1; i < pts.length; i++) { if (!pts[i].lat || !pts[i - 1].lat) continue; acc += haversine(pts[i - 1], pts[i]); if (acc - iniD >= 1000) { splits.push({ km: splits.length + 1, seg: (pts[i].t - ini) / 1000, fc: pts[i].fc }); ini = pts[i].t; iniD = acc; } }
   if (acc - iniD > 100 && pts.length) splits.push({ km: +(splits.length + (acc - iniD) / 1000).toFixed(2), seg: (pts[pts.length - 1].t - ini) / 1000, parcial: (acc - iniD) / 1000 });
   const est = ESPORTES[a.tipo] || ESPORTES.outro;
-  $('#det').innerHTML = `<div class="card"><div style="display:flex;gap:12px;align-items:center"><div class="ic" style="font-size:34px">${est.i}</div><div style="flex:1"><div style="font-size:19px;font-weight:700" id="dNome">${esc(a.nome)}</div><div class="mini">${fmtData(a.inicio)} · ${est.n}${a.clima ? ' · ' + esc(a.clima) : ''}</div></div><button class="ico-btn" id="bEd">✏️</button></div></div>
+  $('#det').innerHTML = `<div class="card"><div style="display:flex;gap:12px;align-items:center"><div class="ic" style="font-size:34px">${est.i}</div><div style="flex:1"><div style="font-size:19px;font-weight:700" id="dNome">${esc(a.nome)}</div><div class="mini">${fmtData(a.inicio)} · ${est.n}${a.clima ? ' · ' + esc(a.clima) : ''}</div>${a.ruas && (a.ruas.inicio?.rua || a.ruas.fim?.rua) ? `<div class="mini">📍 ${esc(a.ruas.inicio?.rua || a.ruas.fim?.rua)}${a.ruas.fim?.rua && a.ruas.fim.rua !== a.ruas.inicio?.rua ? ' → ' + esc(a.ruas.fim.rua) : ''}</div>` : ''}</div><button class="ico-btn" id="bEd" title="Editar" aria-label="Editar">${ICO.editar}</button></div></div>
   ${comGps ? '<div class="mapa-det" id="mapa"></div>' : ''}
   <div class="card"><div class="grid3 centro">
    <div><div class="grande" style="font-size:24px">${fmtDist(a.distancia_m)}</div><div class="mini">Distância</div></div>
@@ -442,9 +666,16 @@ const Gravador = {
     this.pausado = false; this.ultimoPt = null; this.ultimoKmVoz = 0; this.iniVolta = { t: ag.getTime(), d: 0 };
     this.render(); this.ligarGPS(); this.ligarTimer(); this.wakeLock(); this.persistir();
     if (store.get('voz', true)) falar('Atividade iniciada');
+    // "Gravar aqui inicia no relógio": enfileira o comando; o app Rastreador (aberto) começa a gravar em até ~30s
+    if (store.get('gravarRelogio', true)) api('gravar_remoto', { sport: tipo }).then(() => toast('▶ Enviado ao relógio — abra o app Rastreador para gravar lá também', 3500)).catch(() => { });
   },
   retomar() { const s = store.get('gravando'); if (!s) return false; this.a = s; this.pausado = true; this.ultimoPt = null; this.render(); this.ligarGPS(); this.ligarTimer(); toast('Atividade recuperada — toque em ▶ para continuar'); return true; },
   persistir() { store.set('gravando', this.a); },
+  atualizarRua() {
+    const p = this.a.pontos.filter(x => x.lat); if (!p.length) return;
+    const u = p[p.length - 1];
+    apiGet('rua', { lat: u.lat, lon: u.lon }).then(r => { const el = $('#ruaAtual'); if (el && r && r.rua) el.textContent = '📍 ' + r.rua + (r.bairro ? ' · ' + r.bairro : ''); }).catch(() => { });
+  },
   render() {
     const gps = ESPORTES[this.a.tipo].gps;
     app.innerHTML = `<div class="gravando">${gps ? '<div class="mapa" id="mapaLive"><div class="status-gps"><span class="pt ruim" id="gpsPt"></span><span id="gpsTxt">Buscando GPS…</span></div></div>' : '<div style="height:12vh;display:flex;align-items:center;justify-content:center;font-size:44px">' + ESPORTES[this.a.tipo].i + '</div>'}
@@ -455,6 +686,7 @@ const Gravador = {
      <div class="dado"><div class="v" id="vExtra">${gps ? '0' : fmtNum(S.fcAtual ? zonaDe(S.fcAtual)?.z || 0 : 0)}</div><div class="l">${gps ? 'elev. m' : 'zona FC'}</div></div>
     </div>
     <div class="mini centro" id="vAvg" style="padding-bottom:4px">${gps ? 'Média --:-- · Máx 0 km/h' : ''}</div>
+    ${gps ? '<div class="mini centro" id="ruaAtual" style="padding-bottom:4px;opacity:.85"></div>' : ''}
     <div class="controles"><button class="ctrl volta" id="cVolta">⏱</button><button class="ctrl ${this.pausado ? 'inicio' : 'pausa'}" id="cPausa">${this.pausado ? '▶' : '❚❚'}</button><button class="ctrl parar" id="cParar">■</button></div></div>`;
     $('#cPausa').onclick = () => this.togglePausa(); $('#cParar').onclick = () => this.parar(); $('#cVolta').onclick = () => this.volta(false);
     $('#bleLink') && ($('#bleLink').onclick = () => BLE.conectar());
@@ -505,6 +737,7 @@ const Gravador = {
       else { $('#vCal').textContent = calorias(this.a.tipo, this.a.duracao_s, this.fcMedia()); $('#vPassos').textContent = fmtNum(Podometro.total() - this.a.passos0); $('#vExtra').textContent = S.fcAtual ? (zonaDe(S.fcAtual)?.z || 0) : '-'; }
       $('#vFC') && ($('#vFC').textContent = S.fcAtual || '--');
       if (this.a.duracao_s % 15 === 0) this.persistir();
+      if (g && (this.a.duracao_s === 3 || this.a.duracao_s % 30 === 0)) this.atualizarRua();
     }, 1000);
   },
   fcMedia() { return this.a.fcs.length ? Math.round(this.a.fcs.reduce((a, b) => a + b) / this.a.fcs.length) : null; },
@@ -596,9 +829,9 @@ async function renderEstatisticas() {
 
 /* ---------- TREINOS ---------- */
 async function renderTreinos() {
-  app.innerHTML = `<div class="tela"><div class="topo"><div style="display:flex;align-items:center;gap:10px"><button class="ico-btn" data-tela="inicio">‹</button><h1>Treinos</h1></div><button class="ico-btn" id="bNovo">+</button></div><div id="tr"></div>${tabbar('inicio')}</div>`;
+  app.innerHTML = `<div class="tela"><div class="topo"><div style="display:flex;align-items:center;gap:10px"><button class="ico-btn" data-tela="inicio">‹</button><h1>Treinos</h1></div><button class="ico-btn" id="bNovo" title="Novo" aria-label="Novo">${ICO.add}</button></div><div id="tr"></div>${tabbar('inicio')}</div>`;
   const j = await apiGet('treinos');
-  $('#tr').innerHTML = j.itens.length ? `<div class="card lista">${j.itens.map(t => `<div class="item"><div class="ic">${t.concluido ? '✅' : ESPORTES[t.tipo]?.i || '📋'}</div><div class="info"><b>${esc(t.nome)}</b><span>${t.agendado ? new Date(t.agendado + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }) + ' · ' : ''}${t.etapas.map(e => e.tipo + ' ' + e.valor + (e.unidade || '')).join(' → ')}</span></div><button class="btn peq ${t.concluido ? 'sec' : ''}" data-id="${t.id}" data-c="${t.concluido ? 0 : 1}">${t.concluido ? 'Reabrir' : 'Concluir'}</button><button class="ico-btn" data-del="${t.id}">🗑</button></div>`).join('')}</div>` : '<div class="vazio"><div class="i">📋</div>Nenhum treino planejado.<br>Crie treinos com etapas (aquecimento, intervalos, recuperação).</div>';
+  $('#tr').innerHTML = j.itens.length ? `<div class="card lista">${j.itens.map(t => `<div class="item"><div class="ic">${t.concluido ? '✅' : ESPORTES[t.tipo]?.i || '📋'}</div><div class="info"><b>${esc(t.nome)}</b><span>${t.agendado ? new Date(t.agendado + 'T12:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' }) + ' · ' : ''}${t.etapas.map(e => e.tipo + ' ' + e.valor + (e.unidade || '')).join(' → ')}</span></div><button class="btn peq ${t.concluido ? 'sec' : ''}" data-id="${t.id}" data-c="${t.concluido ? 0 : 1}">${t.concluido ? 'Reabrir' : 'Concluir'}</button><button class="ico-btn" data-del="${t.id}" title="Excluir" aria-label="Excluir">${ICO.lixo}</button></div>`).join('')}</div>` : '<div class="vazio"><div class="i">📋</div>Nenhum treino planejado.<br>Crie treinos com etapas (aquecimento, intervalos, recuperação).</div>';
   $('#tr').querySelectorAll('[data-c]').forEach(b => b.onclick = async () => { const t = j.itens.find(x => x.id == b.dataset.id); await api('treino_salvar', { ...t, concluido: +b.dataset.c }); renderTreinos(); });
   $('#tr').querySelectorAll('[data-del]').forEach(b => b.onclick = async () => { if (confirm('Excluir treino?')) { await api('treino_excluir', { id: +b.dataset.del }); renderTreinos(); } });
   $('#bNovo').onclick = () => modal(`<h2>Novo treino</h2><form id="fTr"><div class="campo"><label>Nome</label><input name="nome" required placeholder="Ex.: Intervalado 6x400m"></div><div class="linha"><div class="campo"><label>Esporte</label><select name="tipo">${Object.entries(ESPORTES).map(([k, v]) => `<option value="${k}">${v.i} ${v.n}</option>`).join('')}</select></div><div class="campo"><label>Data</label><input type="date" name="agendado"></div></div><div class="campo"><label>Etapas (uma por linha: tipo valor unidade — ex.: Aquecimento 10 min)</label><textarea name="etapas" rows="5">Aquecimento 10 min
@@ -683,7 +916,8 @@ let mapaTimer = null;
 async function renderMapa() {
   clearTimeout(mapaTimer);
   if (!window.L) { await carregarLeaflet(); if (S.tela !== 'mapa') return; }
-  app.innerHTML = `<div class="tela"><div class="topo"><h1>Mapa</h1><div class="acoes"><button class="ico-btn" id="mLive" title="Adicionar link do LiveTrack">📡</button><button class="ico-btn" id="mCentro" title="Centralizar">🎯</button></div></div>
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Mapa</h1><div class="acoes"><button class="ico-btn" id="mLive" title="Adicionar link do LiveTrack" aria-label="Adicionar link do LiveTrack">${ICO.antena}</button><button class="ico-btn" id="mCentro" title="Centralizar" aria-label="Centralizar">${ICO.alvo}</button></div></div>
+  ${seletorPessoa()}<div id="mCasal"></div>
   <div class="card" style="padding:0;overflow:hidden"><div id="mapaG" style="height:52vh;min-height:320px"></div></div>
   <div class="grid2"><div class="card"><h3>Posição atual</h3><div id="mPos" class="mini">Carregando…</div></div><div class="card"><h3>Relógio</h3><div id="mRel" class="mini">…</div></div></div>
   <div class="card"><h3>Camadas</h3><label class="linha-chk"><input type="checkbox" id="cRotas" checked> Todas as rotas (mapa de calor)</label><label class="linha-chk"><input type="checkbox" id="c24" checked> Trilha das últimas 24 h</label><label class="linha-chk"><input type="checkbox" id="cLive" checked> LiveTrack</label><div class="mini" style="margin-top:6px">As posições vêm do app <b>Rastreador Alequizão</b> no relógio (a cada 5 min), do LiveTrack durante treinos e das rotas gravadas. Tudo também chega ao Traccar no dispositivo <b>garminalex</b>.</div></div>
@@ -695,6 +929,7 @@ async function renderMapa() {
   const cores = { corrida: '#ff4d4f', ciclismo: '#ffd23f', caminhada: '#3ddc84', trilha: '#a76cff' };
   async function carregar() {
     if (S.tela !== 'mapa' || !$('#mapaG')) return;
+    if (S.casal) return carregarCasal();
     let j; try { j = await apiGet('mapa'); } catch { mapaTimer = setTimeout(carregar, 30000); return; }
     Object.values(grupos).forEach(g => g.clearLayers());
     j.rotas.forEach(r => L.polyline(r.ll, { color: cores[r.tipo] || '#00a0df', weight: 3, opacity: .45 }).bindPopup(`<b>${esc(r.nome)}</b><br>${fmtData(r.inicio)} · ${fmtDist(r.distancia_m)}`).on('click', () => { }).addTo(grupos.rotas));
@@ -716,6 +951,32 @@ async function renderMapa() {
     mapaTimer = setTimeout(carregar, alternado(20000, 40000));
   }
   const alternado = (a, b) => a + Math.random() * (b - a);
+  // aba Casal: as duas pessoas no mesmo mapa, cada uma com sua cor
+  async function carregarCasal() {
+    let j; try { j = await apiGet('mapa_casal'); } catch { mapaTimer = setTimeout(carregar, 30000); return; }
+    Object.values(grupos).forEach(g => g.clearLayers());
+    const pos = [];
+    j.pessoas.forEach((p, k) => {
+      const cor = COR_P[k], ini = esc((p.nome || '?')[0]);
+      p.rotas.forEach(r => L.polyline(r.ll, { color: cor, weight: 3, opacity: .5 }).bindPopup(`<b>${esc(p.nome)}</b> · ${esc(r.nome)}<br>${fmtData(r.inicio)} · ${fmtDist(r.distancia_m)}`).addTo(grupos.rotas));
+      if (p.trilha24h.length > 1) L.polyline(p.trilha24h.map(x => [x.lat, x.lon]), { color: cor, weight: 4, dashArray: '6 6' }).addTo(grupos.t24);
+      if (p.live_pontos.length) L.polyline(p.live_pontos.map(x => [x.lat, x.lon]), { color: cor, weight: 5 }).addTo(grupos.live);
+      if (p.atual) {
+        const ic = L.divIcon({ className: '', html: `<div class="pino-relogio" style="background:${cor};color:#fff;font-weight:600">${ini}</div>`, iconSize: [40, 40], iconAnchor: [20, 20] });
+        L.marker([p.atual.lat, p.atual.lon], { icon: ic }).bindPopup(`<b>${esc(p.nome)}</b><br>${esc(p.atual.fonte)}<br>${tempoAtras(p.atual.ts)}`).addTo(grupos.atual);
+        pos.push([p.atual.lat, p.atual.lon]);
+      }
+    });
+    if (primeira && pos.length) pos.length > 1 ? mapa.fitBounds(pos, { padding: [60, 60], maxZoom: 16 }) : mapa.setView(pos[0], 15);
+    primeira = false; atual = j.pessoas.find(p => p.atual)?.atual || null;
+    const P = j.pessoas.filter(p => p.atual), dist = P.length === 2 ? distM(P[0].atual, P[1].atual) : null;
+    $('#mPos').innerHTML = j.pessoas.map((p, k) => `<div style="margin-bottom:8px"><b style="color:${COR_P[k]}">● ${esc(p.nome)}</b><br>${p.atual ? `${tempoAtras(p.atual.ts)} · ${esc(p.atual.fonte)}<br><a href="https://www.google.com/maps?q=${p.atual.lat},${p.atual.lon}" target="_blank">${p.atual.lat.toFixed(5)}, ${p.atual.lon.toFixed(5)}</a>` : 'sem posição'}</div>`).join('');
+    $('#mRel').innerHTML = (dist != null ? `📏 Distância entre vocês: <b style="color:#fff">${dist < 1000 ? Math.round(dist) + ' m' : (dist / 1000).toFixed(1).replace('.', ',') + ' km'}</b><br><span class="mini">pelas últimas posições conhecidas</span><br>` : '')
+      + j.pessoas.map((p, k) => `<span style="color:${COR_P[k]}">■</span> ${esc(p.nome.split(' ')[0])}: ${p.rotas.length} rotas`).join(' · ');
+    mapaTimer = setTimeout(carregar, alternado(20000, 40000));
+  }
+  const distM = (a, b) => { const R = 6371000, r = x => x * Math.PI / 180, dl = r(b.lat - a.lat), dn = r(b.lon - a.lon); const h = Math.sin(dl / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+  document.querySelectorAll('.pessoa-bt').forEach(b => b.onclick = async () => { S.casal = b.dataset.id === 'casal'; try { const j = await api('ver_como', { id: S.casal ? S.euId : +b.dataset.id }); S.usuario = j.usuario; S.vendo = j.vendo; S.euId = j.eu_id; S.pessoas = j.pessoas; renderMapa(); } catch (x) { toast(x.message); } });
   $('#cRotas').onchange = e => e.target.checked ? grupos.rotas.addTo(mapa) : grupos.rotas.remove();
   $('#c24').onchange = e => e.target.checked ? grupos.t24.addTo(mapa) : grupos.t24.remove();
   $('#cLive').onchange = e => e.target.checked ? grupos.live.addTo(mapa) : grupos.live.remove();
@@ -804,10 +1065,11 @@ const AoVivo = {
           this.ultimo = { ...j, em: Date.now() }; this.pintar();
           const mudou = this.versao && j.versao !== this.versao; this.versao = j.versao;
           const livre = $('#modal').hidden && !Gravador.a && !document.activeElement?.matches('input,select,textarea');
-          if (mudou && livre && (['inicio', 'saude', 'atividades', 'estatisticas', 'relatorios', 'metrica', 'dispositivo', 'mais'].includes(S.tela) || (S.tela === 'app' && !/^(sim|walkie)/.test(String(S.arg || ''))))) {
+          if (mudou && livre && (['inicio', 'saude', 'atividades', 'estatisticas', 'relatorios', 'metrica', 'dispositivo'].includes(S.tela) || (S.tela === 'app' && !/^(sim|walkie)/.test(String(S.arg || ''))))) {
             const y = window.scrollY;
             if (S.tela === 'inicio') await renderInicio(true);
             else { if (S.tela === 'saude') S.dash = await apiGet('dashboard').catch(() => S.dash); await TELAS()[S.tela](S.arg); }
+            const fc = $('#dash') || $('.tela'); if (fc) { fc.classList.remove('flash-upd'); void fc.offsetWidth; fc.classList.add('flash-upd'); setTimeout(() => fc.classList.remove('flash-upd'), 1100); } // feedback AJAX
             requestAnimationFrame(() => window.scrollTo(0, y));
           }
         }
@@ -818,6 +1080,68 @@ const AoVivo = {
 };
 setInterval(() => AoVivo.pintar(), 5000);
 
+/* ---------- CASAL AO VIVO: quem está em atividade agora (atualiza via AJAX) ---------- */
+const CasalVivo = {
+  timer: null,
+  parar() { clearTimeout(this.timer); this.timer = null; },
+  iniciar() { this.parar(); if (S.pessoas && S.pessoas.length > 1) this.ciclo(); }, // só faz sentido com parceiro para ver
+  async ciclo() {
+    clearTimeout(this.timer);
+    const box = $('#casalVivo');
+    if (!box) return this.parar(); // saiu da tela início
+    if (!document.hidden && S.usuario && S.online) {
+      try {
+        const j = await apiGet('casal_ativos');
+        const ativos = (j?.pessoas || []).filter(p => p.ativo);
+        box.innerHTML = ativos.map(p => {
+          const quando = p.ha == null ? '' : p.ha < 60 ? 'agora mesmo' : 'há ' + Math.round(p.ha / 60) + ' min';
+          const vel = p.vel_kmh ? ('' + p.vel_kmh).replace('.', ',') + ' km/h' : null;
+          return widget({ ico: '🔴', cor: '#ff4d4f', titulo: `${esc(p.nome.split(' ')[0])} está em atividade agora`, tela: 'mapa', classe: 'vivo', corpo:
+            kv([p.rua && ['LOCAL', '📍 ' + esc(p.rua) + (p.bairro ? ' · ' + esc(p.bairro) : '')], p.fc && ['FREQUÊNCIA', p.fc + ' bpm'], vel && ['VELOCIDADE', vel], p.passos != null && ['PASSOS HOJE', fmtNum(p.passos)], p.body_battery != null && ['BODY BATTERY', p.body_battery], ['FONTE', p.fonte + (quando ? ' · ' + quando : '')]])
+            + '<div class="mini" style="margin-top:6px">Toque para acompanhar no mapa ao vivo</div>' });
+        }).join('');
+      } catch { }
+    }
+    this.timer = setTimeout(() => this.ciclo(), 12000);
+  }
+};
+
+/* a11y: nomes acessíveis automáticos para botões só-ícone (título -> aria-label; voltar/avançar) */
+function a11yLabels() {
+  document.querySelectorAll('button[title]:not([aria-label]),a[title]:not([aria-label])').forEach(b => b.setAttribute('aria-label', b.getAttribute('title')));
+  document.querySelectorAll('.ico-btn:not([aria-label]):not([title])').forEach(b => { const t = (b.textContent || '').trim(); const m = { '‹': 'Voltar', '←': 'Voltar', '›': 'Avançar', '+': 'Adicionar' }; if (m[t]) b.setAttribute('aria-label', m[t]); });
+}
+let a11yRAF = 0;
+try { new MutationObserver(() => { if (a11yRAF) return; a11yRAF = requestAnimationFrame(() => { a11yRAF = 0; a11yLabels(); }); }).observe(document.documentElement, { childList: true, subtree: true }); } catch (e) { }
+
+
+/* ---------- ABA APP: TRACCAR CLIENTE ---------- */
+async function renderTraccar() {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('traccar')}
+  <div class="card"><h3>🛰️ Traccar Cliente — versão 2.0.0</h3>
+   <div class="mini" style="margin-bottom:10px">Cliente Traccar para o relógio, com as mesmas funções do app oficial do Android.
+   Envia a posição pelo protocolo OsmAnd e você configura tudo no relógio ou pelos ajustes do app no <b>Garmin Connect</b> do celular.</div>
+   <div class="lista">
+     <div class="item"><div class="ic">🆔</div><div class="info"><b>Identificador do device</b><span>Digite no relógio; o device é criado no Traccar na hora.</span></div></div>
+     <div class="item"><div class="ic">🌐</div><div class="info"><b>Endereço do servidor</b><span>Padrão http://179.199.136.173:5055 — pode apontar para outro Traccar.</span></div></div>
+     <div class="item"><div class="ic">⏱️</div><div class="info"><b>Frequência</b><span>10 s, 15 s, 30 s, 1, 2 ou 5 min com o app aberto.</span></div></div>
+     <div class="item"><div class="ic">📏</div><div class="info"><b>Filtro de distância</b><span>Só envia depois de andar 10 a 500 m. 0 desliga.</span></div></div>
+     <div class="item"><div class="ic">🧭</div><div class="info"><b>Filtro de ângulo</b><span>Só envia ao mudar 15° a 90° de direção. 0 desliga.</span></div></div>
+     <div class="item"><div class="ic">🎯</div><div class="info"><b>Precisão</b><span>Alta, média ou baixa — troca consumo de bateria por exatidão.</span></div></div>
+     <div class="item"><div class="ic">📴</div><div class="info"><b>Guardar offline</b><span>Até 120 posições na fila, reenviadas sozinhas quando a rede volta.</span></div></div>
+     <div class="item"><div class="ic">📋</div><div class="info"><b>Status</b><span>Log dos últimos 30 eventos com hora, igual à tela de status do Android.</span></div></div>
+     <div class="item"><div class="ic">🌙</div><div class="info"><b>Com o app fechado</b><span>Envia a cada 5 min — é o limite do sistema da Garmin, não do app.</span></div></div>
+   </div>
+   <div style="margin-top:12px"><a class="btn" href="app/TraccarCliente.prg" download>⬇ Baixar TraccarCliente.prg</a></div>
+   <div class="mini" style="margin-top:8px">Para instalar: ligue o relógio no computador e copie o arquivo para a pasta <b>GARMIN/APPS</b>. Compilado para Forerunner® 165 / 165 Music.</div>
+  </div>
+  <div class="card"><h3>Testar sem o relógio</h3>
+   <div class="mini" style="margin-bottom:10px">O app roda no Simulador do site com as mesmas telas, ajustes, filtros e tela de Status.</div>
+   <a class="btn peq" href="#/app/sim-fr165-traccar">🖥️ Abrir no Simulador</a>
+   <a class="btn peq" href="http://179.199.136.173:8082" target="_blank" rel="noopener">🗺️ Abrir o Traccar</a>
+  </div>${tabbar('app')}</div>`;
+}
+
 /* ---------- ABA APP: gerar o app do relógio com dispositivo próprio ---------- */
 const slugDevice = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40);
 let appTimer = null;
@@ -827,6 +1151,13 @@ async function renderApp(arg) {
   if (arg === 'mimei') return renderMimei();
   if (arg === 'ben10') return renderBen10();
   if (arg === 'tama') return renderTama();
+  if (arg === 'locais') return renderLocais();
+  if (arg === 'painel') return renderPainel();
+  if (arg === 'sono') return renderSono();
+  if (arg === 'forca') return renderForca();
+  if (arg === 'gasolina') return renderGasolina();
+  if (arg === 'onibus') return renderOnibus();
+  if (arg === 'traccar') return renderTraccar();
   if (arg && String(arg).startsWith('sim')) return renderSimulador(arg);
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('rastreador')}${cartaoPareamento('rastreador', 'Rastreador Alequizão')}
   <div class="card"><h3>📍 Rastreador — gerar app com dispositivo próprio</h3>
@@ -873,7 +1204,7 @@ async function renderApp(arg) {
   async function carregarApps() {
     if (S.tela !== 'app') return;
     const j = await apiGet('apps_listar').catch(() => null); if (!j || !$('#aLista')) return;
-    $('#aLista').innerHTML = j.itens.length ? `<div class="lista">${j.itens.map(a => `<div class="item"><div class="ic">⌚</div><div class="info"><b>${esc(a.nome)}</b><span>${a.tipo === 'walkie' ? '📻 Walkie-Talkie · ' + esc(a.canal || '') : '📍 ' + esc(a.device)} · ${esc(a.modelo)} · ${a.status === 'pronto' ? (a.envios ? a.envios + ' envios · último ' + fmtData(a.ultimo) : 'ainda sem envios') : a.status === 'erro' ? '❌ ' + esc(a.erro || 'erro') : '⚙️ ' + a.status}</span></div>${a.status === 'pronto' && !String(a.modelo).startsWith('loja') ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : String(a.modelo).startsWith('loja') ? '<span class="mini">🏪 loja</span>' : ''}<button class="ico-btn" data-rm="${a.id}" title="Excluir">🗑</button></div>`).join('')}</div>` : 'Nenhum app gerado ainda';
+    $('#aLista').innerHTML = j.itens.length ? `<div class="lista">${j.itens.map(a => `<div class="item"><div class="ic">⌚</div><div class="info"><b>${esc(a.nome)}</b><span>${a.tipo === 'walkie' ? '📻 Walkie-Talkie · ' + esc(a.canal || '') : a.tipo === 'locais' ? '🚗 Meus Locais' : a.tipo === 'tama' ? '🥚 Bichinho' : a.tipo === 'mimei' ? '🍺 ME MIMEI' : (a.tipo === 'ben10' || a.tipo === 'omnitrix') ? '⌚ ' + esc(a.nome) : '📍 ' + esc(a.device)} · ${esc(a.modelo)} · ${a.status === 'pronto' ? (a.envios ? a.envios + ' envios · último ' + fmtData(a.ultimo) : 'ainda sem envios') : a.status === 'erro' ? '❌ ' + esc(a.erro || 'erro') : '⚙️ ' + a.status}</span></div>${a.status === 'pronto' && !String(a.modelo).startsWith('loja') ? `<a class="btn peq" href="api.php?acao=app_baixar&id=${a.id}">⬇</a>` : String(a.modelo).startsWith('loja') ? '<span class="mini">🏪 loja</span>' : ''}<button class="ico-btn" data-rm="${a.id}" title="Excluir" aria-label="Excluir">${ICO.lixo}</button></div>`).join('')}</div>` : 'Nenhum app gerado ainda';
     $('#aLista').querySelectorAll('[data-rm]').forEach(b => b.onclick = async () => { if (confirm('Excluir este app? O relógio com ele instalado para de enviar.')) { await api('app_excluir', { id: +b.dataset.rm }); carregarApps(); } });
     appTimer = setTimeout(carregarApps, 20000);
   }
@@ -882,6 +1213,14 @@ async function renderApp(arg) {
 
 /* ---------- RELÓGIO: dados completos do aparelho conectado ---------- */
 const RECURSOS_PT = { hasOpticalHeartRate: 'Frequência cardíaca no pulso', bluetoothLowEnergyDevice: 'Bluetooth', wifi: 'Wi-Fi', appSupport: 'Apps Connect IQ', liveTrackCapable: 'LiveTrack', gpsRouteCapable: 'Rotas com GPS', bodyBatteryCapable: 'Body Battery', sleepCapable: 'Sono', stressCapable: 'Estresse', pulseOxCapable: 'Oximetria (SpO2)', hrvStatusCapable: 'Status de HRV', trainingReadinessCapable: 'Prontidão para treino', trainingStatusCapable: 'Status de treino', vo2MaxRunCapable: 'VO2 máx corrida', vo2MaxBikeCapable: 'VO2 máx ciclismo', racePredictorCapable: 'Previsão de provas', respirationCapable: 'Respiração', incidentDetectionCapable: 'Detecção de incidentes', musicCapable: 'Música', paymentCapable: 'Garmin Pay', workoutCapable: 'Treinos', trainingPlanCapable: 'Planos de treino', coursesCapable: 'Percursos', morningReportCapable: 'Relatório matinal', sleepScoreCapable: 'Pontuação do sono', enduranceScoreCapable: 'Pontuação de resistência', hillScoreCapable: 'Pontuação de subida', recoveryTimeCapable: 'Tempo de recuperação', runningPowerCapable: 'Potência de corrida', intensityMinutesCapable: 'Minutos de intensidade', floorsClimbedCapable: 'Andares', hydrationCapable: 'Hidratação', menstrualCycleCapable: 'Ciclo menstrual', badgesCapable: 'Medalhas', firmwareUpdateCapable: 'Atualização de firmware', findMyPhoneCapable: 'Encontrar celular' };
+// tempo desde a ativação do relógio na conta Garmin (ex.: "1 mês e 20 dias")
+function tempoDeVida(t) {
+  const dias = Math.max(0, Math.floor((Date.now() / 1000 - t) / 86400));
+  if (dias < 1) return 'ativado hoje';
+  const a = Math.floor(dias / 365), m = Math.floor(dias % 365 / 30), d = dias % 365 % 30;
+  const p = (n, s, pl) => n ? `${n} ${n > 1 ? pl : s}` : '';
+  return [p(a, 'ano', 'anos'), p(m, 'mês', 'meses'), p(d, 'dia', 'dias')].filter(Boolean).join(' e ').replace(/ e (?=.* e )/, ', ') + ` (${dias} dias)`;
+}
 async function renderDispositivo() {
   app.innerHTML = `<div class="tela"><div class="topo"><div style="display:flex;align-items:center;gap:10px"><button class="ico-btn" data-tela="inicio">‹</button><h1>Relógio</h1></div><div class="acoes"><button class="ico-btn" id="dSync" title="Sincronizar">${ICO.sync}</button></div></div><div id="disp"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('inicio')}</div>`;
   const j = await apiGet('dispositivo').catch(() => null);
@@ -894,7 +1233,7 @@ async function renderDispositivo() {
   $('#disp').innerHTML = `
   <section class="w disp-hero">${d?.imagem ? `<img src="${esc(d.imagem)}" alt="" loading="lazy">` : `<div class="disp-sem">${ICO.relogio}</div>`}
     <div class="w-corpo"><div class="disp-nome">${esc(d?.nome || 'Relógio Garmin')}</div><div class="mini">${esc(d?.modelo || '')}</div>
-    ${kv([['CONTA GARMIN', statusInteg], ['ÚLTIMA SINCRONIZAÇÃO', j.integracao.ultimo_sync ? fmtData(j.integracao.ultimo_sync) : '--'], ['RELÓGIO → GARMIN', d?.ultimo_upload ? dt(d.ultimo_upload) : '--'], ['FIRMWARE', d?.firmware || '--'], ['Nº DE SÉRIE', d?.serie || '--'], ['REGISTRADO EM', d?.registrado ? new Date(d.registrado * 1000).toLocaleDateString('pt-BR') : '--']])}</div></section>
+    ${kv([['CONTA GARMIN', statusInteg], ['ÚLTIMA SINCRONIZAÇÃO', j.integracao.ultimo_sync ? fmtData(j.integracao.ultimo_sync) : '--'], ['RELÓGIO → GARMIN', d?.ultimo_upload ? dt(d.ultimo_upload) : '--'], ['FIRMWARE', d?.firmware || '--'], ['Nº DE SÉRIE', d?.serie || '--'], ['ATIVADO EM', d?.registrado ? new Date(d.registrado * 1000).toLocaleDateString('pt-BR') : '--'], ['TEMPO DE VIDA', d?.registrado ? tempoDeVida(d.registrado) : '--'], ['PRIMEIRA ATIVAÇÃO CONHECIDA', d?.primeira ? new Date(d.primeira * 1000).toLocaleDateString('pt-BR') : '--'], ['VIDA DESDE A 1ª ATIVAÇÃO', d?.primeira ? tempoDeVida(d.primeira) : '--']])}<div class="mini" style="margin-top:6px">A Garmin não informa data de fabricação nem o primeiro liga do aparelho — a data mais antiga disponível é o registro na conta.</div></div></section>
   <section class="w" id="cRelogio">${cardRelogio(l, seg)}</section>
   ${j.serie24h.length > 1 ? widget({ ico: ICO.bateria, cor: '#3cc7a8', titulo: 'Bateria nas últimas 24 h', corpo: `<canvas class="graf" id="gBat"></canvas><div class="mini centro"><span class="verde">■</span> bateria % <span style="color:#ef4b5b">■</span> FC <span style="color:#f5c23b">■</span> Body Battery</div>` }) : ''}
   ${widget({ ico: ICO.estresse, cor: '#1fa3e3', titulo: 'Sensores ao vivo', corpo: l ? kv([['FREQUÊNCIA CARDÍACA', (l.fc ?? '--') + ' bpm'], ['BODY BATTERY', l.body_battery ?? '--'], ['ESTRESSE', l.estresse ?? '--'], ['OXIGENAÇÃO', l.spo2 ? l.spo2 + '%' : '--'], ['PASSOS HOJE', l.passos != null ? fmtNum(l.passos) : '--'], ['ALTITUDE', l.alt != null ? Math.round(l.alt) + ' m' : '--'], ['POSIÇÃO', l.lat ? `<a href="#" data-tela="mapa">${(+l.lat).toFixed(5)}, ${(+l.lon).toFixed(5)}</a>` : '--'], ['PRECISÃO DO GPS', l.precisao >= 3 ? 'boa' : l.precisao == 2 ? 'fraca' : l.precisao == 1 ? 'última conhecida' : '--']]) : '<div class="mini">Instale o app Rastreador para ver os sensores ao vivo.</div>' })}
@@ -930,11 +1269,11 @@ function ligarPareamento() {
 }
 
 /* ---------- APPS › WALKIE-TALKIE ALEQUIZÃO ---------- */
-const segApps = ativo => (setTimeout(pintarLojas, 0), '') + `<div id="lojaLinks"></div><div class="seg"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">📍 Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">📻 Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">🍺 ME MIMEI</button><button class="${ativo === 'ben10' ? 'ativo' : ''}" data-tela="app" data-arg="ben10">⌚ Ben 10</button><button class="${ativo === 'tama' ? 'ativo' : ''}" data-tela="app" data-arg="tama">🥚 Bichinho</button><button class="${ativo === 'sim' ? 'ativo' : ''}" data-tela="app" data-arg="sim">🖥️ Simulador</button></div>`;
+const segApps = ativo => (setTimeout(pintarLojas, 0), '') + `<div id="lojaLinks"></div><div class="seg seg-apps"><button class="${ativo === 'rastreador' ? 'ativo' : ''}" data-tela="app">${ICO.rastreador} Rastreador</button><button class="${ativo === 'walkie' ? 'ativo' : ''}" data-tela="app" data-arg="walkie">${ICO.walkie} Walkie-Talkie</button><button class="${ativo === 'mimei' ? 'ativo' : ''}" data-tela="app" data-arg="mimei">${ICO.mimei} ME MIMEI</button><button class="${ativo === 'ben10' ? 'ativo' : ''}" data-tela="app" data-arg="ben10">${ICO.ben10} Ben 10</button><button class="${ativo === 'tama' ? 'ativo' : ''}" data-tela="app" data-arg="tama">${ICO.tama} Bichinho</button><button class="${ativo === 'locais' ? 'ativo' : ''}" data-tela="app" data-arg="locais">${ICO.locais} Meus Locais</button><button class="${ativo === 'sono' ? 'ativo' : ''}" data-tela="app" data-arg="sono">${ICO.sono} Sono</button><button class="${ativo === 'painel' ? 'ativo' : ''}" data-tela="app" data-arg="painel">${ICO.painel} Painel Total</button><button class="${ativo === 'forca' ? 'ativo' : ''}" data-tela="app" data-arg="forca">${ICO.forca} Força</button><button class="${ativo === 'gasolina' ? 'ativo' : ''}" data-tela="app" data-arg="gasolina">${ICO.gasolina} Gasolina Perto</button><button class="${ativo === 'onibus' ? 'ativo' : ''}" data-tela="app" data-arg="onibus">${ICO.onibus} Próximo Ônibus</button><button class="${ativo === 'traccar' ? 'ativo' : ''}" data-tela="app" data-arg="traccar">${ICO.traccar} Traccar</button><button class="${ativo === 'sim' ? 'ativo' : ''}" data-tela="app" data-arg="sim">${ICO.sim} Simulador</button></div>`;
 const WK = { canal: null, ultimo: 0, timer: null, canais: [] };
 async function renderWalkie() {
   clearTimeout(WK.timer);
-  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1><div class="acoes"><button class="ico-btn" id="wkPush" title="Notificações no celular e no relógio">🔔</button></div></div>${segApps('walkie')}
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1><div class="acoes"><button class="ico-btn" id="wkPush" title="Notificações no celular e no relógio" aria-label="Notificações">${ICO.sino}</button></div></div>${segApps('walkie')}
   <div id="wk"><div class="w"><div class="w-corpo"><div class="mini centro">Carregando…</div></div></div></div>${tabbar('app')}</div>`;
   $('#wkPush').onclick = ativarPush;
   const j = await apiGet('walkie_canais').catch(() => null); if (!j) return;
@@ -950,14 +1289,14 @@ async function renderWalkie() {
    <div class="w-corpo"><div class="mini">Código do canal: <b class="codigo">${esc(c.codigo)}</b> · ${c.membros} participante(s) · <a href="#" id="wkCompart">compartilhar</a>${c.dono ? ` · <a href="#" id="wkRenomear">renomear</a> · <a href="#" id="wkExcluir" class="verm">excluir canal</a>` : ` · <a href="#" id="wkSair">sair</a>`}</div>
    <div class="chat" id="wkChat"></div>
    <div class="rapidas" id="wkRapidas"></div>
-   <form class="enviar" id="wkForm"><input id="wkTexto" maxlength="120" placeholder="Mensagem para os relógios" autocomplete="off"><button type="button" class="ico-btn" id="wkMic" title="Falar (vira texto)">🎙️</button><button class="ico-btn enviar-bt" title="Enviar">➤</button></form>
+   <form class="enviar" id="wkForm"><input id="wkTexto" maxlength="120" placeholder="Mensagem para os relógios" autocomplete="off"><button type="button" class="ico-btn" id="wkMic" title="Falar (vira texto)" aria-label="Falar">${ICO.micro}</button><button class="ico-btn enviar-bt" title="Enviar" aria-label="Enviar">${ICO.enviar}</button></form>
    <div class="linha" style="margin-top:10px"><button class="btn laranja peq" id="wkAtencao">📣 Chamar atenção (10 s)</button><button class="btn perigo peq" id="wkSos">🆘 SOS</button></div></div></section>
-  ${widget({ ico: '⚡', cor: '#f5c23b', titulo: 'Mensagens rápidas do relógio', corpo: `<div class="mini" style="margin-bottom:8px">${c.dono ? 'Aparecem no botão START do relógio de todos do canal (até 15, com até 30 letras). O relógio atualiza sozinho.' : 'Só quem criou o canal pode alterar.'}</div><div id="wkFrases"></div>${c.dono ? `<form class="enviar" id="wkFraseForm" style="margin-top:10px"><input id="wkFraseNova" maxlength="30" placeholder="Nova mensagem rápida"><button class="ico-btn enviar-bt" title="Adicionar">+</button></form>` : ''}` })}
+  ${widget({ ico: '⚡', cor: '#f5c23b', titulo: 'Mensagens rápidas do relógio', corpo: `<div class="mini" style="margin-bottom:8px">${c.dono ? 'Aparecem no botão START do relógio de todos do canal (até 15, com até 30 letras). O relógio atualiza sozinho.' : 'Só quem criou o canal pode alterar.'}</div><div id="wkFrases"></div>${c.dono ? `<form class="enviar" id="wkFraseForm" style="margin-top:10px"><input id="wkFraseNova" maxlength="30" placeholder="Nova mensagem rápida"><button class="ico-btn enviar-bt" title="Adicionar" aria-label="Adicionar">${ICO.add}</button></form>` : ''}` })}
   ${widget({ ico: '⌚', cor: '#1fa3e3', titulo: 'Instalar no relógio', corpo: `<div class="mini" style="margin-bottom:10px">Gere o app com o seu nome. No relógio aparecem TODOS os seus canais (o primeiro é o principal; troque em START → Canais). Cada pessoa gera o dela.</div>
     <form id="wkApp"><div class="campo"><label>Seu nome no walkie-talkie</label><input name="nome" maxlength="20" required placeholder="Ex.: Alex" value="${esc((S.usuario.nome || '').split(' ')[0])}"></div>
     <div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="wkModelo" list="wkModelos" value="Forerunner® 165 (fr165)" required autocomplete="off"><datalist id="wkModelos"></datalist><div class="mini" id="wkModeloInfo"></div></div>
     <button class="btn" id="wkAppBt">⬇ Gerar e baixar Walkie-Talkie</button></form><div id="wkProg" class="mini" style="margin-top:10px"></div>` })}
-  ${c.dono ? widget({ ico: '🔗', cor: '#8b7cf6', titulo: 'Integração (Lembretes e outros sistemas)', corpo: `<div class="mini" style="margin-bottom:8px">Com esta chave, o <b>Lembretes</b> (alequizao.com/lembretes) manda avisos direto para os relógios deste canal: cole-a na ficha do contato, no campo “Chave do Walkie-Talkie”. Não compartilhe em público — quem tem a chave consegue enviar mensagens.</div><div class="enviar"><input id="wkChave" readonly value="${esc(c.chave_api || '')}"><button type="button" class="ico-btn" id="wkCopiar" title="Copiar">📋</button><button type="button" class="ico-btn" id="wkNovaChave" title="Gerar nova chave">↻</button></div>` }) : ''}
+  ${c.dono ? widget({ ico: '🔗', cor: '#8b7cf6', titulo: 'Integração (Lembretes e outros sistemas)', corpo: `<div class="mini" style="margin-bottom:8px">Com esta chave, o <b>Lembretes</b> (alequizao.com/lembretes) manda avisos direto para os relógios deste canal: cole-a na ficha do contato, no campo “Chave do Walkie-Talkie”. Não compartilhe em público — quem tem a chave consegue enviar mensagens.</div><div class="enviar"><input id="wkChave" readonly value="${esc(c.chave_api || '')}"><button type="button" class="ico-btn" id="wkCopiar" title="Copiar" aria-label="Copiar">${ICO.copiar}</button><button type="button" class="ico-btn" id="wkNovaChave" title="Gerar nova chave" aria-label="Gerar nova chave">${ICO.sync}</button></div>` }) : ''}
   ${widget({ ico: '🔔', cor: '#3cc7a8', titulo: 'Receber nas notificações do relógio', corpo: `<div id="pushStatus" class="push-status">Verificando este aparelho…</div><div id="pushGuia"></div><div class="linha" style="margin-top:10px"><button class="btn peq" id="wkPush2">🔔 Ativar neste aparelho</button><button class="btn sec peq" id="wkPushTeste">Enviar teste</button></div>` })}` : ''}`;
   document.querySelectorAll('[data-canal]').forEach(e => e.onclick = () => { WK.canal = +e.dataset.canal; WK.ultimo = 0; renderWalkie(); });
   ligarPareamento();
@@ -1071,14 +1410,15 @@ async function renderMimei() {
   if (!j || !j.ok) { const off = navigator.onLine === false; $('#mm').removeAttribute('aria-busy'); $('#mm').innerHTML = `<section class="w w-mimei"><div class="mimei-estado" role="alert"><div class="i" aria-hidden="true">${off ? '📡' : '⚠️'}</div><b>${off ? 'Você está offline' : 'Não deu para carregar o ME MIMEI'}</b><p class="mini">${off ? 'Conecte-se à internet para ver o saldo e registrar lanches.' : 'O servidor não respondeu. Tente de novo em instantes.'}</p><button class="btn" id="mmTentar">Tentar de novo</button></div></section>`; $('#mmTentar').onclick = renderMimei; return; }
   $('#mm').removeAttribute('aria-busy');
   window.MIMEI_BIB = j.biblioteca || [];
+  if (+S.euId === 1) setTimeout(mimeiStatsAdmin, 0); // 1.16.0: estatísticas do app da loja (só admin)
   const r = j.resumo, fmt = n => (Math.round(n * 10) / 10).toString().replace('.', ',');
   // sabores: agrupa lanches com o mesmo "grupo" num bloco só, na posição do primeiro
   const blocos = [], porGrupo = {}; j.lanches.forEach((l, i) => { l._i = i; if (!l.grupo) return blocos.push({ l }); const k = l.grupo.toLowerCase(); if (!porGrupo[k]) blocos.push(porGrupo[k] = { grupo: l.grupo, itens: [] }); porGrupo[k].itens.push(l); });
   blocos.forEach((b, i) => { if (b.itens && b.itens.length === 1) blocos[i] = { l: b.itens[0] }; });
   const semAc = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const abertos = window.MIMEI_ABERTOS || (window.MIMEI_ABERTOS = new Set());
-  const cardLanche = (l, titulo) => `<div class="mimei-card ${r.saldo >= l.kcal ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(l.icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'"><b aria-label="cabem ${fmt(Math.max(0, r.saldo / l.kcal))}">${fmt(Math.max(0, r.saldo / l.kcal))}<span class="x">×</span></b><span>${esc(titulo)}</span><small>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</small><button class="btn sec peq" data-comi="${l.id}" aria-label="Comi 1 ${esc(l.nome)}">Comi 1</button></div>`;
-  const itemLanche = (l, titulo) => `<div class="item mimei-item" data-id="${l.id}" data-busca="${esc(semAc(`${l.nome} ${l.grupo || ''} ${l.sabor || ''}`))}"><span class="mimei-arrasta" aria-hidden="true" title="Arraste para reordenar">⠿</span><img loading="lazy" decoding="async" class="mimei-ic" width="42" height="42" src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(titulo)}</b><span>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</span></div><button class="ico-btn" data-sobe="${l.id}" title="Subir" aria-label="Subir ${esc(l.nome)}">↑</button><button class="ico-btn" data-edita="${l.id}" title="Editar" aria-label="Editar ${esc(l.nome)}">✎</button><button class="ico-btn" data-apaga="${l.id}" title="Apagar" aria-label="Apagar ${esc(l.nome)}">🗑</button></div>`;
+  const cardLanche = (l, titulo) => `<div class="mimei-card ${l.zero || r.saldo >= l.kcal ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(l.icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'">${l.zero ? '<b aria-label="zero, livre" style="font-size:1.05em">ZERO<span class="x"> · livre</span></b>' : `<b aria-label="cabem ${fmt(Math.max(0, r.saldo / l.kcal))}">${fmt(Math.max(0, r.saldo / l.kcal))}<span class="x">×</span></b>`}<span>${esc(titulo)}</span><small>${l.kcal} kcal${l.porcao ? ' · ' + esc(l.porcao) : ''}</small><button class="btn sec peq" data-comi="${l.id}" aria-label="Comi 1 ${esc(l.nome)}">Comi 1</button></div>`;
+  const itemLanche = (l, titulo) => `<div class="item mimei-item" data-id="${l.id}" data-busca="${esc(semAc(`${l.nome} ${l.grupo || ''} ${l.sabor || ''}`))}"><span class="mimei-arrasta" aria-hidden="true" title="Arraste para reordenar">⠿</span><img loading="lazy" decoding="async" class="mimei-ic" width="42" height="42" src="${esc(l.icone || '')}" alt="" onerror="this.style.visibility='hidden'"><div class="info"><b>${esc(titulo)}</b><span>${l.kcal} kcal${l.zero ? ' · ZERO (livre)' : ''}${l.porcao ? ' · ' + esc(l.porcao) : ''}</span></div><button class="ico-btn" data-sobe="${l.id}" title="Subir" aria-label="Subir ${esc(l.nome)}">↑</button><button class="ico-btn" data-edita="${l.id}" title="Editar" aria-label="Editar ${esc(l.nome)}">✎</button><button class="ico-btn" data-apaga="${l.id}" title="Apagar" aria-label="Apagar ${esc(l.nome)}">🗑</button></div>`;
   const kcals = j.lanches.map(l => +l.kcal).filter(k => k > 0), menor = kcals.length ? Math.min(...kcals) : 0;
   const estadoSaldo = r.saldo <= 0 ? 'zerado' : (menor && r.saldo < menor ? 'baixo' : '');
   const pctComido = r.queimado > 0 ? Math.min(100, r.comido / r.queimado * 100) : (r.comido > 0 ? 100 : 0);
@@ -1094,7 +1434,7 @@ async function renderMimei() {
     </div>
     <div class="mimei-tools">
      <label class="mimei-busca"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg><input type="search" id="mmBusca" placeholder="Buscar lanche ou sabor" aria-label="Buscar lanche ou sabor" autocomplete="off" enterkeyhint="search" value="${esc(filtro.q)}"><button type="button" id="mmLimpa" class="${filtro.q ? '' : 'mimei-off'}" aria-label="Limpar busca">✕</button></label>
-     <div class="chips mimei-chips" id="mmChips" role="toolbar" aria-label="Filtrar por tipo">${[['', 'Todos', j.lanches.length], ['*cabe', 'Cabem hoje', j.lanches.filter(l => r.saldo >= l.kcal).length], ...grupos.map(b => [b.grupo, b.grupo, b.itens.length])].map(([k, n, c]) => `<button type="button" class="chip ${filtro.g === k ? 'ativo' : ''}" data-filtro="${esc(k)}" aria-pressed="${filtro.g === k}">${esc(n)} <i>${c}</i></button>`).join('')}</div>
+     <div class="chips mimei-chips" id="mmChips" role="toolbar" aria-label="Filtrar por tipo">${[['', 'Todos', j.lanches.length], ['*cabe', 'Cabem hoje', j.lanches.filter(l => !l.zero && r.saldo >= l.kcal).length], ...grupos.map(b => [b.grupo, b.grupo, b.itens.length])].map(([k, n, c]) => `<button type="button" class="chip ${filtro.g === k ? 'ativo' : ''}" data-filtro="${esc(k)}" aria-pressed="${filtro.g === k}">${esc(n)} <i>${c}</i></button>`).join('')}</div>
      <div class="mimei-contagem" id="mmConta" aria-live="polite"></div>
     </div>
     <div class="mimei-grade" id="mmGrade"></div>
@@ -1113,7 +1453,8 @@ async function renderMimei() {
   document.querySelectorAll('[data-edita]').forEach(b => b.onclick = () => editarLanche(lista.find(x => x.id == b.dataset.edita), [...new Set(lista.map(x => x.grupo).filter(Boolean))]));
   const pintarGrade = () => {
     const q = semAc(filtro.q.trim()), g = filtro.g; let html, n;
-    if (!q && !g) { html = blocos.map(b => b.itens ? `<details class="mimei-grupo"${abertos.has(b.grupo) ? ' open' : ''} data-grupo="${esc(b.grupo)}"><summary class="mimei-card ${r.saldo >= Math.min(...b.itens.map(l => l.kcal)) ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(b.itens[0].icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'"><b>${fmt(Math.max(0, r.saldo / Math.min(...b.itens.map(l => l.kcal))))}<span class="x">×</span></b><span>${esc(b.grupo)} · ${b.itens.length} sabores</span><small>${Math.min(...b.itens.map(l => l.kcal))}–${Math.max(...b.itens.map(l => l.kcal))} kcal</small><span class="btn sec peq" aria-hidden="true">Sabores ▾</span></summary><div class="mimei-grade">${b.itens.map(l => cardLanche(l, l.sabor)).join('')}</div></details>` : cardLanche(b.l, b.l.nome)).join(''); n = null; }
+    const kMin = b => Math.min(...(b.itens.some(l => !l.zero) ? b.itens.filter(l => !l.zero) : b.itens).map(l => l.kcal)) || 1; // 1.17.0: zero fora da conversão
+    if (!q && !g) { html = blocos.map(b => b.itens ? `<details class="mimei-grupo"${abertos.has(b.grupo) ? ' open' : ''} data-grupo="${esc(b.grupo)}"><summary class="mimei-card ${r.saldo >= kMin(b) ? 'cabe' : 'nao-cabe'}"><img decoding="async" src="${esc(b.itens[0].icone || '')}" alt="" loading="lazy" width="46" height="46" onerror="this.style.visibility='hidden'"><b>${fmt(Math.max(0, r.saldo / kMin(b)))}<span class="x">×</span></b><span>${esc(b.grupo)} · ${b.itens.length} sabores</span><small>${Math.min(...b.itens.map(l => l.kcal))}–${Math.max(...b.itens.map(l => l.kcal))} kcal</small><span class="btn sec peq" aria-hidden="true">Sabores ▾</span></summary><div class="mimei-grade">${b.itens.map(l => cardLanche(l, l.sabor)).join('')}</div></details>` : cardLanche(b.l, b.l.nome)).join(''); n = null; }
     else { const it = j.lanches.filter(l => (!g || (g === '*cabe' ? r.saldo >= l.kcal : l.grupo === g)) && (!q || semAc(`${l.nome} ${l.grupo || ''} ${l.sabor || ''}`).includes(q))); n = it.length; html = it.map(l => cardLanche(l, l.grupo && l.sabor && !q && g !== '*cabe' ? l.sabor : l.nome)).join(''); }
     const grade = $('#mmGrade'); if (!grade) return;
     grade.innerHTML = n === 0 ? `<div class="mimei-estado" style="grid-column:1/-1"><div class="i" aria-hidden="true">${g === '*cabe' && !q ? '🫙' : '🔍'}</div><b>${g === '*cabe' && !q ? 'Nada cabe no saldo agora' : 'Nenhum lanche encontrado'}</b><p class="mini">${g === '*cabe' && !q ? 'Mexa-se um pouco para liberar calorias.' : 'Tente outro nome ou limpe os filtros.'}</p>${q || g ? '<button class="btn sec" type="button" id="mmZera">Limpar filtros</button>' : ''}</div>` : html;
@@ -1241,14 +1582,249 @@ function editarLanche(l, grupos = []) {
   });
 }
 
+/* ---------- DEPRESSÃO: análise privada dos sinais de humor de Alex e Jeovana (só Alequizão) ---------- */
+// atualização automática (AJAX): o índice é recalculado no servidor a cada 5 min (bem_estar.py) — a tela busca de novo sozinha
+// a cada 5 min, ao voltar para o app e na virada do dia; só redesenha se os dados mudarem
+const DEP = { assin: '', timer: null, req: 0, per: store.get('depPer', 'mes'), off: 0, j: null, P: null, graf: {} };
+const DEP_PER = { dia: ['Dia', 1], semana: ['Semana', 7], quinzena: ['Quinzena', 15], mes: ['Mês', 30], ano: ['Ano', 365], tudo: ['Tudo', 0] };
+if (!DEP_PER[DEP.per]) DEP.per = 'mes';
+const DEP_FAT = { sono_h: ['Sono', 'h'], sono_score: ['Qualidade do sono', ''], hrv: ['HRV da noite', ' ms'], stress_med: ['Estresse médio', ''], stress_alto_min: ['Tempo em estresse alto', ' min'],
+  bb_max: ['Body Battery máx.', ''], fc_rep: ['FC em repouso', ' bpm'], passos: ['Passos', ''], intensidade: ['Minutos de intensidade', ' min'] };
+const DEP_NIVEL = [['Baixo', '#3ddc84', '✓', 'Sinais majoritariamente positivos no período.'], ['Atenção', '#f5c23b', '!', 'Oscilações e alguns dias puxados para baixo. Vale observar e conversar.'],
+  ['Elevado', '#ff4d4f', '⚠', 'Muitos dias para baixo e índice baixo. Sinal para cuidar — se persistir por semanas, buscar apoio profissional.']];
+const DEP_NOME = { 1: 'Alex' }, DEP_REL = { 1: 'FR165', 3: 'FR55' };
+const depNeg = h => h === 'baixo' || h === 'dificil';
+const depHumor = i => i == null ? null : i >= 70 ? 'otimo' : i >= 58 ? 'bem' : i >= 42 ? 'normal' : i >= 30 ? 'baixo' : 'dificil';
+const depDM = d => d.slice(8, 10) + '/' + d.slice(5, 7);
+const depFmt = (v, u = '') => { if (v == null || !isFinite(v)) return '--'; if (u === 'h') { const m = Math.round(v * 60); return `${Math.floor(m / 60)}h${pad(m % 60)}`; } return (Math.abs(v) >= 1000 ? fmtNum(v) : (Math.round(v * 10) / 10).toString().replace('.', ',')) + u; };
+const depMed = a => { const v = a.filter(x => x != null && isFinite(x)); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : null; };
+
+function renderDepressao() {
+  if (+S.euId !== 1) return navegar('inicio'); // aba privada — só o dono a vê
+  app.innerHTML = `<div class="tela"><div class="topo"><div style="display:flex;align-items:center;gap:10px"><button class="ico-btn" data-tela="mais">‹</button><h1>Depressão</h1></div></div>
+  <div class="seg dep-seg" role="tablist" aria-label="Período">${Object.entries(DEP_PER).map(([k, [n]]) => `<button data-dper="${k}" class="${DEP.per === k ? 'ativo' : ''}">${n}</button>`).join('')}</div>
+  <div class="dep-nav"><button class="ico-btn" id="depAnt" aria-label="Período anterior">‹</button><b id="depRot"></b><button class="ico-btn" id="depProx" aria-label="Próximo período">›</button></div>
+  <div class="mini centro" id="depAt"></div>
+  <div id="dep"><div class="card"><div class="mini centro">Analisando os sinais de Alex e Jeovana…</div></div></div>${tabbar('mais')}</div>`;
+  document.querySelectorAll('[data-dper]').forEach(b => b.onclick = () => { DEP.per = b.dataset.dper; DEP.off = 0; store.set('depPer', DEP.per); document.querySelectorAll('[data-dper]').forEach(x => x.classList.toggle('ativo', x === b)); depMontar(true); });
+  $('#depAnt').onclick = () => { DEP.off++; depMontar(true); };
+  $('#depProx').onclick = () => { if (DEP.off > 0) { DEP.off--; depMontar(true); } };
+  depMontar(true);
+}
+function depAgendar() {
+  clearInterval(DEP.timer);
+  DEP.timer = setInterval(() => $('#dep') ? depMontar() : clearInterval(DEP.timer), 5 * 60 * 1000);
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && $('#dep')) depMontar(); });
+window.addEventListener('resize', () => { clearTimeout(DEP.rz); DEP.rz = setTimeout(() => $('#dep') && depDesenhar(), 150); });
+function depPeriodo() {
+  const hoje = hojeISO(), n = DEP_PER[DEP.per][1];
+  if (!n) return { de: '2025-01-01', ate: hoje, n: 0 };
+  const ate = somaDias(hoje, -DEP.off * n);
+  return { de: somaDias(ate, -(n - 1)), ate, n };
+}
+function depRotulo(P) {
+  if (!P.n) return 'Todo o período';
+  if (P.n === 1) { const d = new Date(P.ate + 'T12:00:00'), s = d.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' }); return P.ate === hojeISO() ? 'Hoje · ' + s : s[0].toUpperCase() + s.slice(1); }
+  return `${depDM(P.de)}${P.de.slice(0, 4) !== P.ate.slice(0, 4) ? '/' + P.de.slice(0, 4) : ''} – ${depDM(P.ate)}/${P.ate.slice(0, 4)}`;
+}
+async function depMontar(forcar) {
+  const box = $('#dep'); if (!box) return;
+  if (forcar) { DEP.assin = ''; depAgendar(); }
+  const P = depPeriodo(), req = ++DEP.req, agora = new Date(), hora = `${pad(agora.getHours())}:${pad(agora.getMinutes())}`;
+  $('#depRot').textContent = depRotulo(P); $('#depProx').disabled = DEP.off === 0; $('#depAnt').disabled = !P.n;
+  if (forcar && DEP.j) box.classList.add('dep-carr');
+  // busca também o período anterior (comparação) e 30 dias de contexto para o filtro "Dia"
+  let j; try { j = await apiGet('bem_estar_casal', { de: P.n ? somaDias(P.de, -Math.max(P.n, 30)) : P.de, ate: P.ate }); } catch { j = null; }
+  if (req !== DEP.req || box !== $('#dep')) return; // filtro mudou ou saiu da tela enquanto carregava
+  box.classList.remove('dep-carr');
+  const at = $('#depAt');
+  if (!j?.ok) { if (DEP.assin) at.textContent = 'Sem conexão · mostrando a última leitura · tentando de novo em 5 min'; else box.innerHTML = '<div class="card"><div class="mini centro">Não foi possível carregar agora. Tentando de novo em 5 min…</div></div>'; return; }
+  const assin = DEP.per + DEP.off + hojeISO() + JSON.stringify(j.pessoas);
+  at.innerHTML = `🔄 Atualizado às ${hora} · atualiza sozinho`;
+  if (assin === DEP.assin) return;
+  DEP.assin = assin; DEP.j = j; DEP.P = P;
+  depPintar();
+}
+function depStats(a) {
+  if (!a.length) return null;
+  const media = Math.round(a.reduce((s, x) => s + x.indice, 0) / a.length);
+  const cont = {}; a.forEach(x => x.humor && (cont[x.humor] = (cont[x.humor] || 0) + 1));
+  const neg = (cont.baixo || 0) + (cont.dificil || 0), pctNeg = Math.round(100 * neg / a.length);
+  let seq = 0, maxSeq = 0; a.forEach(x => depNeg(x.humor) ? (seq++, maxSeq = Math.max(maxSeq, seq)) : seq = 0);
+  const nivel = a.length < 3 ? null : media >= 60 && pctNeg < 20 && maxSeq < 3 ? 0 : media >= 45 && pctNeg < 45 && maxSeq < 5 ? 1 : 2;
+  const ord = [...a].sort((x, y) => x.indice - y.indice);
+  return { n: a.length, media, cont, neg, pctNeg, maxSeq, nivel, pior: ord[0], melhor: ord[ord.length - 1] };
+}
+function depPintar() {
+  const box = $('#dep'), { j, P } = DEP; if (!box || !j) return;
+  const hoje = hojeISO(), dia = P.n === 1, cmpN = dia ? 7 : P.n;
+  const pes = j.pessoas.map((p, k) => {
+    const todos = p.dias.filter(x => x.indice != null);
+    const per = todos.filter(x => x.data >= P.de && x.data <= P.ate);
+    const ant = cmpN ? todos.filter(x => x.data >= somaDias(P.de, -cmpN) && x.data < P.de) : [];
+    return { id: +p.id, k, cor: COR_P[k] || '#9aa0a6', nome: esc(DEP_NOME[p.id] || (p.nome || '').split(' ')[0]), todos, per, ant, ultimo: todos.length ? todos[todos.length - 1].data : null, st: depStats(per), stA: depStats(ant), porDia: Object.fromEntries(p.dias.map(x => [x.data, x])) };
+  });
+  // eixo dos gráficos: o período; no filtro "Dia", os 30 dias até ele; em "Tudo", desde o primeiro dado
+  const prim = pes.map(q => q.todos.find(x => x.data >= (P.n ? P.de : '0'))?.data).filter(Boolean).sort()[0];
+  const ini = !P.n ? (prim || somaDias(hoje, -29)) : dia ? somaDias(P.ate, -29) : P.n >= 365 && prim && prim > P.de ? prim : P.de; // no Ano, o eixo começa no primeiro dado
+  const dias = listaDias(ini, P.ate), longo = dias.length > 60;
+  if (!pes.some(q => q.todos.some(x => x.data >= ini))) { box.innerHTML = '<div class="card"><div class="vazio"><div class="i">🧠</div>Sem dados de bem-estar neste período.<br><br>Escolha outro período ou sincronize os relógios.</div></div>'; return; }
+  const leg = extra => `<div class="dep-leg">${pes.map(q => `<span><i style="background:${q.cor}"></i>${q.nome}${extra ? ' · ' + extra(q) : ''}</span>`).join('')}</div>`;
+  const tipH = (q, x) => { const h = HUMORES[x?.humor]; return `<div><i style="background:${q.cor}"></i>${q.nome} <b>${x?.indice ?? '--'}</b> ${h ? h[0] + ' ' + h[1] : '<span style="color:var(--txt3)">sem dados</span>'}</div>`; };
+  DEP.graf = {};
+  // 1) índice de bem-estar dos dois
+  DEP.graf.ind = { dias, zonas: true, min: 0, max: 100, marca: dia ? P.ate : null, media7: longo, aria: 'Índice de bem-estar diário de Alex e Jeovana',
+    series: pes.map(q => ({ cor: q.cor, v: dias.map(d => q.porDia[d]?.indice ?? null) })), tip: i => pes.map(q => tipH(q, q.porDia[dias[i]])).join('') };
+  // 2) fatores ao longo do tempo (pequenos múltiplos, um eixo por fator)
+  const fatKeys = Object.keys(DEP_FAT).filter(f => pes.some(q => dias.some(d => q.porDia[d]?.fatores?.[f]?.v != null)));
+  fatKeys.forEach(f => { const u = DEP_FAT[f][1]; DEP.graf['f_' + f] = { dias, marca: dia ? P.ate : null, media7: longo, fmt: v => depFmt(u === 'h' ? v : Math.round(v), u), aria: DEP_FAT[f][0] + ' de Alex e Jeovana',
+    series: pes.map(q => ({ cor: q.cor, v: dias.map(d => q.porDia[d]?.fatores?.[f]?.v ?? null) })),
+    tip: i => pes.map(q => { const x = q.porDia[dias[i]]?.fatores?.[f]; return `<div><i style="background:${q.cor}"></i>${q.nome} <b>${depFmt(x?.v, u)}</b>${x ? ` <span style="color:var(--txt2)">(normal ${depFmt(x.normal, u)})</span>` : ''}</div>`; }).join('') }; });
+
+  const cartao = q => {
+    const st = q.st, semDados = q.ultimo && q.ultimo < somaDias(hoje, -1) && P.ate >= q.ultimo;
+    const aviso = semDados ? `<div class="dep-aviso">⚠️ Sem dados do relógio desde ${depDM(q.ultimo)}. Abra o Garmin Connect no celular${q.id === 1 ? '' : ' da ' + q.nome} para sincronizar.</div>` : '';
+    const topo = `<div class="dep-p-top"><span class="dep-p-nome"><i class="dep-dot"></i>${q.nome}</span><small class="mini">${DEP_REL[q.id] || ''}</small></div>`;
+    if (dia) {
+      const r = q.porDia[P.ate], H = HUMORES[r?.humor], med = q.stA?.media;
+      if (!r || r.indice == null) return `<div class="dep-p" style="--c:${q.cor}">${topo}<div class="mini">Sem dados neste dia.</div>${aviso}</div>`;
+      const dif = med != null ? r.indice - med : null;
+      return `<div class="dep-p" style="--c:${q.cor}">${topo}
+        <div class="dep-gauge"><div class="dep-emo">${H?.[0] || '🤔'}</div><div><div class="dep-nivel" style="color:${H?.[2] || 'var(--txt)'}">${H?.[1] || 'Sem dados'}</div>
+        <div class="mini">índice <b>${r.indice}</b>/100${dif != null ? ` · ${dif > 0 ? '+' : ''}${dif} vs média dos 7 dias anteriores` : ''}</div><div class="mini">${r.humor_manual ? 'humor corrigido à mão' : 'automático'} · confiança ${r.confianca ?? '--'}%</div></div></div>
+        ${r.motivos?.length ? `<ul class="be-mot">${r.motivos.map(m => `<li>${esc(m)}</li>`).join('')}</ul>` : ''}${aviso}</div>`;
+    }
+    if (!st) return `<div class="dep-p" style="--c:${q.cor}">${topo}<div class="mini">Sem dados neste período.</div>${aviso}</div>`;
+    const N = st.nivel == null ? null : DEP_NIVEL[st.nivel], H = HUMORES[depHumor(st.media)], tend = q.stA ? st.media - q.stA.media : null;
+    const setaT = tend == null ? '' : tend > 3 ? `<span style="color:#3ddc84">↑ +${tend} vs período anterior</span>` : tend < -3 ? `<span style="color:#ff4d4f">↓ ${tend} vs período anterior</span>` : '<span>→ estável vs período anterior</span>';
+    return `<div class="dep-p" style="--c:${q.cor}">${topo}
+      <div class="dep-gauge"><div class="dep-emo">${H?.[0] || '🤔'}</div><div>${N ? `<span class="dep-tag" style="color:${N[1]}">${N[2]} ${N[0]}</span>` : '<span class="mini">poucos dias para avaliar</span>'}
+      <div class="mini" style="margin-top:4px">índice médio <b>${st.media}</b>/100</div><div class="mini">${setaT}</div></div></div>
+      ${N ? `<div class="mini" style="margin:8px 0 4px">${N[3]}</div>` : ''}
+      ${kv([['Dias com dados', `${st.n}${P.n ? ' de ' + P.n : ''}`], ['Dias pra baixo / difíceis', `${st.neg} (${st.pctNeg}%)`], ['Maior sequência ruim', st.maxSeq + (st.maxSeq === 1 ? ' dia' : ' dias')],
+        ['Melhor dia', `${depDM(st.melhor.data)} · ${st.melhor.indice} ${HUMORES[st.melhor.humor]?.[0] || ''}`], ['Pior dia', `${depDM(st.pior.data)} · ${st.pior.indice} ${HUMORES[st.pior.humor]?.[0] || ''}`]])}${aviso}</div>`;
+  };
+
+  // calendário de humor (uma linha por pessoa)
+  const grande = dias.length <= 31;
+  const cal = `${pes.map(q => `<div class="dep-cal-l"><span class="dep-cal-n"><i class="dep-dot" style="--c:${q.cor}"></i>${q.nome}</span><div class="dep-cal${grande ? ' g' : ''}">${dias.map(d => {
+    const x = q.porDia[d], h = HUMORES[x?.humor], t = `${q.nome} · ${depDM(d)} · ${h ? h[1] + ' · índice ' + x.indice : 'sem dados'}`;
+    return `<b class="${h ? '' : 'vz'}${dia && d === P.ate ? ' sel' : ''}" style="${h ? 'background:' + h[2] : ''}" title="${t}" data-t="${t}">${grande ? +d.slice(8) : ''}</b>`; }).join('')}</div></div>`).join('')}
+    <div class="dep-leg">${Object.values(HUMORES).map(h => `<span><i style="background:${h[2]}"></i>${h[0]} ${h[1]}</span>`).join('')}<span><i class="vz"></i>sem dados</span></div>`;
+
+  // distribuição do humor no período
+  const dist = dia ? '' : widget({ ico: '🥧', cor: '#b28cff', titulo: 'Como foram os dias', corpo: `${pes.map(q => { const st = q.st; if (!st) return `<div class="dep-cal-l"><span class="dep-cal-n"><i class="dep-dot" style="--c:${q.cor}"></i>${q.nome}</span><span class="mini">sem dados</span></div>`;
+    return `<div class="dep-cal-l" style="align-items:center"><span class="dep-cal-n"><i class="dep-dot" style="--c:${q.cor}"></i>${q.nome}</span><div class="dep-dist">${Object.keys(HUMORES).filter(h => st.cont[h]).map(h => { const pc = 100 * st.cont[h] / st.n;
+      return `<span style="flex:${st.cont[h]};background:${HUMORES[h][2]}" title="${HUMORES[h][1]}: ${st.cont[h]} dia(s) · ${Math.round(pc)}%">${pc >= 12 ? HUMORES[h][0] + ' ' + st.cont[h] : ''}</span>`; }).join('')}</div></div>`; }).join('')}
+    <div class="dep-leg">${Object.values(HUMORES).map(h => `<span><i style="background:${h[2]}"></i>${h[0]} ${h[1]}</span>`).join('')}</div>` });
+
+  // fatores comparados ao normal de cada um (média do z no período; + = melhor que o normal)
+  const zMed = (q, f) => depMed(q.per.map(x => x.fatores?.[f]?.z ?? null));
+  const fatPer = Object.keys(DEP_FAT).filter(f => pes.some(q => zMed(q, f) != null));
+  const diverg = fatPer.length ? widget({ ico: '⚖️', cor: '#1c9ddc', titulo: dia ? 'Fatores do dia vs o normal de cada um' : 'Fatores vs o normal de cada um', corpo: `${leg()}
+    <div class="dep-div-eixo"><span>← pior que o normal</span><span>melhor →</span></div>
+    ${fatPer.map(f => `<div class="dep-div-r"><span>${DEP_FAT[f][0]}</span><div class="dep-div-bs">${pes.map(q => { const z = zMed(q, f); if (z == null) return `<div class="dep-div-t" title="${q.nome}: sem este dado"><div class="dep-div-tr"></div><em>--</em></div>`; const w = Math.min(50, Math.abs(z) / 2.5 * 50);
+      return `<div class="dep-div-t" title="${q.nome}: ${z >= 0 ? '+' : ''}${depFmt(z)}"><div class="dep-div-tr"><i style="--c:${q.cor};${z >= 0 ? 'left' : 'right'}:50%;width:${Math.max(w, 1)}%"></i></div><em>${z >= 0 ? '+' : ''}${depFmt(z)}</em></div>`; }).join('')}</div></div>`).join('')}
+    <div class="mini" style="margin-top:6px">Cada barra mostra o quanto o fator ficou acima ou abaixo do <b>normal da própria pessoa</b> (nos 30 dias anteriores). Em estresse e FC, “melhor” quer dizer mais baixo.</div>` }) : '';
+
+  // sincronia do casal
+  let sinc = '';
+  if (pes.length > 1) {
+    const [a, b] = pes, faixa = dia ? dias : listaDias(P.n ? P.de : ini, P.ate);
+    const par = faixa.map(d => [a.porDia[d], b.porDia[d]]).filter(([x, y]) => x?.indice != null && y?.indice != null);
+    if (dia) {
+      const x = a.porDia[P.ate], y = b.porDia[P.ate];
+      if (x?.indice != null && y?.indice != null) sinc = widget({ ico: '💑', cor: '#f0506e', titulo: 'O casal neste dia', corpo: `<div class="mini">${depNeg(x.humor) && depNeg(y.humor) ? 'Os dois estavam para baixo neste dia — um bom dia para desacelerar juntos.' : depNeg(x.humor) || depNeg(y.humor) ? `${depNeg(x.humor) ? a.nome : b.nome} estava mais para baixo — um dia para ${depNeg(x.humor) ? b.nome : a.nome} dar apoio.` : 'Nenhum dos dois ficou para baixo neste dia.'}</div>` });
+    } else if (par.length >= 3) {
+      const juntos = par.filter(([x, y]) => depNeg(x.humor) && depNeg(y.humor)).length, apoio = par.filter(([x, y]) => depNeg(x.humor) !== depNeg(y.humor)).length;
+      let r = null;
+      if (par.length >= 5) { const xs = par.map(p => p[0].indice), ys = par.map(p => p[1].indice), mx = depMed(xs), my = depMed(ys); const sxy = xs.reduce((s, v, i) => s + (v - mx) * (ys[i] - my), 0), sx = Math.sqrt(xs.reduce((s, v) => s + (v - mx) ** 2, 0)), sy = Math.sqrt(ys.reduce((s, v) => s + (v - my) ** 2, 0)); r = sx && sy ? sxy / sx / sy : null; }
+      const frR = r == null ? 'Poucos dias em comum para medir se os humores andam juntos.' : r >= .5 ? 'Os humores de vocês <b>andam juntos</b>: quando um piora, o outro costuma piorar também.' : r >= .2 ? 'Os humores de vocês têm <b>alguma relação</b>.' : r > -.2 ? 'Os humores de vocês são <b>independentes</b> no período.' : 'Os humores de vocês andam <b>em direções opostas</b>: quando um está mal, o outro costuma estar bem.';
+      sinc = widget({ ico: '💑', cor: '#f0506e', titulo: 'Sincronia do casal', corpo: `<div class="mini">${frR}${r != null ? ` <span style="color:var(--txt3)">(correlação ${depFmt(r)})</span>` : ''}</div>
+        <div class="dep-sinc"><div><b>${par.length}</b><span class="mini">dias com dados dos dois</span></div><div><b>${juntos}</b><span class="mini">dias ruins juntos</span></div><div><b>${apoio}</b><span class="mini">dias em que só um estava mal</span></div></div>` });
+    }
+  }
+
+  // o que mais puxou para baixo (motivos dos dias ruins)
+  const dri = { estresse: ['😰', 'Estresse alto'], sono: ['😴', 'Sono ruim'], bateria: ['🔋', 'Body Battery baixa'], hrv: ['💓', 'HRV baixa'], fc: ['❤️', 'FC de repouso alta'], parado: ['🪑', 'Pouca atividade'] };
+  const motivos = q => { const c = {}; q.per.filter(x => depNeg(x.humor)).forEach(x => (x.motivos || []).filter(m => ('' + m).startsWith('⚠')).forEach(m => { const s = ('' + m).toLowerCase();
+    const k = s.includes('estresse') ? 'estresse' : s.includes('sono') || s.includes('dormiu') ? 'sono' : s.includes('body battery') ? 'bateria' : s.includes('hrv') ? 'hrv' : s.includes('fc em repouso') ? 'fc' : s.includes('passos') || s.includes('intensidade') ? 'parado' : null; if (k) c[k] = (c[k] || 0) + 1; }));
+    return Object.entries(c).sort((x, y) => y[1] - x[1]); };
+  const mots = pes.map(q => [q, motivos(q)]);
+  const motW = dia || !mots.some(([, m]) => m.length) ? '' : widget({ ico: '⚠️', cor: '#ff8a00', titulo: 'O que mais puxou para baixo', corpo: `<div class="dep-mot">${mots.map(([q, m]) => `<div><div class="dep-p-nome" style="--c:${q.cor};font-size:14px;margin-bottom:8px"><i class="dep-dot"></i>${q.nome}</div>${m.length ? `<div class="dep-dri">${m.map(([k, n]) => `<div class="dep-dri-i"><span>${dri[k][0]}</span><b>${dri[k][1]}</b><i>${n}×</i></div>`).join('')}</div>` : '<div class="mini">Nenhum dia ruim no período 🎉</div>'}</div>`).join('')}</div><div class="mini" style="margin-top:8px">Quantas vezes cada fator apareceu como motivo nos dias para baixo ou difíceis.</div>` });
+
+  // tabela (acessível / conferência)
+  const linhasTab = [...(dia ? [P.ate] : listaDias(P.n ? P.de : ini, P.ate))].reverse().slice(0, 400);
+  const tab = `<details class="dep-det"><summary>Ver tabela dia a dia</summary><div class="dep-tabw"><table class="dep-tab"><thead><tr><th>Data</th>${pes.map(q => `<th><i class="dep-dot" style="--c:${q.cor}"></i> ${q.nome}</th>`).join('')}</tr></thead><tbody>${linhasTab.map(d => `<tr><td>${depDM(d)}/${d.slice(2, 4)}</td>${pes.map(q => { const x = q.porDia[d], h = HUMORES[x?.humor]; return `<td>${x?.indice != null ? `${h?.[0] || ''} ${x.indice} <span class="mini">${h?.[1] || ''}</span>` : '<span class="mini">—</span>'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div></details>`;
+
+  box.innerHTML = `
+  ${widget({ ico: ICO.depressao, cor: '#b28cff', titulo: dia ? 'Como cada um estava' : 'Sinal de alerta emocional', corpo: `<div class="dep-pessoas">${pes.map(cartao).join('')}</div>` })}
+  ${widget({ ico: '📈', cor: '#b28cff', titulo: 'Índice de bem-estar' + (dia ? ' · 30 dias até o dia' : ''), corpo: `${leg(q => q.st ? 'média ' + q.st.media : dia && q.porDia[P.ate]?.indice != null ? 'no dia ' + q.porDia[P.ate].indice : 'sem dados')}
+    <div class="dep-graf" data-g="ind" style="height:230px"></div>
+    <div class="mini" style="margin-top:6px">0–100 comparado com o normal de cada pessoa. ${longo ? 'Linha forte = média móvel de 7 dias; linha fraca = cada dia. ' : ''}Toque ou passe o dedo no gráfico para ver cada dia.</div>` })}
+  ${widget({ ico: '📅', cor: '#b28cff', titulo: 'Calendário de humor' + (dia ? ' · 30 dias' : ''), corpo: cal })}
+  ${dist}${sinc}${diverg}
+  ${fatKeys.length ? widget({ ico: '🩺', cor: '#3ddc84', titulo: 'Sinais do relógio ao longo do tempo', corpo: `${leg()}<div class="dep-sms">${fatKeys.map(f => { const u = DEP_FAT[f][1];
+      return `<div><div class="dep-sm-t">${DEP_FAT[f][0]}<span>${pes.map(q => `${q.nome} ${depFmt(depMed((dia ? [q.porDia[P.ate]] : q.per).map(x => x?.fatores?.[f]?.v ?? null)), u)}`).join(' · ')}${dia ? '' : ' (média)'}</span></div><div class="dep-graf" data-g="f_${f}" style="height:120px"></div></div>`; }).join('')}</div>` }) : ''}
+  ${motW}
+  ${widget({ ico: '🗒️', cor: '#9aa0a6', titulo: 'Dados', corpo: tab })}
+  ${widget({ ico: '💙', cor: '#3ddc84', titulo: 'Importante', corpo: `
+    <div class="mini">Isto é uma <b>estimativa pelos dados do relógio</b> (sono, HRV, estresse, Body Battery, FC e movimento). <b>Não é diagnóstico de depressão</b> — só um médico ou psicólogo pode avaliar isso. Serve como um sinal para vocês se observarem e conversarem sobre como estão se sentindo.</div>
+    <div class="mini" style="margin-top:8px">Se a tristeza, o desânimo ou a falta de sono persistirem por duas semanas ou mais, procurem um profissional. No Brasil, o <b>CVV</b> atende 24h, de graça e em sigilo: ligue <a href="tel:188">188</a> ou acesse <a href="https://cvv.org.br" target="_blank" rel="noopener">cvv.org.br</a>.</div>
+    <div class="mini" style="margin-top:8px;color:var(--txt3)">🔒 Aba privada — visível só para você.</div>` })}`;
+  box.querySelectorAll('.dep-cal b[data-t]').forEach(b => b.onclick = () => toast(b.dataset.t));
+  depDesenhar();
+}
+// gráficos de linha em SVG com dica (tooltip) e linha-guia ao passar o dedo/mouse
+function depDesenhar() { document.querySelectorAll('.dep-graf[data-g]').forEach(el => { const g = DEP.graf[el.dataset.g]; if (g) depSvg(el, g); }); }
+function depSvg(el, g) {
+  const W = el.clientWidth || 300, H = el.clientHeight || 160, L = g.zonas ? 70 : 40, R = 10, T = 8, B = 20, n = g.dias.length;
+  const vals = g.series.flatMap(s => s.v).filter(v => v != null && isFinite(v));
+  if (!vals.length) { el.innerHTML = '<div class="mini centro" style="padding-top:40px">Sem dados no período</div>'; return; }
+  let mn = g.min ?? Math.min(...vals), mx = g.max ?? Math.max(...vals);
+  if (g.min == null) { const f = (mx - mn) * .12 || Math.abs(mx) * .1 || 1; mn -= f; mx += f; }
+  const x = i => L + (n === 1 ? (W - L - R) / 2 : i / (n - 1) * (W - L - R)), y = v => T + (1 - (v - mn) / (mx - mn)) * (H - T - B);
+  const fmt = g.fmt || (v => Math.round(v));
+  let s = '';
+  if (g.zonas) {
+    [30, 42, 58, 70].forEach(v => s += `<line class="grade" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/>`);
+    [[85, 'otimo'], [64, 'bem'], [50, 'normal'], [36, 'baixo'], [15, 'dificil']].forEach(([v, h]) => s += `<text x="0" y="${y(v) + 3.5}">${HUMORES[h][0]} ${HUMORES[h][1]}</text>`);
+  } else [mn + (mx - mn) * .1, (mn + mx) / 2, mx - (mx - mn) * .1].forEach(v => s += `<line class="grade" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"/><text x="${L - 6}" y="${y(v) + 3.5}" text-anchor="end">${fmt(v)}</text>`);
+  const rot = n > 1 ? [0, Math.floor((n - 1) / 2), n - 1] : [0];
+  rot.forEach((i, k) => s += `<text x="${x(i)}" y="${H - 4}" text-anchor="${n === 1 ? 'middle' : k === 0 ? 'start' : k === rot.length - 1 ? 'end' : 'middle'}">${depDM(g.dias[i])}</text>`);
+  if (g.marca) { const i = g.dias.indexOf(g.marca); if (i >= 0) s += `<line x1="${x(i)}" x2="${x(i)}" y1="${T}" y2="${H - B}" stroke="var(--txt2)" stroke-dasharray="3 3"/>`; }
+  const caminho = v => { let d = '', dentro = false; v.forEach((a, i) => { if (a == null || !isFinite(a)) { dentro = false; return; } d += `${dentro ? 'L' : 'M'}${x(i).toFixed(1)},${y(a).toFixed(1)}`; dentro = true; }); return d; };
+  const m7 = v => v.map((_, i) => { const w = v.slice(Math.max(0, i - 6), i + 1).filter(a => a != null); return w.length >= 3 ? w.reduce((p, q) => p + q, 0) / w.length : null; });
+  g.series.forEach(se => {
+    if (g.media7) s += `<path d="${caminho(se.v)}" fill="none" stroke="${se.cor}" stroke-width="1.5" stroke-opacity=".35" stroke-linejoin="round"/><path d="${caminho(m7(se.v))}" fill="none" stroke="${se.cor}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>`;
+    else s += `<path d="${caminho(se.v)}" fill="none" stroke="${se.cor}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    se.v.forEach((a, i) => { if (a == null) return; const so = (se.v[i - 1] == null) && (se.v[i + 1] == null); if (!g.media7 && (n <= 45 || so)) s += `<circle cx="${x(i)}" cy="${y(a)}" r="${n <= 15 ? 4 : 3}" fill="${se.cor}" stroke="var(--card)" stroke-width="2"/>`; });
+  });
+  el.innerHTML = `<svg width="${W}" height="${H}" role="img" aria-label="${g.aria || ''}">${s}<line class="dep-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--txt2)" stroke-width="1" visibility="hidden"/><g class="dep-pts"></g></svg><div class="dep-tip" hidden></div>`;
+  const cross = el.querySelector('.dep-cross'), pts = el.querySelector('.dep-pts'), tip = el.querySelector('.dep-tip');
+  const mostrar = e => {
+    const r = el.getBoundingClientRect(), px = e.clientX - r.left;
+    const i = n === 1 ? 0 : Math.max(0, Math.min(n - 1, Math.round((px - L) / (W - L - R) * (n - 1)))), cx = x(i);
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    pts.innerHTML = g.series.map(se => se.v[i] == null ? '' : `<circle cx="${cx}" cy="${y(se.v[i])}" r="5" fill="${se.cor}" stroke="var(--card)" stroke-width="2"/>`).join('');
+    const d = new Date(g.dias[i] + 'T12:00:00');
+    tip.innerHTML = `<div class="t">${d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit' })}</div>${g.tip(i)}`; tip.hidden = false;
+    const tw = tip.offsetWidth; tip.style.left = Math.max(0, Math.min(W - tw, cx > W / 2 ? cx - tw - 12 : cx + 12)) + 'px';
+  };
+  el.onpointermove = mostrar; el.onpointerdown = mostrar;
+  el.onpointerleave = () => { cross.setAttribute('visibility', 'hidden'); pts.innerHTML = ''; tip.hidden = true; };
+}
+
 /* ---------- MAIS: menu organizado ---------- */
 function renderMais() {
   const u = S.usuario || {};
   const grupos = [
     ['Seus dados', [['perfil', ICO.perfilUser, 'Perfil e metas', 'Dados pessoais, metas diárias e zonas de FC'], ['perfil', ICO.sync, 'Integrações', 'Garmin, Strava e sincronização', 'integracoes'], ['dispositivo', ICO.relogio, 'Relógio', 'Bateria, sensores e recursos do aparelho']]],
     ['Análises', [['relatorios', ICO.relatorios, 'Relatórios', 'Forma × fadiga, risco de lesão, sono, correlações'], ['estatisticas', ICO.barras, 'Desempenho', 'Totais, recordes e medalhas'], ['treinos', ICO.semana, 'Treinos e calendário', 'Planeje e marque treinos concluídos']]],
-    ['Apps do relógio', [['app', ICO.app, 'Rastreador', 'GPS, bateria e FC ao vivo no Traccar'], ['app', '📻', 'Walkie-Talkie', 'Canais, mensagens rápidas e SOS', 'walkie'], ['app', '🍺', 'ME MIMEI', 'Quantos lanches cabem nas calorias do dia', 'mimei'], ['app', '⌚', 'Omnitrix Ben 10', 'Escolha o alien girando o Omnitrix', 'ben10'], ['app', '🥚', 'Bichinho Virtual', 'Cuide do bichinho: ovo, fome, cocô e sono', 'tama']]],
+    ['Apps do relógio', [['app', ICO.rastreador, 'Rastreador', 'GPS, bateria e FC ao vivo no Traccar'], ['app', ICO.walkie, 'Walkie-Talkie', 'Canais, mensagens rápidas e SOS', 'walkie'], ['app', ICO.mimei, 'ME MIMEI', 'Quantos lanches cabem nas calorias do dia', 'mimei'], ['app', ICO.ben10, 'Omnitrix Ben 10', 'Escolha o alien girando o Omnitrix', 'ben10'], ['app', ICO.tama, 'Bichinho Virtual', 'Cuide do bichinho: ovo, fome, cocô e sono', 'tama'], ['app', ICO.forca, 'Força', 'Treino de musculação com contagem de repetições', 'forca'], ['app', ICO.sono, 'Sono', 'A sua noite no pulso, 100% offline', 'sono'], ['app', ICO.painel, 'Painel Total', 'Mostrador com tudo na tela: hora, FC, passos, clima e mais', 'painel'], ['app', ICO.gasolina, 'Gasolina Perto', 'Os postos mais baratos perto de você, com seta até lá', 'gasolina'], ['app', ICO.onibus, 'Próximo Ônibus', 'Em quantos minutos o ônibus chega no seu ponto', 'onibus']]],
   ];
+  if (+S.euId === 1) grupos[1][1].push(['depressao', ICO.depressao, 'Depressão', 'Humor, estresse e sono de Alex e Jeovana']); // aba privada (só Alequizão)
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Mais</h1></div>
   <section class="w mais-perfil click" data-tela="perfil"><div class="w-corpo"><div class="avatar">${esc((u.nome || '?')[0].toUpperCase())}</div><div><b>${esc(u.nome || '')}</b><span>${esc(u.email || '')}</span></div><span class="seta">›</span></div></section>
   ${grupos.map(([titulo, itens]) => `<div class="mais-grupo">${titulo}</div><section class="w"><div class="lista mais-lista">${itens.map(([tela, ic, nome, desc, arg]) => `<div class="item" data-tela="${tela}"${arg ? ` data-arg="${arg}"` : ''}><div class="ic">${ic}</div><div class="info"><b>${nome}</b><span>${desc}</span></div><span class="seta">›</span></div>`).join('')}</div></section>`).join('')}
@@ -1269,13 +1845,15 @@ function renderMais() {
 const SIM = { dev: null, img: null, app: 'mimei', canvas: null, escala: 1, menu: null, timer: null,
   mimei: { dados: null, sel: 0, icones: {}, estado: '' },
   walkie: { token: null, canal: null, canais: [], mensagens: [], ultimoId: 0, desloc: 0, frases: null, estado: 'Conectando...', cfg: null },
-  rastreador: { ativo: true, leitura: null, estado: '' }, sobre: null };
+  rastreador: { ativo: true, leitura: null, estado: '' },
+  traccar: { ativo: false, nome: null, url: 'http://179.199.136.173:5055', intervalo: 30, distancia: 0, angulo: 0, precisao: 0,
+    buffer: true, enviados: 0, fila: 0, gps: 'sem sinal', estado: 'MENU > Identificador', log: [], status: null }, sobre: null };
 async function renderSimulador(arg) {
   const [modeloArg, appArg] = String(arg || '').split('-').slice(1);
   if (appArg) SIM.app = appArg;
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sim')}
   <section class="w"><header class="w-top"><span class="w-ico">🖥️</span><span class="w-tit">Simulador do relógio</span></header><div class="w-corpo">
-    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador'], ['tama', '🥚', 'Bichinho'], ['omnitrix', '🟢', 'Omnitrix']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
+    <div class="sim-apps">${[['mimei', '🍺', 'ME MIMEI'], ['walkie', '📻', 'Walkie-Talkie'], ['rastreador', '📍', 'Rastreador'], ['tama', '🥚', 'Bichinho'], ['omnitrix', '🟢', 'Omnitrix'], ['locais', '🚗', 'Meus Locais'], ['sono', '🌙', 'Sono'], ['painel', '📊', 'Painel Total'], ['forca', '🏋️', 'Força'], ['gasolina', '⛽', 'Gasolina Perto'], ['onibus', '🚌', 'Próximo Ônibus'], ['traccar', '🛰️', 'Traccar']].map(([k, i, n]) => `<button class="chip ${SIM.app === k ? 'ativo' : ''}" data-simapp="${k}">${i} ${n}</button>`).join('')}</div>
     <div class="sim-barra"><input id="simModelo" list="simModelos" value="Forerunner® 165 (fr165)" autocomplete="off"><datalist id="simModelos"></datalist><button class="btn peq" id="simFoto">📷 Baixar foto</button></div>
     <div class="sim-palco"><canvas id="simCanvas"></canvas></div>
     <div class="mini centro" id="simDica"></div>
@@ -1312,12 +1890,26 @@ function simPonto(e) { const r = SIM.canvas.getBoundingClientRect(); return { x:
 async function simIniciarApp() {
   if (!document.querySelector('#simCanvas')) { SIM.canvas = null; return; }
   clearTimeout(SIM.timer); SIM.menu = null; SIM.sobre = null;
+  clearInterval(SIM.trTimer); SIM.traccar.status = null;
+  if (SIM.app === 'traccar' && SIM.traccar.ativo) { SIM.traccar.ativo = false; simTraccarLigar(); }
   const dicas = { mimei: 'Deslize ou use ↑ ↓ ← → para trocar de lanche; START (Enter) abre "Comi" e "Desfazer". Ações valem de verdade.',
     walkie: 'Você conta como um relógio próprio: abra o simulador em outra conta (ex.: jeovana) para conversar. START abre mensagens rápidas, escrever, chamar atenção, SOS e canais.',
     omnitrix: 'START (Enter) abre o Omnitrix, ↑ ↓ giram entre os 59 aliens e START transforma. É o mesmo Omnitrix da aba Ben 10.',
     tama: 'Cuide do bichinho: ↑ ↓ escolhem o ícone, START (Enter) usa, VOLTAR (Esc) cancela. É o mesmo bichinho da aba Bichinho.',
-    rastreador: 'Mostra a última leitura real do seu relógio. O simulador não envia posição nem bateria (para não criar dados falsos). MENU (segurar UP) abre Sobre.' };
+    locais: 'Salve onde deixou o carro, a moto, o pet ou as chaves e volte pela seta. START abre, ↑ ↓ andam na lista e trocam bússola/informações/mapa, MENU abre as ações. Tudo offline.',
+    painel: 'Mostrador (watch face) com hora grande, data, frequência cardíaca com zona, calorias, bateria, passos, distância, andares, subida, estresse, minutos de intensidade, Body Battery, clima, GPS, nascer e pôr do sol, notificações e alarmes — tudo na mesma tela.',
+    sono: 'Mostra a sua última noite de sono com estágios, hipnograma, frequência cardíaca, respiração, HRV, estresse, Body Battery e as últimas 7 noites. ↑ ↓ trocam de página e START atualiza pelo servidor.',
+    forca: 'Treino de musculação que o FR55 não tem de fábrica: conta as repetições pelo acelerômetro, separa as séries, controla o descanso e grava a atividade em FIT para o Garmin Connect. START começa e fecha a série, ↑ ↓ corrigem a contagem, MENU (segurar UP) abre o menu do treino e VOLTAR (Esc) pausa.',
+    gasolina: 'Os 5 postos mais baratos perto de você, com preço real da SEFAZ-AL. ↑ ↓ andam entre os postos, START (Enter) abre a seta até o posto, MENU (segurar UP) troca o combustível ou atualiza, VOLTAR (Esc) volta. Posição: o GPS do navegador se já estiver liberado; senão, um ponto fixo em Maceió.',
+    onibus: 'Em quantos minutos chega o próximo ônibus no seu ponto favorito, com dados reais (ao vivo pelo GPS dos ônibus ou a tabela programada de hoje). ↑ ↓ trocam de favorito, START (Enter) ou MENU (segurar UP) abrem as opções (atualizar, perto de mim, alerta 2 min, principal, remover, sincronizar), VOLTAR (Esc) volta. Favoritos: os do painel (aba Próximo Ônibus) + os salvos aqui pelo "Perto de mim".',
+    traccar: 'Cliente Traccar com as mesmas funções do app do Android: MENU (segurar UP) abre identificador, servidor, frequência, distância, ângulo, precisão, guardar offline e a tela de Status. START liga e para o serviço. Fechado, o relógio envia a cada 5 min (limite da Garmin).',
+    rastreador: 'Mostra a última leitura real do seu relógio. O simulador não envia posição nem bateria (para não criar dados falsos). MENU (segurar UP) abre Sobre. Versão 1.0.1: com o app fechado, envia bateria e saúde a cada 5 min e só manda posição quando há GPS novo.' };
   $('#simDica') && ($('#simDica').textContent = dicas[SIM.app]);
+  if (SIM.app === 'sono') { await sonoCarregar(); }
+  if (SIM.app === 'painel') { await painelCarregar(); }
+  if (SIM.app === 'gasolina') { GAS.tela = 'lista'; GAS.menu = -1; gasBuscar(); }
+  if (SIM.app === 'onibus') { ONI.modo = 0; ONI.p = null; ONI.carregado = false; oniAnimar(); oniAtualizar(); }
+  clearInterval(SIM.forcaTimer); if (SIM.app === 'forca') { forcaIniciar(); SIM.forcaTimer = setInterval(() => { if (SIM.app === 'forca' && SIM.canvas) { forcaTique(); simDesenhar(); } else clearInterval(SIM.forcaTimer); }, 1000); }
   if (SIM.app === 'mimei') await simMimeiDados();
   if (SIM.app === 'walkie') await simWalkieIniciar();
   if (SIM.app === 'rastreador') await simRastreadorDados();
@@ -1327,13 +1919,30 @@ async function simIniciarApp() {
     if (!B10.aliens.length) { try { B10.aliens = await fetch('app/ben10/aliens.json?v=2').then(x => x.json()); } catch (e) { } }
     SIM.b10Timer = setInterval(() => { if (SIM.app === 'omnitrix' && SIM.canvas) { b10Tique(); simDesenhar(); } else clearInterval(SIM.b10Timer); }, 50);
   }
+  clearInterval(SIM.locTimer); if (SIM.app === 'locais') { locIniciar(); SIM.locTimer = setInterval(() => { if (SIM.app === 'locais' && SIM.canvas) { locTique(); simDesenhar(); } else clearInterval(SIM.locTimer); }, 1000); }
   clearInterval(SIM.tamaTimer); clearInterval(TAMA.anim2); TAMA.anim2 = null; if (SIM.app === 'tama') { tamaCarregar(); tamaSimular(); SIM.tamaTimer = setInterval(() => { if (SIM.app === 'tama' && SIM.canvas) tamaTique(); else clearInterval(SIM.tamaTimer); }, 250); }
   simDesenhar();
+}
+/* ---- ME MIMEI 1.16.0: estatísticas (só admin) ---- */
+function mimeiStatsAdmin() {
+  const mm = $('#mm'); if (!mm || $('#mmStats')) return;
+  const s = document.createElement('section'); s.className = 'w'; s.id = 'mmStats';
+  s.innerHTML = `<header class="w-top"><span class="w-ico" aria-hidden="true">📊</span><span class="w-tit">ME MIMEI — estatísticas da loja (admin)</span></header><div class="w-corpo"><button class="btn sec peq" id="mmStatsBt">Carregar estatísticas</button><div id="mmStatsC"></div></div>`;
+  mm.appendChild(s);
+  $('#mmStatsBt').onclick = async () => {
+    const c = $('#mmStatsC'); c.textContent = 'Carregando…';
+    const j = await apiGet('mimei_stats').catch(x => ({ ok: false, erro: x.message })); if (!j.ok) { c.textContent = j.erro || 'Falhou'; return; }
+    const tab = (t, l, k = 'k') => `<h4 style="margin:12px 0 4px">${t}</h4>${l.length ? `<div class="lista">${l.map(x => `<div class="item"><div class="info"><b>${esc(x[k] ?? '?')}</b></div><span class="mini">${x.n}${x.qtd ? ' · ' + String(x.qtd).replace('.', ',') + ' un.' : ''}</span></div>`).join('')}</div>` : '<p class="mini">Sem dados</p>'}`;
+    const mx = Math.max(1, ...j.ativos.map(a => +a.n));
+    c.innerHTML = `<p class="mini">${j.total} relógios no total · ${j.ativos7} ativos nos últimos 7 dias · ${j.pares} pares de amigos</p>
+      <h4 style="margin:12px 0 4px">Relógios ativos por dia (30 dias)</h4>${j.ativos.length ? `<div style="display:flex;align-items:flex-end;gap:2px;height:80px" role="img" aria-label="Relógios ativos por dia">${j.ativos.map(a => `<i title="${a.d}: ${a.n}" style="flex:1;background:var(--azul,#2563eb);height:${Math.max(4, a.n / mx * 100)}%;border-radius:2px"></i>`).join('')}</div>` : '<p class="mini">Sem dados</p>'}
+      ${tab('Lanches mais registrados', j.lanches, 'nome')}${tab('Registrado por', j.origens)}${tab('Países', j.paises)}${tab('Idiomas', j.idiomas)}${tab('Versões do app', j.versoes)}${tab('Modelos', j.modelos)}`;
+  };
 }
 /* ---- ME MIMEI ---- */
 async function simMimeiDados() {
   const j = await apiGet('mimei_estado').catch(() => null); if (!j?.ok) return;
-  const r = j.resumo; j.lanches.forEach(l => l.pode = l.kcal > 0 ? Math.round(r.saldo / l.kcal * 10) / 10 : 0);
+  const r = j.resumo; j.lanches.forEach(l => l.pode = l.kcal > 0 && !l.zero ? Math.round(r.saldo / l.kcal * 10) / 10 : 0); // 1.17.0: zero fora da conversão
   const ult = j.consumo[0]; r.ultimo = ult ? `${String(+ult.qtd).replace('.', ',')}x ${ult.nome}` : null;
   const M = SIM.mimei; M.dados = j; if (M.sel >= j.lanches.length) M.sel = 0; M.estado = ''; simCarregarIcones(); simDesenhar();
 }
@@ -1375,7 +1984,12 @@ async function simRastreadorDados() {
 /* ---- teclas e menus ---- */
 function simTecla(t) {
   if (SIM.sobre) { if (t === 'next') SIM.sobre.deslocamento++; else if (t === 'prev') SIM.sobre.deslocamento = Math.max(0, SIM.sobre.deslocamento - 1); else if (t === 'back') SIM.sobre = null; return simDesenhar(); }
-  if (SIM.app === 'rastreador' && t === 'menu') { SIM.sobre = { app: 'Rastreador', versao: '', deslocamento: 0 }; return simDesenhar(); }
+  if (SIM.app === 'traccar' && SIM.traccar.status) { const T = SIM.traccar;
+    if (t === 'next') T.status.deslocamento++; else if (t === 'prev') T.status.deslocamento = Math.max(0, T.status.deslocamento - 1);
+    else if (t === 'back') T.status = null; else if (t === 'start') { T.log = []; }
+    return simDesenhar(); }
+  if (SIM.app === 'traccar' && (t === 'menu' || (t === 'start' && !SIM.traccar.nome))) { simMenuTraccar(); return simDesenhar(); }
+  if (SIM.app === 'rastreador' && t === 'menu') { SIM.sobre = { app: 'Rastreador Alequizão', versao: '1.0.1', deslocamento: 0 }; return simDesenhar(); }
   if (SIM.menu) {
     const m = SIM.menu;
     if (t === 'next') m.i = (m.i + 1) % m.itens.length; else if (t === 'prev') m.i = (m.i - 1 + m.itens.length) % m.itens.length;
@@ -1387,11 +2001,20 @@ function simTecla(t) {
   if (SIM.app === 'walkie') { const W = SIM.walkie;
     if (t === 'prev') W.desloc = Math.min(W.desloc + 1, Math.max(0, W.mensagens.length - 1)); else if (t === 'next') W.desloc = Math.max(0, W.desloc - 1); else if (t === 'start' || t === 'menu') simMenuWalkie(); }
   if (SIM.app === 'omnitrix') { b10Acao({ start: 'start', back: 'voltar', prev: 'cima', next: 'baixo', menu: 'start' }[t] || 'start'); return simDesenhar(); }
+  if (SIM.app === 'sono') { sonoBotao(t); return simDesenhar(); }
+  if (SIM.app === 'forca') { forcaBotao(t); return simDesenhar(); }
+  if (SIM.app === 'gasolina') { gasBotao(t); return simDesenhar(); }
+  if (SIM.app === 'onibus') { oniBotao(t); return simDesenhar(); }
+  if (SIM.app === 'locais') { locBotao(t); return; }
   if (SIM.app === 'tama') { tamaBotao({ start: 'start', back: 'back', prev: 'cima', next: 'baixo', menu: 'start' }[t] || 'start'); return simDesenhar(); }
+  if (SIM.app === 'traccar' && t === 'start') { simTraccarLigar(); return simDesenhar(); }
   if (SIM.app === 'rastreador' && t === 'start') { SIM.rastreador.ativo = !SIM.rastreador.ativo; }
   simDesenhar();
 }
 function simToque(yTela) {
+  if (SIM.app === 'gasolina') return gasToque(yTela, SIM.dev.tela.height);
+  if (SIM.app === 'onibus') { oniToque(yTela, SIM.dev.tela.height); return simDesenhar(); }
+  if (SIM.app === 'locais') return simTecla('start');
   if (!SIM.menu) { if (SIM.app !== 'rastreador') simTecla('start'); return; }
   const m = SIM.menu, alt = SIM.dev.tela.height / 5, i = Math.floor((yTela - alt) / alt) + m.topo;
   if (i >= 0 && i < m.itens.length) { m.i = i; simEscolher(m.itens[i]); }
@@ -1400,7 +2023,7 @@ function simMenuMimei() {
   const M = SIM.mimei, l = M.dados.lanches[M.sel], r = M.dados.resumo;
   const itens = [{ t: 'Comi 1', s: l.porcao || `${l.kcal} kcal`, q: 1 }, { t: 'Comi meia', s: `${Math.round(l.kcal / 2)} kcal`, q: 0.5 }, { t: 'Comi 2', s: `${l.kcal * 2} kcal`, q: 2 }];
   if (r.ultimo) itens.push({ t: 'Desfazer ultimo', s: r.ultimo, a: 'desfazer' });
-  itens.push({ t: 'Atualizar', s: 'v1.8.0', a: 'atualizar' }, { t: 'Sobre', s: 'desenvolvedor', a: 'sobre' });
+  itens.push({ t: 'Sequencia', s: 'dias dentro do saldo', a: 'mm_info' }, { t: 'Conquistas', s: 'veja em /garmin/meu', a: 'mm_info' }, { t: 'Amigos', s: 'parear em /garmin/meu', a: 'mm_info' }, { t: 'Atualizar', s: 'v1.17.0', a: 'atualizar' }, { t: 'Sobre', s: 'desenvolvedor', a: 'sobre' });
   SIM.menu = { titulo: l.nome, itens, i: 0, topo: 0 };
 }
 function simMenuWalkie() {
@@ -1413,8 +2036,24 @@ function simMenuWalkie() {
 }
 async function simEscolher(it) {
   const pai = SIM.menu; SIM.menu = null;
-  if (it.a === 'sobre') { SIM.sobre = { app: SIM.app === 'mimei' ? 'ME MIMEI' : 'Walkie-Talkie', versao: SIM.app === 'mimei' ? '1.12.0' : '2.3.2', deslocamento: 0 }; return simDesenhar(); }
+  if (it.a === 'sobre') { const apps = { mimei: ['ME MIMEI', '1.17.0'], walkie: ['Walkie-Talkie', '2.3.2'], traccar: ['Traccar Cliente', '2.0.0'], rastreador: ['Rastreador Alequizão', '1.0.1'] };
+    const a = apps[SIM.app] || ['Walkie-Talkie', '2.3.2']; SIM.sobre = { app: a[0], versao: a[1], deslocamento: 0 }; return simDesenhar(); }
+  if (SIM.app === 'traccar') {
+    const T = SIM.traccar, giro = (lista, v) => lista[(lista.indexOf(v) + 1) % lista.length];
+    if (it.a === 'tr_nome') { const n = prompt('Identificador do device no Traccar:', T.nome || ''); if (n && n.trim()) { T.nome = n.trim(); T.estado = 'Device criado no Traccar (simulado)'; trAnotar(T, 'Device criado'); } return simDesenhar(); }
+    if (it.a === 'tr_url') { const u = prompt('Endereco do servidor:', T.url); if (u && u.trim()) { T.url = u.trim(); T.estado = 'Servidor salvo'; trAnotar(T, 'Servidor: ' + T.url); } return simDesenhar(); }
+    if (it.a === 'tr_int') { T.intervalo = giro(TR_INTERVALO, T.intervalo); if (T.ativo) { T.ativo = false; simTraccarLigar(); } simMenuTraccar(); return simDesenhar(); }
+    if (it.a === 'tr_dist') { T.distancia = giro(TR_DISTANCIA, T.distancia); simMenuTraccar(); return simDesenhar(); }
+    if (it.a === 'tr_ang') { T.angulo = giro(TR_ANGULO, T.angulo); simMenuTraccar(); return simDesenhar(); }
+    if (it.a === 'tr_prec') { T.precisao = (T.precisao + 1) % 3; simMenuTraccar(); return simDesenhar(); }
+    if (it.a === 'tr_buf') { T.buffer = !T.buffer; simMenuTraccar(); return simDesenhar(); }
+    if (it.a === 'tr_ligar') { simTraccarLigar(); return simDesenhar(); }
+    if (it.a === 'tr_status') { T.status = { deslocamento: 0 }; return simDesenhar(); }
+    if (it.a === 'tr_fila') { T.fila = 0; simMenuTraccar(); return simDesenhar(); }
+    return simDesenhar();
+  }
   if (SIM.app === 'mimei') {
+    if (it.a === 'mm_info') { SIM.mimei.estado = it.s; return simDesenhar(); }
     const M = SIM.mimei, l = M.dados.lanches[M.sel]; M.estado = it.a === 'desfazer' ? 'Desfazendo...' : it.a === 'atualizar' ? 'Atualizando...' : 'Registrando...'; simDesenhar();
     try { if (it.q) await api('mimei_comi', { id: l.id, qtd: it.q }); else if (it.a === 'desfazer') await api('mimei_desfazer', {}); } catch (x) { toast(x.message); }
     return simMimeiDados();
@@ -1448,9 +2087,16 @@ function simDesenhar() {
   else if (SIM.menu) simDesenharMenu(c, w, h, redondo, fonte, cor);
   else if (SIM.app === 'omnitrix') b10Desenhar(c, w, h);
   else if (SIM.app === 'tama') tamaDesenhar(c, w, h);
+  else if (SIM.app === 'painel') painelDesenhar(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'sono') sonoDesenhar(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'forca') forcaDesenhar(c, w, h, redondo, fonte, cor);
+  else if (SIM.app === 'gasolina') gasDesenhar(c, w, h, d.tipo !== 'amoled', fonte);
+  else if (SIM.app === 'onibus') oniDesenhar(c, w, h, d.tipo !== 'amoled', fonte);
+  else if (SIM.app === 'locais') locDesenhar(c, w, h, redondo, fonte, cor);
   else if (SIM.app === 'mimei') simDesenharMimei(c, w, h, redondo, fonte, cor);
   else if (SIM.app === 'walkie' && typeof simDesenharWalkie === 'function') { const W = SIM.walkie, pos = W.canais.findIndex(x => x.id == W.canal);
     simDesenharWalkie(c, w, h, redondo, fonte, cor, { canal: W.nomeCanal || 'Walkie-Talkie', posCanal: pos + 1, totalCanais: W.canais.length, mensagens: W.mensagens, deslocamento: W.desloc, estado: W.estado, atualizacao: false, aviso: W.cfg?.aviso || '' }); }
+  else if (SIM.app === 'traccar') { SIM.traccar.status ? simDesenharTraccarStatus(c, w, h, redondo, fonte, cor, SIM.traccar) : simDesenharTraccar(c, w, h, redondo, fonte, cor, SIM.traccar); }
   else if (SIM.app === 'rastreador' && typeof simDesenharRastreador === 'function') { const R = SIM.rastreador, l = R.leitura;
     simDesenharRastreador(c, w, h, redondo, fonte, cor, { ativo: R.ativo, bateria: l ? Math.round(l.bateria) : '--', gps: l?.precisao >= 3 ? 'bom' : l?.precisao == 2 ? 'fraco' : l ? 'procurando' : 'sem sinal', enviados: 0, ultimoEnvio: l ? l.recebido.slice(11, 19) : null, ultimoOk: true, estado: R.estado }); }
   c.restore();
@@ -1482,7 +2128,7 @@ function simDesenharMimei(c, w, h, redondo, fonte, cor) {
   if (!n) { desenharLinhas(simMedir(c, M.estado || 'Nenhum lanche', [fonte('small'), fT], w * 0.7), cy - fT.h, '#fff'); return; }
   const l = dados.lanches[M.sel], fmt = v => { const s2 = Math.round(v * 10) / 10; return (Math.abs(s2 - Math.trunc(s2)) < 0.05 ? Math.trunc(s2) : s2.toFixed(1)).toString().replace('.', ','); };
   const telaGrande = w >= 360, base = telaGrande ? 0.40 : 0.34;
-  const numTxt = fmt(l.pode) + 'x', kcalTxt = String(l.kcal);
+  const numTxt = l.zero ? 'ZERO' : fmt(l.pode) + 'x', kcalTxt = String(l.kcal), rotCabem = l.zero ? 'livre' : 'cabem';
   const itens = [{ t: 'ME MIMEI', f: [fT], cor: 0xF5C23B }, { t: `${r.saldo ?? '--'} kcal livres`, f: [fT], cor: 0x9A9AA0 }, { bloco: true }, { t: l.nome, f: telaGrande ? [fonte('medium'), fonte('small'), fonte('tiny'), fT] : [fonte('small'), fonte('tiny'), fT], cor: 0xFFFFFF }];
   if (l.porcao) itens.push({ t: l.porcao, f: [fT], cor: 0x9A9AA0 });
   itens.push({ rodape: true, t: n <= 9 ? '' : `${M.sel + 1} / ${n}`, f: [fT], cor: 0x6A6A70 });
@@ -1500,14 +2146,14 @@ function simDesenharMimei(c, w, h, redondo, fonte, cor) {
     const y = ys[k];
     if (it.bloco) {
       const larg = corda(y, y + tam), fontesLado = ['large', 'medium', 'small', 'tiny', 'xtiny'].map(fonte); let fLado = fT, precisa = 0;
-      for (const f of fontesLado) { c.font = f.css; const a = Math.max(c.measureText(numTxt).width, c.measureText(kcalTxt).width); c.font = fT.css; const b = Math.max(c.measureText('cabem').width, c.measureText('kcal').width);
+      for (const f of fontesLado) { c.font = f.css; const a = Math.max(c.measureText(numTxt).width, c.measureText(kcalTxt).width); c.font = fT.css; const b = Math.max(c.measureText(rotCabem).width, c.measureText('kcal').width);
         fLado = f; precisa = Math.max(a, b); if (precisa <= (larg - tam) / 2 - 6) break; }
       let t2 = tam; if (precisa > (larg - t2) / 2 - 6) t2 = Math.max(16, Math.floor(larg - 2 * precisa - 12));
       const ic = M.icones[l.id];
       if (ic) { const s = Math.min(t2 / ic.width, t2 / ic.height); c.drawImage(ic, cx - ic.width * s / 2, y + (tam - ic.height * s) / 2, ic.width * s, ic.height * s); }
       else { c.fillStyle = cor(0x2A2A2C); c.beginPath(); c.arc(cx, y + tam / 2, t2 / 2, 0, Math.PI * 2); c.fill(); }
       const yL = y + (tam - fLado.h - fT.h) / 2, xE = cx - t2 / 2 - 6 - precisa / 2, xD = cx + t2 / 2 + 6 + precisa / 2;
-      simTexto(c, numTxt, xE, yL, fLado, cor(0xF5C23B)); simTexto(c, 'cabem', xE, yL + fLado.h, fT, cor(0x9A9AA0));
+      simTexto(c, numTxt, xE, yL, fLado, cor(0xF5C23B)); simTexto(c, rotCabem, xE, yL + fLado.h, fT, cor(0x9A9AA0));
       simTexto(c, kcalTxt, xD, yL, fLado, '#fff'); simTexto(c, 'kcal', xD, yL + fLado.h, fT, cor(0x9A9AA0));
     } else if (medidas[k] === null) {
       const passo = Math.floor(w * 0.035), xp = cx - (n - 1) * passo / 2; for (let q = 0; q < n; q++) { c.fillStyle = q === M.sel ? cor(0xF5C23B) : cor(0x4A4A50); c.beginPath(); c.arc(xp + q * passo, y + fT.h / 2, q === M.sel ? 3 : 2, 0, Math.PI * 2); c.fill(); }
@@ -1620,6 +2266,7 @@ function simDesenharWalkie(c, w, h, redondo, fonte, cor, dados) {
   if (aviso && blocos.length) { const mAv = medir(`v mais recentes (${desl})`, ['xtiny'], limite); desenhar(mAv, cx, limite, cor(0x1FA3E3), 0, 1); }
 }
 
+/* ---- RASTREADOR ALEQUIZÃO 1.0.1 (espelha PrincipalView.mc de /opt/ciq/loja/rastreador-1.0.1) ---- */
 function simDesenharRastreador(c, w, h, redondo, fonte, cor, dados) {
   const { pilha } = simLayoutHelpers(c, w, h, redondo, fonte);
   c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
@@ -1630,8 +2277,86 @@ function simDesenharRastreador(c, w, h, redondo, fonte, cor, dados) {
     [`GPS: ${dados.gps || 'sem sinal'}`, ['xtiny'], cor(0xAAAAAA)],
     [txt, ['xtiny'], cor(0xAAAAAA)],
     [dados.estado || '', ['xtiny'], cor(0xAAAAAA)],
+    ['fechado: bateria e saúde a cada 5 min', ['xtiny'], cor(0x6A6A70)],
+  ], h * (redondo ? 0.07 : 0.03), h * (redondo ? 0.94 : 0.97));
+}
+
+
+/* ---- TRACCAR CLIENTE 2.0 (espelha PrincipalView.mc de /opt/ciq/traccar) ---- */
+const TR_INTERVALO = [10, 15, 30, 60, 120, 300], TR_DISTANCIA = [0, 10, 25, 50, 100, 250, 500], TR_ANGULO = [0, 15, 30, 45, 90], TR_PRECISAO = ['alta', 'media', 'baixa'];
+const trTempo = s => (s % 60 === 0 && s >= 60) ? `${s / 60} min` : `${s} s`;
+function trFiltros(T) { let t = trTempo(T.intervalo); if (T.distancia > 0) t += ` · ${T.distancia} m`; if (T.angulo > 0) t += ` · ${T.angulo}°`; return t; }
+function trAnotar(T, txt, ok = true) { T.log.push({ t: new Date(), s: txt, ok }); if (T.log.length > 30) T.log.shift(); }
+function simDesenharTraccar(c, w, h, redondo, fonte, cor, T) {
+  const { pilha } = simLayoutHelpers(c, w, h, redondo, fonte);
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  let linha = `Enviados: ${T.enviados}`;
+  if (T.fila > 0) linha += ` · fila ${T.fila}`;
+  if (T.ultimoEnvio) linha += ` · ${T.ultimoEnvio}${T.ultimoOk ? ' ok' : ' x'}`;
+  pilha([
+    [T.ativo ? 'AO VIVO' : 'PARADO', ['xtiny'], T.ativo ? cor(0x3DDC84) : cor(0x1FA3E3)],
+    [T.nome || 'sem device', ['medium', 'small', 'tiny', 'xtiny'], '#fff'],
+    [`GPS: ${T.gps} · ${trFiltros(T)}`, ['xtiny'], cor(0xAAAAAA)],
+    [linha, ['xtiny'], cor(0xAAAAAA)],
+    [T.estado || '', ['xtiny'], cor(0xAAAAAA)],
     ['fechado: envia a cada 5 min', ['xtiny'], cor(0x6A6A70)],
   ], h * (redondo ? 0.07 : 0.03), h * (redondo ? 0.94 : 0.97));
+}
+/* tela de Status: mesma rolagem do StatusView.mc */
+function simDesenharTraccarStatus(c, w, h, redondo, fonte, cor, T) {
+  const { medir, altura, desenhar } = simLayoutHelpers(c, w, h, redondo, fonte);
+  const cx = w / 2, fh = fonte('xtiny').h, x = ['xtiny'];
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+  const hm = d => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const l = [['Status', cor(0xF5C23B)], [`${T.ativo ? 'servico ligado' : 'servico parado'} · fila ${T.fila}`, cor(0x9A9AA0)]];
+  for (let i = T.log.length - 1; i >= 0; i--) l.push([`${hm(T.log[i].t)} ${T.log[i].s}`, T.log[i].ok ? cor(0xCCCCCC) : cor(0xE8604C)]);
+  if (!T.log.length) l.push(['sem eventos ainda', cor(0x6A6A70)]);
+  const desl = Math.max(0, Math.min(T.status?.deslocamento || 0, l.length - 1));
+  const yIni = h * (redondo ? 0.1 : 0.04), yFim = h * (redondo ? 0.9 : 0.96), esp = fh * 0.15;
+  const seta = (t, y) => { c.font = fonte('xtiny').css; c.fillStyle = cor(0x6A6A70); c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(t, cx, y); };
+  let y = yIni; if (desl > 0) { seta('^', y); y += fh; }
+  let i = desl;
+  for (; i < l.length; i++) {
+    const m = medir(l[i][0], x, y), alt = altura(m), reserva = i < l.length - 1 ? fh : 0;
+    if (y + alt + reserva > yFim && i > desl) break;
+    desenhar(m, cx, y, l[i][1]); y += alt + esp;
+  }
+  if (i < l.length) seta('v', yFim - fh);
+}
+function simMenuTraccar() {
+  const T = SIM.traccar;
+  SIM.menu = { titulo: 'Traccar', i: 0, topo: 0, itens: [
+    { t: 'Identificador', s: T.nome || 'toque para digitar', a: 'tr_nome' },
+    { t: 'Servidor', s: T.url, a: 'tr_url' },
+    { t: 'Frequencia', s: trTempo(T.intervalo), a: 'tr_int' },
+    { t: 'Distancia', s: T.distancia === 0 ? 'desligado' : `${T.distancia} m`, a: 'tr_dist' },
+    { t: 'Angulo', s: T.angulo === 0 ? 'desligado' : `${T.angulo}°`, a: 'tr_ang' },
+    { t: 'Precisao', s: TR_PRECISAO[T.precisao], a: 'tr_prec' },
+    { t: 'Guardar offline', s: T.buffer ? 'ligado' : 'desligado', a: 'tr_buf' },
+    { t: T.ativo ? 'Parar servico' : 'Iniciar servico', s: T.ativo ? 'rastreando' : 'parado', a: 'tr_ligar' },
+    { t: 'Status', s: `${T.log.length} eventos`, a: 'tr_status' },
+    { t: 'Limpar fila', s: `${T.fila} guardadas`, a: 'tr_fila' },
+    { t: 'Sobre', s: 'desenvolvedor', a: 'sobre' },
+  ] };
+}
+function simTraccarLigar() {
+  const T = SIM.traccar;
+  if (!T.nome) { T.estado = 'Defina o identificador'; return simMenuTraccar(); }
+  T.ativo = !T.ativo;
+  clearInterval(SIM.trTimer);
+  trAnotar(T, T.ativo ? 'Servico ligado' : 'Servico parado');
+  if (!T.ativo) { T.estado = 'Parado · fechado envia a cada 5 min'; T.gps = 'sem sinal'; return; }
+  T.estado = 'Buscando GPS...';
+  SIM.trTimer = setInterval(() => {
+    if (SIM.app !== 'traccar' || !SIM.canvas || !T.ativo) { clearInterval(SIM.trTimer); return; }
+    T.gps = 'bom';
+    if (T.distancia > 0 && Math.random() < 0.35) { T.estado = 'Parado · filtro de distancia'; return simDesenhar(); }
+    if (T.angulo > 0 && Math.random() < 0.2) { T.estado = 'Parado · filtro de angulo'; return simDesenhar(); }
+    T.enviados++;
+    const d = new Date(); T.ultimoEnvio = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    T.ultimoOk = true; T.estado = `Ao vivo · ${trFiltros(T)} (simulado)`; trAnotar(T, 'Enviado');
+    simDesenhar();
+  }, Math.max(2, T.intervalo) * 1000);
 }
 
 /* "Sobre o desenvolvedor" (Sobre.mc): itens a partir de dados.deslocamento; o que não cabe inteiro fica para a rolagem */
@@ -2102,5 +2827,1796 @@ async function renderTama() {
         setTimeout(() => esperar(n + 1), 2000); };
       esperar();
     } catch (x) { $('#tamaProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+/* ================= MEUS LOCAIS — réplica das telas do MeusLocaisApp.mc ================= */
+const LOC = {
+  cores: { fundo: 0x000000, texto: 0xFFFFFF, fraco: 0x9A9A9A, azul: 0x00A9E0, azulEsc: 0x00557A, verde: 0x00C853, vermelho: 0xE53935, amarelo: 0xFFC107, linha: 0x262626, cartao: 0x141414, mapa: 0x0E1720, grade: 0x1F3446 },
+  TIPOS: ['Carro', 'Moto', 'Pet', 'Chaves', 'Celular', 'Fones', 'Objeto', 'Outro'],
+  base: { lat: -9.6670, lon: -35.7160 },
+  locais: [], tela: 'inicio', sel: 0, topo: 0, tipo: 0, quadro: 0,
+  gps: { lat: -9.6670, lon: -35.7160, prec: 40, bons: 0, ok: true },
+  heading: 0, alvo: null, seta: 0, dist: null, distSuave: null, hist: [], ref: null, tend: 0,
+  pagina: 0, chegou: false, andando: 1, rolagem: 0, menu: null, trilha: []
+};
+const locNorm = a => { let x = a - Math.floor(a / 360) * 360; return x < 0 ? x + 360 : (x >= 360 ? 0 : x); };
+const locDif = (a, b) => { const d = locNorm(locNorm(b) - locNorm(a)); return d > 180 ? d - 360 : d; };
+const locInterp = (a, b, f) => locNorm(locNorm(a) + locDif(a, b) * f);
+function locDist(la1, lo1, la2, lo2) { const R = 6371008.8, r = Math.PI / 180, f1 = la1 * r, f2 = la2 * r, df = f2 - f1, dl = (lo2 - lo1) * r;
+  const s = Math.sin(df / 2) ** 2 + Math.cos(f1) * Math.cos(f2) * Math.sin(dl / 2) ** 2; return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s)); }
+function locBear(la1, lo1, la2, lo2) { const r = Math.PI / 180, f1 = la1 * r, f2 = la2 * r, dl = (lo2 - lo1) * r;
+  return locNorm(Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r); }
+function locFmt(m) { if (m == null || !isFinite(m) || m < 0) return '--'; if (m < 1000) return Math.floor(m) + ' m';
+  const km = m / 1000; return km < 10 ? km.toFixed(2) + ' km' : (km < 100 ? km.toFixed(1) + ' km' : Math.round(km) + ' km'); }
+function locPonto(la, lo, m, g) { const a = g * Math.PI / 180; return [la + m * Math.cos(a) / 111320, lo + m * Math.sin(a) / (111320 * Math.cos(la * Math.PI / 180))]; }
+function locRosa(g) { return ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'][Math.floor((locNorm(g) + 22.5) / 45) % 8]; }
+
+function locSemear() {
+  if (LOC.locais.length) return;
+  const d = [[0, 120, 45], [1, 340, 200], [3, 12, 300], [4, 8, 90], [5, 65, 180]];
+  LOC.locais = d.map(([t, m, g], i) => { const p = locPonto(LOC.base.lat, LOC.base.lon, m, g);
+    return { id: i + 1, nome: LOC.TIPOS[t], tipo: t, lat: p[0], lon: p[1], ts: Date.now() / 1000 - 3600 * (i + 1), prec: 4 + i, ultDist: m, maxDist: m * 1.4 }; });
+}
+function locIniciar() { locSemear(); LOC.tela = 'inicio'; LOC.quadro = 0; LOC.gps = { lat: LOC.base.lat, lon: LOC.base.lon, prec: 40, bons: 0, ok: true }; LOC.menu = null; }
+
+function locTique() {
+  LOC.quadro++;
+  // aquisição de GPS
+  if (LOC.tela === 'gps') { LOC.gps.prec = Math.max(4, LOC.gps.prec - 6); if (LOC.gps.prec <= 20) LOC.gps.bons = Math.min(9, LOC.gps.bons + 1); }
+  // navegação: anda em direção ao destino (ou se afasta)
+  if (LOC.tela === 'nav' && LOC.alvo && LOC.andando) {
+    const b = locBear(LOC.gps.lat, LOC.gps.lon, LOC.alvo.lat, LOC.alvo.lon);
+    const p = locPonto(LOC.gps.lat, LOC.gps.lon, 2.2 * LOC.andando, LOC.andando > 0 ? b : b + 180);
+    LOC.gps.lat = p[0]; LOC.gps.lon = p[1];
+    LOC.heading = locInterp(LOC.heading, b, 0.12);
+    const n = LOC.trilha.length; if (!n || locDist(LOC.trilha[n - 1][0], LOC.trilha[n - 1][1], p[0], p[1]) > 5) { LOC.trilha.push([p[0], p[1]]); if (LOC.trilha.length > 30) LOC.trilha.shift(); }
+  }
+  if (LOC.alvo) locNavAtualizar();
+  LOC.locais.forEach(l => { l.ultDist = locDist(LOC.gps.lat, LOC.gps.lon, l.lat, l.lon); if (l.ultDist > l.maxDist) l.maxDist = l.ultDist; });
+}
+function locNavAtualizar() {
+  const d = locDist(LOC.gps.lat, LOC.gps.lon, LOC.alvo.lat, LOC.alvo.lon);
+  const b = locBear(LOC.gps.lat, LOC.gps.lon, LOC.alvo.lat, LOC.alvo.lon);
+  LOC.dist = d; LOC.distSuave = LOC.distSuave == null ? d : LOC.distSuave + (d - LOC.distSuave) * 0.35;
+  LOC.seta = locInterp(LOC.seta, locNorm(b - LOC.heading), 0.25); LOC.bearing = b;
+  LOC.hist.push(d); if (LOC.hist.length > 5) LOC.hist.shift();
+  const med = LOC.hist.reduce((a, x) => a + x, 0) / LOC.hist.length;
+  if (LOC.ref == null) LOC.ref = med;
+  else if (med - LOC.ref <= -8) { LOC.tend = 1; LOC.ref = med; }
+  else if (med - LOC.ref >= 8) { LOC.tend = 2; LOC.ref = med; }
+  else if (LOC.hist.length >= 5 && Math.max(...LOC.hist.map(x => Math.abs(x - med))) < 8) LOC.tend = 0;
+  if (LOC.distSuave <= 10 && !LOC.chegou) { LOC.chegou = true; simVibrar(1); }
+  if (LOC.distSuave > 20) LOC.chegou = false;
+}
+
+/* ---------------- botões ---------------- */
+function locBotao(t) {
+  const L = LOC;
+  if (L.menu) { const m = L.menu;
+    if (t === 'next') m.i = (m.i + 1) % m.itens.length; else if (t === 'prev') m.i = (m.i - 1 + m.itens.length) % m.itens.length;
+    else if (t === 'back') L.menu = null; else if (t === 'start' || t === 'menu') { const it = m.itens[m.i]; L.menu = null; locAcao(it); }
+    return simDesenhar(); }
+  switch (L.tela) {
+    case 'inicio': if (t === 'start' || t === 'menu') { L.tela = L.locais.length ? 'lista' : 'lista'; L.sel = 0; } break;
+    case 'lista': {
+      const n = L.locais.length;
+      if (t === 'next') { L.sel = (L.sel + 1) % (n + 1); } else if (t === 'prev') { L.sel = (L.sel - 1 + n + 1) % (n + 1); }
+      else if (t === 'start') { if (L.sel >= n) { L.tela = 'tipo'; L.tipo = 0; } else locAbrirNav(L.locais[L.sel]); }
+      else if (t === 'menu') { if (L.sel < n) { L.alvo = L.locais[L.sel]; L.tela = 'detalhe'; L.rolagem = 0; } }
+      else if (t === 'back') L.tela = 'inicio';
+      if (L.sel < L.topo) L.topo = L.sel; if (L.sel >= L.topo + 5) L.topo = L.sel - 4; if (L.topo < 0) L.topo = 0;
+      break; }
+    case 'tipo':
+      if (t === 'next') L.tipo = (L.tipo + 1) % 8; else if (t === 'prev') L.tipo = (L.tipo + 7) % 8;
+      else if (t === 'start') { L.tela = 'gps'; L.gps.prec = 40; L.gps.bons = 0; }
+      else if (t === 'back') L.tela = 'lista';
+      break;
+    case 'gps':
+      if (t === 'start' && locPodeSalvar()) { const p = locPonto(L.gps.lat, L.gps.lon, 3, Math.random() * 360);
+        L.novo = { id: Date.now(), nome: LOC.TIPOS[L.tipo], tipo: L.tipo, lat: p[0], lon: p[1], ts: Date.now() / 1000, prec: L.gps.prec, ultDist: 0, maxDist: 0 };
+        L.locais.push(L.novo); L.tela = 'salvo'; simVibrar(1); }
+      else if (t === 'back') L.tela = 'tipo';
+      break;
+    case 'salvo': L.tela = 'lista'; L.sel = L.locais.length - 1; break;
+    case 'nav':
+      if (L.chegou && (t === 'start' || t === 'back')) { L.chegou = false; L.tela = 'lista'; L.alvo = null; break; }
+      if (t === 'next') L.pagina = (L.pagina + 1) % 3; else if (t === 'prev') L.pagina = (L.pagina + 2) % 3;
+      else if (t === 'start' || t === 'menu') locMenuAcoes();
+      else if (t === 'back') { L.tela = 'lista'; L.alvo = null; }
+      break;
+    case 'detalhe':
+      if (t === 'next') L.rolagem = Math.min(1, L.rolagem + 1); else if (t === 'prev') L.rolagem = Math.max(0, L.rolagem - 1);
+      else if (t === 'start' || t === 'menu') locMenuAcoes();
+      else if (t === 'back') L.tela = 'lista';
+      break;
+    case 'excluir':
+      if (t === 'next' || t === 'prev') L.confirma = !L.confirma;
+      else if (t === 'start') { if (L.confirma) { LOC.locais = LOC.locais.filter(x => x !== L.alvo); L.alvo = null; L.sel = 0; } L.tela = 'lista'; }
+      else if (t === 'back') L.tela = 'detalhe';
+      break;
+    case 'renomear':
+      if (t === 'next') L.rnSel = (L.rnSel + 1) % L.rnLista.length; else if (t === 'prev') L.rnSel = (L.rnSel - 1 + L.rnLista.length) % L.rnLista.length;
+      else if (t === 'start') { L.alvo.nome = L.rnLista[L.rnSel]; L.tela = 'detalhe'; }
+      else if (t === 'back') L.tela = 'detalhe';
+      break;
+  }
+  simDesenhar();
+}
+function locPodeSalvar() { return LOC.gps.ok && LOC.gps.prec <= 20 && LOC.gps.bons >= 3; }
+function locAbrirNav(l) { LOC.alvo = l; LOC.tela = 'nav'; LOC.pagina = 0; LOC.dist = LOC.distSuave = null; LOC.hist = []; LOC.ref = null; LOC.tend = 0; LOC.chegou = false; LOC.trilha = []; LOC.andando = 1; locNavAtualizar(); }
+function locMenuAcoes() { LOC.menu = { titulo: LOC.alvo ? LOC.alvo.nome : 'Ações', i: 0, itens: ['Navegar', 'Mapa', 'Renomear', 'Excluir', LOC.andando > 0 ? 'Simular: afastar' : 'Simular: aproximar', 'Sobre'] }; }
+function locAcao(it) {
+  const L = LOC;
+  if (it === 'Navegar') { locAbrirNav(L.alvo); }
+  else if (it === 'Mapa') { locAbrirNav(L.alvo); L.pagina = 2; }
+  else if (it === 'Renomear') { const b = LOC.TIPOS[L.alvo.tipo]; L.rnLista = [b, b + ' do trabalho', b + ' do shopping', b + ' de casa', 'Porta da casa', 'Estacionamento', 'Garagem']; L.rnSel = 0; L.tela = 'renomear'; }
+  else if (it === 'Excluir') { L.confirma = false; L.tela = 'excluir'; }
+  else if (it.indexOf('Simular') === 0) { L.andando = -L.andando; }
+  else if (it === 'Sobre') { SIM.sobre = { app: 'Meus Locais', versao: '1.0.0', deslocamento: 0 }; }
+}
+
+/* ---------------- ícones vetoriais (mesmo desenho do IconManager.mc) ---------------- */
+function locIcone(c, tipo, cx, cy, s, cor) {
+  c.save(); c.fillStyle = cor; c.strokeStyle = cor; c.lineCap = 'round'; c.lineJoin = 'round';
+  const rr = (x, y, w, h, r) => { c.beginPath(); c.roundRect(x, y, w, h, r); c.fill(); };
+  const furo = () => { c.fillStyle = '#000'; };
+  if (tipo === 0) { const w = s, x = cx - w / 2, yC = cy - s * 0.02, hC = s * 0.30;
+    rr(x + w * 0.20, cy - s * 0.30, w * 0.60, s * 0.30, s * 0.10); rr(x, yC, w, hC, s * 0.12);
+    c.beginPath(); c.arc(x + w * 0.24, yC + hC, s * 0.12, 0, 7); c.arc(x + w * 0.76, yC + hC, s * 0.12, 0, 7); c.fill(); }
+  else if (tipo === 1) { const r = s * 0.20, y = cy + s * 0.18, xe = cx - s * 0.30, xd = cx + s * 0.30;
+    c.lineWidth = s * 0.09 + 1; c.beginPath(); c.arc(xe, y, r, 0, 7); c.stroke(); c.beginPath(); c.arc(xd, y, r, 0, 7); c.stroke();
+    c.beginPath(); c.moveTo(xe, y); c.lineTo(cx - s * 0.05, cy - s * 0.10); c.lineTo(xd, y); c.moveTo(cx - s * 0.05, cy - s * 0.10); c.lineTo(cx + s * 0.22, cy - s * 0.22); c.lineTo(cx + s * 0.38, cy - s * 0.30); c.stroke();
+    rr(cx - s * 0.26, cy - s * 0.22, s * 0.28, s * 0.10, s * 0.04); }
+  else if (tipo === 2) { c.beginPath(); c.moveTo(cx - s * .34, cy - s * .34); c.lineTo(cx - s * .10, cy - s * .16); c.lineTo(cx - s * .30, cy + s * .04); c.closePath();
+    c.moveTo(cx + s * .34, cy - s * .34); c.lineTo(cx + s * .10, cy - s * .16); c.lineTo(cx + s * .30, cy + s * .04); c.closePath(); c.fill();
+    c.beginPath(); c.arc(cx, cy, s * 0.26, 0, 7); c.fill(); rr(cx - s * .12, cy + s * .12, s * .24, s * .20, s * .08);
+    furo(); c.beginPath(); c.arc(cx - s * .10, cy - s * .04, s * .045, 0, 7); c.arc(cx + s * .10, cy - s * .04, s * .045, 0, 7); c.arc(cx, cy + s * .20, s * .05, 0, 7); c.fill(); }
+  else if (tipo === 3) { const r = s * 0.18, xa = cx - s * 0.22; c.lineWidth = s * 0.10 + 1; c.beginPath(); c.arc(xa, cy, r, 0, 7); c.stroke();
+    c.fillRect(xa + r, cy - s * .05, s * .44, s * .10); c.fillRect(cx + s * .10, cy + s * .05, s * .07, s * .14); c.fillRect(cx + s * .26, cy + s * .05, s * .07, s * .14); }
+  else if (tipo === 4) { const w = s * .50, hh = s * .80; rr(cx - w / 2, cy - hh / 2, w, hh, s * .10);
+    furo(); c.beginPath(); c.roundRect(cx - w / 2 + s * .05, cy - hh / 2 + s * .10, w - s * .10, hh - s * .22, s * .04); c.fill(); }
+  else if (tipo === 5) { c.lineWidth = s * 0.10 + 1; c.beginPath(); c.arc(cx, cy + s * .02, s * .32, Math.PI * 1.11, Math.PI * 1.89); c.stroke();
+    rr(cx - s * .40, cy, s * .16, s * .34, s * .07); rr(cx + s * .24, cy, s * .16, s * .34, s * .07); }
+  else if (tipo === 6) { const w = s * .76, hh = s * .60; rr(cx - w / 2, cy - hh / 2, w, hh, s * .06);
+    furo(); c.fillRect(cx - s * .06, cy - hh / 2, s * .12, hh); c.fillRect(cx - w / 2, cy - s * .05, w, s * .08); }
+  else { const r = s * .26, top = cy - s * .16; c.beginPath(); c.arc(cx, top, r, 0, 7); c.fill();
+    c.beginPath(); c.moveTo(cx - r * .72, top + r * .62); c.lineTo(cx + r * .72, top + r * .62); c.lineTo(cx, cy + s * .40); c.closePath(); c.fill();
+    furo(); c.beginPath(); c.arc(cx, top, r * .38, 0, 7); c.fill(); }
+  c.restore();
+}
+function locCerto(c, cx, cy, s, cor) { c.save(); c.strokeStyle = cor; c.lineWidth = s * 0.13 + 2; c.lineCap = 'round'; c.beginPath();
+  c.moveTo(cx - s * .30, cy + s * .02); c.lineTo(cx - s * .06, cy + s * .26); c.lineTo(cx + s * .34, cy - s * .26); c.stroke(); c.restore(); }
+function locAntena(c, cx, cy, s, cor) { c.save(); c.strokeStyle = cor; c.fillStyle = cor; c.lineWidth = s * .07 + 1;
+  [0.20, 0.34, 0.48].forEach(f => { c.beginPath(); c.arc(cx, cy + s * .22, s * f, Math.PI * 1.25, Math.PI * 1.75); c.stroke(); });
+  c.beginPath(); c.arc(cx, cy + s * .22, s * .07, 0, 7); c.fill(); c.restore(); }
+function locSeta(c, cx, cy, raio, graus, cor, borda) {
+  const a = (locNorm(graus) - 90) * Math.PI / 180, co = Math.cos(a), se = Math.sin(a);
+  const pts = [[raio, 0], [-raio * .55, raio * .72], [-raio * .18, 0], [-raio * .55, -raio * .72]].map(([x, y]) => [cx + x * co - y * se, cy + x * se + y * co]);
+  c.save(); c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath();
+  c.fillStyle = cor; c.fill(); if (borda) { c.strokeStyle = borda; c.lineWidth = 2; c.stroke(); } c.restore();
+}
+
+/* ---------------- desenho das telas ---------------- */
+function locDesenhar(c, w, h, redondo, fonte, cor) {
+  const L = LOC, C = L.cores, cx = w / 2, CO = x => cor(x);
+  const txt = (t, x, y, f, cc, al = 'center') => { c.font = f.css; c.fillStyle = cc; c.textAlign = al; c.textBaseline = 'top'; c.fillText(t, x, y); };
+  const corda = (y1, y2) => simCorda(w, h, redondo, y1, y2);
+  const fT = fonte('tiny'), fX = fonte('xtiny'), fS = fonte('small'), fM = fonte('medium');
+  const botao = (y, texto, cc, corTexto, f0) => { const ff = f0 || fT; c.font = ff.css; const bh = h * .115, bw = Math.min(c.measureText(texto).width + h * .18, corda(y, y + bh));
+    c.fillStyle = cc; c.beginPath(); c.roundRect(cx - bw / 2, y, bw, bh, bh / 2); c.fill(); txt(texto, cx, y + (bh - ff.h) / 2, ff, corTexto); };
+  c.font = fT.css;
+
+  if (SIM.sobre) return;
+  if (L.menu) return locMenu(c, w, h, redondo, fonte, cor);
+
+  switch (L.tela) {
+    case 'inicio': {
+      locIcone(c, 7, cx, h * .26, h * .20, CO(C.azul));
+      txt('Meus Locais', cx, h * .44, fM, CO(C.texto));
+      const ls = simQuebrar(c, 'Tudo que importa, sempre por perto.', fX, corda(h * .58, h * .72));
+      ls.forEach((l, i) => txt(l, cx, h * .60 + i * fX.h, fX, CO(C.fraco)));
+      txt('Toque para abrir', cx, h * .84, fX, CO(C.azul));
+      return; }
+    case 'lista': {
+      if (!L.locais.length) {
+        locIcone(c, 7, cx, h * .25, h * .18, CO(C.azul));
+        txt('Nenhum local salvo', cx, h * .42, fS, CO(C.texto));
+        txt('Marque onde deixou', cx, h * .54, fX, CO(C.fraco)); txt('algo importante.', cx, h * .54 + fX.h, fX, CO(C.fraco));
+        botao(h * .78, '+ MARCAR LOCAL', CO(C.azul), CO(C.fundo), fX); return; }
+      txt('Meus Locais', cx, h * .09, fT, CO(C.texto));
+      c.fillStyle = CO(C.linha); c.fillRect(w * .22, h * .175, w * .56, 2);
+      const alt = h * .138; let y = h * .185; const n = L.locais.length;
+      for (let i = L.topo; i < Math.min(L.topo + 5, n + 1); i++) {
+        if (y + alt > h * .97) break;
+        const larg = corda(y + 2, y + alt - 2), x = cx - larg / 2, hL = alt - 4, sel = i === L.sel;
+        if (i < n) {
+          const d = L.locais[i];
+          if (sel) { c.fillStyle = CO(C.azul); c.beginPath(); c.roundRect(x, y + 2, larg, hL, hL / 3); c.fill(); }
+          const ct = sel ? CO(C.fundo) : CO(C.texto), cd = sel ? CO(C.fundo) : CO(C.fraco), s = hL * .62;
+          locIcone(c, d.tipo, x + s * .72, y + 2 + hL / 2, s, ct);
+          const dist = locFmt(d.ultDist);
+          txt(dist, x + larg - s * .35, y + 2 + (hL - fX.h) / 2, fX, cd, 'right');
+          c.font = fX.css; const wd = c.measureText(dist).width;
+          const xN = x + s * 1.35, largN = Math.max(20, x + larg - s * .45 - wd - xN - 6);
+          let f = fS; c.font = fS.css; if (c.measureText(d.nome).width > largN) f = fT; c.font = f.css; if (c.measureText(d.nome).width > largN) f = fX;
+          txt(d.nome, xN, y + 2 + (hL - f.h) / 2, f, ct, 'left');
+        } else {
+          c.fillStyle = sel ? CO(C.azul) : CO(C.cartao); c.beginPath(); c.roundRect(x, y + 2, larg, hL, hL / 3); c.fill();
+          txt('+ Novo Local', cx, y + 2 + (hL - fX.h) / 2, fX, sel ? CO(C.fundo) : CO(C.texto));
+        }
+        y += alt;
+      }
+      if (n + 1 > 5) { const tY = h * .20, tH = h * .62; c.fillStyle = CO(C.linha); c.beginPath(); c.roundRect(w - 8, tY, 4, tH, 2); c.fill();
+        const bh = Math.max(14, tH * 5 / (n + 1)), by = tY + (tH - bh) * (L.topo / Math.max(1, n + 1 - 5));
+        c.fillStyle = CO(C.azul); c.beginPath(); c.roundRect(w - 8, by, 4, bh, 2); c.fill(); }
+      return; }
+    case 'tipo': {
+      txt('Marcar Local', cx, h * .09, fT, CO(C.texto));
+      c.fillStyle = CO(C.linha); c.fillRect(w * .22, h * .175, w * .56, 2);
+      const alt = h * .138; let y = h * .185; const topo = Math.max(0, Math.min(L.tipo - 2, 3));
+      for (let i = topo; i < Math.min(topo + 5, 8); i++) {
+        const larg = corda(y + 2, y + alt - 2), x = cx - larg / 2, hL = alt - 4, sel = i === L.tipo;
+        if (sel) { c.fillStyle = CO(C.azul); c.beginPath(); c.roundRect(x, y + 2, larg, hL, hL / 3); c.fill(); }
+        const ct = sel ? CO(C.fundo) : CO(C.texto), s = hL * .62;
+        locIcone(c, i, x + s * .72, y + 2 + hL / 2, s, ct);
+        txt(LOC.TIPOS[i], x + s * 1.35, y + 2 + (hL - fS.h) / 2, fS, ct, 'left');
+        y += alt;
+      }
+      return; }
+    case 'gps': {
+      locIcone(c, L.tipo, cx, h * .19, h * .15, CO(C.azul));
+      txt(LOC.TIPOS[L.tipo], cx, h * .28, fM, CO(C.texto));
+      const pronto = locPodeSalvar();
+      txt(pronto ? 'Localização pronta' : (L.gps.prec > 20 ? 'Aguardando maior precisão...' : 'Obtendo localização...'), cx, h * .43, fT, CO(C.fraco));
+      const lb = corda(h * .545, h * .58) * .86, yb = h * .545, hb = h * .035;
+      let pct = L.gps.prec > 20 ? 45 : (L.gps.prec > 10 ? 75 : 90); pct = Math.min(100, pct + L.gps.bons * 4);
+      c.fillStyle = CO(C.linha); c.beginPath(); c.roundRect(cx - lb / 2, yb, lb, hb, hb / 2); c.fill();
+      c.fillStyle = pronto ? CO(C.verde) : CO(C.azul); c.beginPath(); c.roundRect(cx - lb / 2, yb, Math.max(hb, lb * pct / 100), hb, hb / 2); c.fill();
+      txt('Precisão: ±' + Math.round(L.gps.prec) + ' m', cx, h * .62, fT, L.gps.prec > 20 ? CO(C.amarelo) : (L.gps.prec <= 10 ? CO(C.verde) : CO(C.texto)));
+      c.font = fT.css; botao(h * .755, 'Salvar', pronto ? CO(C.azul) : CO(C.linha), pronto ? CO(C.fundo) : CO(C.fraco));
+      return; }
+    case 'salvo': {
+      const r = h * .095; c.fillStyle = CO(C.verde); c.beginPath(); c.arc(cx, h * .19, r, 0, 7); c.fill();
+      locCerto(c, cx, h * .19, r * 1.25, CO(C.fundo));
+      txt(L.novo.nome, cx, h * .30, fM, CO(C.texto));
+      txt('Local salvo!', cx, h * .415, fT, CO(C.verde));
+      const dt = new Date(L.novo.ts * 1000);
+      txt(dt.toLocaleDateString('pt-BR') + ' ' + dt.toTimeString().slice(0, 5), cx, h * .505, fX, CO(C.fraco));
+      txt(L.novo.lat.toFixed(4) + ', ' + L.novo.lon.toFixed(4), cx, h * .575, fX, CO(C.texto));
+      txt('Precisão ±' + Math.round(L.novo.prec) + ' m', cx, h * .645, fX, CO(C.fraco));
+      c.font = fT.css; botao(h * .755, 'OK', CO(C.cartao), CO(C.texto));
+      return; }
+    case 'nav': return locNav(c, w, h, redondo, fonte, cor);
+    case 'detalhe': {
+      locCabecalho(c, w, h, fonte, cor, L.alvo);
+      const empilhado = (() => { c.font = fonte('xtiny').css; return c.measureText(L.alvo.nome).width > simCorda(w, h, true, h * .12, h * .12) - h * .085 * 2.2; })();
+      const itens = [['Salvo em', new Date(L.alvo.ts * 1000).toLocaleDateString('pt-BR') + ' ' + new Date(L.alvo.ts * 1000).toTimeString().slice(0, 5)],
+        ['Distância atual', locFmt(L.alvo.ultDist)], ['Distância máxima', locFmt(L.alvo.maxDist)],
+        ['Precisão ao salvar', '±' + Math.round(L.alvo.prec) + ' m'], ['Coordenadas', L.alvo.lat.toFixed(4) + ', ' + L.alvo.lon.toFixed(4)]];
+      let y = empilhado ? h * .255 : h * .20; const alt = h * .145; const vis = empilhado ? 3 : 4;
+      L.rolagem = Math.max(0, Math.min(L.rolagem, itens.length - vis));
+      for (let i = L.rolagem; i < Math.min(itens.length, L.rolagem + vis); i++) {
+        const larg = corda(y, y + alt), x = cx - larg / 2;
+        txt(itens[i][0], x, y, fX, CO(C.fraco), 'left');
+        c.font = fT.css; const f = c.measureText(itens[i][1]).width > larg ? fX : fT;
+        txt(itens[i][1], x, y + fX.h - 2, f, CO(C.texto), 'left'); y += alt;
+      }
+      txt('START: ações', cx, h * .87, fX, CO(C.azul));
+      return; }
+    case 'excluir': {
+      txt('Excluir local?', cx, h * .22, fS, CO(C.texto));
+      txt(L.alvo.nome, cx, h * .34, fT, CO(C.fraco));
+      [['Cancelar', h * .50, !L.confirma], ['Excluir', h * .68, L.confirma]].forEach(([t2, y, sel]) => {
+        const bh = h * .13, bw = Math.min(corda(y, y + bh), w * .7);
+        c.fillStyle = sel ? (t2 === 'Excluir' ? CO(C.vermelho) : CO(C.azul)) : CO(C.cartao);
+        c.beginPath(); c.roundRect(cx - bw / 2, y, bw, bh, bh / 2); c.fill();
+        txt(t2, cx, y + (bh - fT.h) / 2, fT, sel ? CO(C.fundo) : CO(C.texto)); });
+      return; }
+    case 'renomear': {
+      txt('Renomear', cx, h * .09, fT, CO(C.texto));
+      const alt = h * .138; let y = h * .185; const topo = Math.max(0, Math.min(L.rnSel - 2, L.rnLista.length - 5));
+      for (let i = topo; i < Math.min(topo + 5, L.rnLista.length); i++) {
+        const larg = corda(y + 2, y + alt - 2), x = cx - larg / 2, hL = alt - 4, sel = i === L.rnSel;
+        if (sel) { c.fillStyle = CO(C.azul); c.beginPath(); c.roundRect(x, y + 2, larg, hL, hL / 3); c.fill(); }
+        c.font = fT.css; const f = c.measureText(L.rnLista[i]).width > larg - 20 ? fX : fT;
+        txt(L.rnLista[i], cx, y + 2 + (hL - f.h) / 2, f, sel ? CO(C.fundo) : CO(C.texto)); y += alt; }
+      return; }
+  }
+}
+function locCabecalho(c, w, h, fonte, cor, d) {
+  const C = LOC.cores, cx = w / 2, fX = fonte('xtiny'), s = h * .085;
+  c.font = fX.css; const tw = c.measureText(d.nome).width;
+  const largMax = simCorda(w, h, true, h * .13, h * .13) - s * 2.2;
+  c.textBaseline = 'top';
+  if (tw > largMax) {   // nome longo: icone em cima, nome embaixo (nunca abrevia)
+    locIcone(c, d.tipo, cx, h * .10, s, cor(C.azul));
+    c.fillStyle = cor(C.texto); c.textAlign = 'center'; c.fillText(d.nome, cx, h * .145);
+    return;
+  }
+  const x0 = cx - (tw + s * 1.25) / 2;
+  locIcone(c, d.tipo, x0 + s * .5, h * .115, s, cor(C.azul));
+  c.fillStyle = cor(C.texto); c.textAlign = 'left'; c.fillText(d.nome, x0 + s * 1.25, h * .115 - fX.h / 2);
+}
+function locNav(c, w, h, redondo, fonte, cor) {
+  const L = LOC, C = L.cores, cx = w / 2, CO = x => cor(x);
+  const fX = fonte('xtiny'), fT = fonte('tiny'), fS = fonte('small'), fM = fonte('medium'), fH = fonte('numberHot') || fonte('large');
+  const txt = (t, x, y, f, cc, al = 'center') => { c.font = f.css; c.fillStyle = cc; c.textAlign = al; c.textBaseline = 'top'; c.fillText(t, x, y); };
+  const corProx = L.distSuave <= 100 ? CO(C.verde) : (L.distSuave <= 500 ? CO(C.azul) : CO(C.texto));
+
+  if (L.chegou) {
+    const r = h * .105; c.fillStyle = CO(C.verde); c.beginPath(); c.arc(cx, h * .22, r, 0, 7); c.fill();
+    locCerto(c, cx, h * .22, r * 1.25, CO(C.fundo));
+    txt(L.alvo.nome, cx, h * .40, fM, CO(C.verde));
+    txt('Você chegou!', cx, h * .53, fS, CO(C.verde));
+    const m = Math.round(L.distSuave); txt(m + (m === 1 ? ' metro' : ' metros'), cx, h * .64, fT, CO(C.texto));
+    const bh = h * .115, bw = h * .34; c.fillStyle = CO(C.cartao); c.beginPath(); c.roundRect(cx - bw / 2, h * .755, bw, bh, bh / 2); c.fill();
+    txt('OK', cx, h * .755 + (bh - fT.h) / 2, fT, CO(C.texto)); return;
+  }
+  locCabecalho(c, w, h, fonte, cor, L.alvo);
+
+  if (L.pagina === 0) {
+    const cy = h * .50, raio = h * .285;
+    c.strokeStyle = CO(C.linha); c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, raio, 0, 7); c.stroke();
+    for (let i = 0; i < 24; i++) { const ang = locNorm(i * 15 - L.heading) - 90, a = ang * Math.PI / 180, g = i % 6 === 0;
+      const r1 = raio - (g ? raio * .13 : raio * .07); c.strokeStyle = g ? CO(C.fraco) : CO(C.linha); c.lineWidth = g ? 2 : 1;
+      c.beginPath(); c.moveTo(cx + r1 * Math.cos(a), cy + r1 * Math.sin(a)); c.lineTo(cx + raio * Math.cos(a), cy + raio * Math.sin(a)); c.stroke(); }
+    ['N', 'L', 'S', 'O'].forEach((le, j) => { const a = (locNorm(j * 90 - L.heading) - 90) * Math.PI / 180, rr = raio - raio * .26;
+      txt(le, cx + rr * Math.cos(a), cy + rr * Math.sin(a) - fX.h / 2, fX, j === 0 ? CO(C.vermelho) : CO(C.fraco)); });
+    locSeta(c, cx, cy - raio * .12, raio * .60, L.seta, CO(C.azul), CO(C.fundo));
+    txt(locFmt(L.distSuave), cx, cy + raio + h * .015, fM, corProx);
+    return;
+  }
+  if (L.pagina === 1) {
+    const num = locFmt(L.distSuave).split(' ')[0], un = locFmt(L.distSuave).split(' ')[1] || '';
+    c.font = fH.css; const lw = c.measureText(num).width; c.font = fT.css; const lu = c.measureText(' ' + un).width;
+    const x0 = cx - (lw + lu) / 2;
+    txt(num, x0, h * .24, fH, corProx, 'left');
+    txt(' ' + un, x0 + lw, h * .24 + fH.h - fT.h - 6, fT, CO(C.fraco), 'left');
+    const tend = ['Estável', 'Aproximando', 'Afastando'][L.tend], cT = [CO(C.fraco), CO(C.verde), CO(C.vermelho)][L.tend];
+    c.font = fT.css; const tw = c.measureText(tend).width, s = h * .055, xs = cx - (tw + s * 1.4) / 2, ys = h * .58 + fT.h / 2;
+    c.fillStyle = cT;
+    if (L.tend) { const sg = L.tend === 1 ? 1 : -1; c.beginPath(); c.moveTo(xs + s * .5, ys + sg * s * .5); c.lineTo(xs + s * .5 - s * .36, ys - sg * s * .15); c.lineTo(xs + s * .5 + s * .36, ys - sg * s * .15); c.closePath(); c.fill();
+      c.fillRect(xs + s * .5 - s * .12, L.tend === 1 ? ys - s * .5 : ys - s * .15, s * .24, s * .5); }
+    else { c.beginPath(); c.arc(xs + s * .5, ys, s * .16, 0, 7); c.fill(); }
+    txt(tend, xs + s * 1.4, h * .58, fT, cT, 'left');
+    txt(locRosa(L.bearing) + ' ' + Math.round(L.bearing) + '°', cx, h * .70, fS, CO(C.texto));
+    txt(L.distSuave <= 100 ? 'Muito perto' : (L.distSuave <= 500 ? 'Está por perto' : 'Precisão ±' + Math.round(LOC.gps.prec) + ' m'),
+        cx, h * .87, fX, L.distSuave <= 100 ? CO(C.verde) : (L.distSuave <= 500 ? CO(C.azul) : CO(C.fraco)));
+    return;
+  }
+  // mapa
+  const cy = h * .55, raio = h * .33;
+  c.fillStyle = CO(C.mapa); c.beginPath(); c.arc(cx, cy, raio, 0, 7); c.fill();
+  c.strokeStyle = CO(C.linha); c.lineWidth = 2; c.stroke();
+  const alcance = Math.max(25, L.distSuave / .70), escala = raio / alcance, giro = L.heading;
+  const proj = (la, lo) => { const dLat = (la - L.gps.lat) * 111320, dLon = (lo - L.gps.lon) * 111320 * Math.cos(L.gps.lat * Math.PI / 180);
+    const a = -giro * Math.PI / 180, x = dLon * Math.cos(a) - dLat * Math.sin(a), y = dLon * Math.sin(a) + dLat * Math.cos(a);
+    let px = cx + x * escala, py = cy - y * escala; const dx = px - cx, dy = py - cy, r = Math.hypot(dx, dy), lim = raio * .88;
+    if (r > lim) { px = cx + dx * lim / r; py = cy + dy * lim / r; } return [px, py]; };
+  // aneis de distancia + eixos (o FR165 nao tem cartografia)
+  [alcance / 3, alcance * 2 / 3].forEach(a => { const r = a * escala; if (r < 6 || r > raio) return;
+    c.strokeStyle = CO(C.grade); c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, r, 0, 7); c.stroke();
+    c.font = fX.css; c.fillStyle = CO(C.fraco); c.textAlign = 'left'; c.textBaseline = 'top'; c.fillText(locFmt(a), cx - r * .707 + 2, cy + r * .707 - fX.h / 2); });
+  c.strokeStyle = CO(C.grade); c.lineWidth = 1;
+  for (let j = 0; j < 4; j++) { const a = (locNorm(j * 90 - giro) - 90) * Math.PI / 180;
+    c.beginPath(); c.moveTo(cx, cy); c.lineTo(cx + raio * .94 * Math.cos(a), cy + raio * .94 * Math.sin(a)); c.stroke(); }
+  { const an = (locNorm(-giro) - 90) * Math.PI / 180, rn = raio - raio * .10;
+    txt('N', cx + rn * Math.cos(an), cy + rn * Math.sin(an) - fX.h / 2, fX, CO(C.vermelho)); }
+  if (L.trilha.length > 1) { c.strokeStyle = CO(C.azulEsc); c.lineWidth = 3; c.beginPath();
+    L.trilha.forEach((p, i) => { const [x, y] = proj(p[0], p[1]); i ? c.lineTo(x, y) : c.moveTo(x, y); }); c.stroke(); }
+  const [dx2, dy2] = proj(L.alvo.lat, L.alvo.lon);
+  c.strokeStyle = CO(C.azul); c.lineWidth = 3; c.setLineDash([7, 6]); c.beginPath(); c.moveTo(cx, cy); c.lineTo(dx2, dy2); c.stroke(); c.setLineDash([]);
+  locIcone(c, L.alvo.tipo, dx2, dy2 - h * .011, h * .075, CO(C.azul));
+  c.fillStyle = CO(C.azulEsc); c.beginPath(); c.arc(cx, cy, h * .030, 0, 7); c.fill();
+  c.fillStyle = CO(C.azul); c.beginPath(); c.arc(cx, cy, h * .018, 0, 7); c.fill();
+  txt(locFmt(L.distSuave), cx, h * .865, fS, corProx);
+}
+function locMenu(c, w, h, redondo, fonte, cor) {
+  const C = LOC.cores, m = LOC.menu, cx = w / 2, fT = fonte('tiny'), fX = fonte('xtiny');
+  const txt = (t, x, y, f, cc) => { c.font = f.css; c.fillStyle = cc; c.textAlign = 'center'; c.textBaseline = 'top'; c.fillText(t, x, y); };
+  txt(m.titulo, cx, h * .07, fX, cor(C.fraco));
+  const alt = h * .15, topo = Math.max(0, Math.min(m.i - 2, m.itens.length - 4));
+  let y = h * .17;
+  for (let i = topo; i < Math.min(topo + 4, m.itens.length); i++) {
+    const larg = simCorda(w, h, redondo, y + 2, y + alt - 2), sel = i === m.i;
+    if (sel) { c.fillStyle = cor(C.azul); c.beginPath(); c.roundRect(cx - larg / 2, y + 2, larg, alt - 4, (alt - 4) / 3); c.fill(); }
+    c.font = fT.css; const f = c.measureText(m.itens[i]).width > larg - 16 ? fX : fT;
+    txt(m.itens[i], cx, y + 2 + (alt - 4 - f.h) / 2, f, sel ? cor(C.fundo) : cor(C.texto)); y += alt;
+  }
+}
+
+/* ---- aba "Meus Locais" (prévia interativa + gerar o app) ---- */
+let LOCTIMER = null;
+function locFonte(h) { const esc = h / 390; const tab = { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMild: 75.3, numberMedium: 93.1, numberHot: 112.3 };
+  return nome => { const px = (tab[nome] || 30) * esc; return { css: `400 ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; }; }
+function locPintar() {
+  const cv = $('#locCv'); if (!cv) { clearInterval(LOCTIMER); LOCTIMER = null; return; }
+  const dpr = window.devicePixelRatio || 1, lado = 360;
+  cv.width = lado * dpr; cv.height = lado * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
+  c.fillStyle = '#000'; c.fillRect(0, 0, lado, lado);
+  locDesenhar(c, lado, lado, true, locFonte(lado), x => '#' + x.toString(16).padStart(6, '0'));
+  c.restore();
+}
+async function renderLocais() {
+  locIniciar();
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('locais')}
+  <section class="w"><header class="w-top"><span class="w-ico">🚗</span><span class="w-tit">Meus Locais</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <canvas id="locCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #00a9e033;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-locbt="prev">▲ Cima</button><button class="chip" data-locbt="start">● START</button><button class="chip" data-locbt="next">▼ Baixo</button><button class="chip" data-locbt="menu">≡ Menu</button><button class="chip" data-locbt="back">↩ Voltar</button></div>
+   <div class="mini" style="text-align:center;max-width:560px">Salve onde você deixou o <b>carro, a moto, o pet, as chaves, o celular, os fones</b> ou qualquer coisa — e volte até lá com uma <b>seta de bússola</b>, distância em tempo real e mini-mapa. Funciona <b>100% offline</b>: sem internet, sem servidor, sem celular.<br>
+   Na prévia: <b>START</b> abre/confirma, <b>▲▼</b> andam na lista, <b>≡ Menu</b> abre as ações do local (Navegar, Mapa, Renomear, Excluir e simular afastar/aproximar) e <b>↩</b> volta. Na navegação, <b>▲▼</b> trocam entre <b>bússola → informações → mapa</b>.</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="locApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="locModelo" list="locModelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="locModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="locGera">⬇ Baixar Meus Locais</button></div>
+   <div class="mini" id="locProg"></div></form></div>
+  <div class="card"><h3>Como instalar e usar</h3><div class="mini">1) Conecte o relógio no computador pelo cabo USB.<br>2) Copie o <b>.prg</b> baixado para a pasta <b>GARMIN/APPS</b>.<br>3) Desconecte. No relógio: <b>START</b> → <b>Adicionar</b> → <b>Meus Locais</b>.<br>4) Abra, escolha <b>+ Novo Local</b>, o tipo (carro, moto, pet…), espere a precisão do GPS ficar boa e toque em <b>Salvar</b>.<br>5) Para voltar: abra o app, escolha o local e siga a seta. Ela aponta para o destino, a distância atualiza sozinha e o relógio <b>vibra</b> quando você está a 25 m e ao chegar (10 m).<br><b>Permissão:</b> só GPS. O app não usa internet nem o celular.</div></div>
+  ${tabbar('app')}</div>`;
+  clearInterval(LOCTIMER); LOCTIMER = setInterval(() => { locTique(); locPintar(); }, 1000); locPintar();
+  document.querySelectorAll('[data-locbt]').forEach(b => b.onclick = () => { locBotao(b.dataset.locbt); locPintar(); });
+  const cv = $('#locCv'); cv.onclick = () => { locBotao('start'); locPintar(); };
+  let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; };
+  cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); locBotao(dy > 0 ? 'prev' : 'next'); locPintar(); } };
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#locModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#locApp').onsubmit = e => e.preventDefault();
+  $('#locGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#locModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#locGera'); bt.disabled = true; $('#locProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('locais_app', { modelo: m.id });
+      const esperar = async (n = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#locProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || n > 90) { $('#locProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(n + 1), 2000); };
+      esperar();
+    } catch (x) { $('#locProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+
+/* ================= app "Sono" (prévia interativa + gerar o app do relógio) ================= */
+const SONO = { dados: null, pagina: 0, erro: null, carregando: false, timer: null };
+const SONO_PAGS = ['BOM DIA', 'PONTUAÇÃO', 'FATORES', 'ESTÁGIOS', 'A NOITE', 'CORAÇÃO', 'ESTRESSE', 'ENERGIA', 'HISTÓRICO', 'SOBRE'];
+const SONO_COR = { prof: 0x0000ff, leve: 0x00ffff, rem: 0xff00ff, acor: 0xff0000, ok: 0x00ff00, aten: 0xffff00, txt: 0xffffff, cinza: 0xaaaaaa, linha: 0x555555 };
+
+async function sonoCarregar() {
+  if (SONO.carregando) return; SONO.carregando = true; SONO.erro = null;
+  try {
+    const j = await apiGet('sono', { dias: 8 });
+    const n = (j.noites || [])[0] || null;
+    SONO.dados = n ? { n, h: (j.noites || []).slice(1).map(x => ({ d: x.d.slice(5), tot: x.tot, prof: x.prof, leve: x.leve, rem: x.rem, acor: x.acor, score: x.score })) } : null;
+    if (!n) SONO.erro = 'Sem noite registrada ainda. Sincronize o relógio com o Garmin Connect.';
+  } catch (e) { SONO.erro = e.message; }
+  SONO.carregando = false;
+}
+function sonoBotao(t) {
+  if (t === 'next') SONO.pagina = (SONO.pagina + 1) % SONO_PAGS.length;
+  else if (t === 'prev') SONO.pagina = (SONO.pagina + SONO_PAGS.length - 1) % SONO_PAGS.length;
+  else if (t === 'start') sonoCarregar().then(() => { sonoPintar(); if (typeof simDesenhar === 'function' && SIM && SIM.app === 'sono') simDesenhar(); });
+}
+const sonoDur = s => s == null ? '--' : (Math.floor(s / 3600) > 0 ? Math.floor(s / 3600) + 'h' + String(Math.floor((s % 3600) / 60)).padStart(2, '0') : Math.round(s / 60) + 'min');
+const sonoPct = (p, t) => (!t || p == null) ? '--' : Math.round(p * 100 / t) + '%';
+const sonoDia = d => !d ? '' : (d.length >= 10 ? d.slice(8, 10) + '/' + d.slice(5, 7) : d.length === 5 ? d.slice(3, 5) + '/' + d.slice(0, 2) : d);
+const sonoQual = q => ({ EXCELLENT: 'excelente', GOOD: 'bom', FAIR: 'razoável', POOR: 'ruim' }[q] || (q || '').toLowerCase());
+// Mesma conta do app no relógio (Analise.mc): o FR55 não recebe pontuação da Garmin.
+const sonoFaixa = (v, ini, fim, pts) => (v >= ini && v <= fim) ? pts : Math.max(0, pts * (1 - (v < ini ? ini - v : v - fim) / Math.max(1, (fim - ini) * 1.4)));
+function sonoNota(n) {
+  if (!n || !n.tot) return null;
+  if (n.score != null) return n.score;
+  const t = n.tot;
+  let p = sonoFaixa(t * 100 / 28800, 92, 115, 45) + sonoFaixa((n.prof || 0) * 100 / t, 16, 33, 15)
+        + sonoFaixa((n.rem || 0) * 100 / t, 21, 31, 15) + sonoFaixa((n.acor || 0) * 100 / (t + (n.acor || 0)), 0, 6, 15)
+        + (n.est != null ? sonoFaixa(n.est, 0, 18, 10) : 7);
+  return Math.max(0, Math.min(100, Math.round(p)));
+}
+function sonoFatores(n) {
+  if (!n || !n.tot) return [];
+  const t = n.tot;
+  return [['Duração', sonoFaixa(t * 100 / 28800, 92, 115, 45), 45],
+          ['Profundo', sonoFaixa((n.prof || 0) * 100 / t, 16, 33, 15), 15],
+          ['REM', sonoFaixa((n.rem || 0) * 100 / t, 21, 31, 15), 15],
+          ['Despertares', sonoFaixa((n.acor || 0) * 100 / (t + (n.acor || 0)), 0, 6, 15), 15],
+          ['Estresse', n.est != null ? sonoFaixa(n.est, 0, 18, 10) : 7, 10]];
+}
+const sonoQualFator = (p, mx) => { const f = p * 100 / mx; return f >= 80 ? 'Bom' : f >= 50 ? 'Razoável' : 'Ruim'; };
+const sonoCorFator = q => q === 'Bom' ? SONO_COR.ok : q === 'Razoável' ? SONO_COR.aten : SONO_COR.acor;
+const sonoQualN = s => s == null ? '--' : s >= 90 ? 'Excelente' : s >= 80 ? 'Bom' : s >= 60 ? 'Razoável' : 'Ruim';
+const sonoSaudacao = () => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; };
+function sonoRecado(n) {
+  const h = new Date().getHours(), nt = sonoNota(n);
+  if (h >= 18) return 'Hora de desacelerar para dormir bem.';
+  if (nt >= 80) return 'Noite boa! Aproveite o dia.';
+  if (nt >= 60) return 'Deu para descansar. Tente dormir mais cedo.';
+  if (n && n.tot < 21600) return 'Você dormiu pouco. Pegue leve hoje.';
+  return 'Sono agitado. Evite esforço pesado.';
+}
+const sonoCorScore = s => s == null ? SONO_COR.cinza : s >= 80 ? SONO_COR.ok : s >= 60 ? SONO_COR.aten : SONO_COR.acor;
+const sonoCorEst = i => i === 0 ? SONO_COR.prof : i === 2 ? SONO_COR.rem : i === 3 ? SONO_COR.acor : SONO_COR.leve;
+
+function sonoDesenhar(c, w, h, redondo, fonte, cor) {
+  const corda = y => simCorda(w, h, redondo, y, y) || w * 0.92;
+  const txt = (y, t, fontes, cr, just) => {
+    const l = corda(y);
+    let f = fonte(fontes[fontes.length - 1]);
+    for (const nome of fontes) { const ff = fonte(nome); c.font = ff.css; if (c.measureText(t).width <= l) { f = ff; break; } }
+    c.font = f.css; c.fillStyle = cor(cr); c.textBaseline = 'middle';
+    c.textAlign = just || 'center'; c.fillText(t, just === 'left' ? (w - l) / 2 : just === 'right' ? (w + l) / 2 : w / 2, y);
+    c.textAlign = 'left'; return f.h;
+  };
+  const barra = (x, y, bw, bh, partes, total) => {
+    c.fillStyle = cor(SONO_COR.linha); c.fillRect(x, y, bw, bh);
+    let px = x;
+    partes.forEach(([v, cr]) => { if (!v) return; const pw = v * bw / total; c.fillStyle = cor(cr); c.fillRect(px, y, pw + .8, bh); px += pw; });
+  };
+  const linha = (x, y, gw, gh, serie, cr) => {
+    if (!serie || serie.length < 2) return;
+    const mn = Math.min(...serie), mx = Math.max(...serie) === mn ? mn + 1 : Math.max(...serie);
+    c.strokeStyle = cor(SONO_COR.linha); c.lineWidth = 1; c.beginPath(); c.moveTo(x, y + gh); c.lineTo(x + gw, y + gh); c.stroke();
+    c.strokeStyle = cor(cr); c.lineWidth = 2; c.beginPath();
+    serie.forEach((v, i) => { const px = x + i * gw / (serie.length - 1), py = y + gh - (v - mn) * gh / (mx - mn); i ? c.lineTo(px, py) : c.moveTo(px, py); });
+    c.stroke(); c.lineWidth = 1;
+  };
+  const n = SONO.dados && SONO.dados.n;
+  if (!n) {
+    txt(h * .14, 'SONO', ['xtiny'], SONO_COR.leve);
+    const t = SONO.carregando ? 'Buscando o seu sono...' : (SONO.erro || 'Aperte START para buscar');
+    const f = fonte('xtiny'); c.font = f.css;
+    const pal = t.split(' '); const linhas = []; let at = '';
+    pal.forEach(p => { const teste = at ? at + ' ' + p : p; if (c.measureText(teste).width <= corda(h / 2)) at = teste; else { if (at) linhas.push(at); at = p; } });
+    if (at) linhas.push(at);
+    linhas.forEach((l, i) => txt(h / 2 - (linhas.length - 1) * f.h / 2 + i * f.h, l, ['xtiny'], SONO_COR.txt));
+    return;
+  }
+  txt(h * .13, SONO_PAGS[SONO.pagina], ['xtiny'], SONO_COR.leve);
+  const p = SONO.pagina, nota = sonoNota(n);
+  const arco = (y, raio, valor) => {          // arco da pontuação, igual ao do relógio
+    c.lineWidth = Math.max(4, h * .045); c.lineCap = 'butt';
+    c.strokeStyle = cor(SONO_COR.linha); c.beginPath(); c.arc(w / 2, y, raio, Math.PI * .83, Math.PI * .17, false); c.stroke();
+    if (valor > 0) { c.strokeStyle = cor(sonoCorScore(valor)); c.beginPath();
+      c.arc(w / 2, y, raio, Math.PI * .83, Math.PI * (.83 + 1.34 * valor / 100), false); c.stroke(); }
+    c.lineWidth = 1;
+  };
+  const quebra = (y, t, cr, larg) => {        // texto em várias linhas
+    const f = fonte('xtiny'); c.font = f.css;
+    const pal = t.split(' '); const ls = []; let at = '';
+    pal.forEach(x => { const q = at ? at + ' ' + x : x; if (c.measureText(q).width <= (larg || corda(y))) at = q; else { if (at) ls.push(at); at = x; } });
+    if (at) ls.push(at);
+    ls.forEach((l, i) => txt(y + i * f.h, l, ['xtiny'], cr));
+    return ls.length * f.h;
+  };
+  if (p === 0) {
+    txt(h * .26, sonoSaudacao(), ['small', 'xtiny'], SONO_COR.leve);
+    txt(h * .44, nota == null ? '--' : String(nota), ['numberMedium', 'numberMild', 'large'], sonoCorScore(nota));
+    txt(h * .62, sonoDur(n.tot) + ' de sono', ['small', 'xtiny'], SONO_COR.txt);
+    if (n.bb != null) txt(h * .72, 'Body Battery ' + (n.bb >= 0 ? '+' : '') + n.bb, ['xtiny'], SONO_COR.ok);
+    quebra(h * .79, sonoRecado(n), SONO_COR.cinza, corda(h * .79) * .92);
+  } else if (p === 1) {
+    arco(h * .54, Math.min(w, h) * .33, nota || 0);   // centro mais baixo: não encosta no título
+    txt(h * .45, nota == null ? '--' : String(nota), ['numberMedium', 'numberMild', 'large'], SONO_COR.txt);
+    txt(h * .61, sonoQualN(nota), ['small', 'xtiny'], sonoCorScore(nota));
+    txt(h * .72, sonoDur(n.tot), ['small', 'xtiny'], SONO_COR.txt);
+    txt(h * .82, n.ini + ' - ' + n.fim, ['xtiny'], SONO_COR.leve);
+    txt(h * .90, sonoDia(n.d) + (n.score == null ? ' (calculada)' : ''), ['xtiny'], SONO_COR.cinza);
+  } else if (p === 2) {
+    const fs = sonoFatores(n);
+    fs.forEach((f, i) => {
+      const yy = h * .26 + i * h * .125, ll = corda(yy), x = (w - ll) / 2, q = sonoQualFator(f[1], f[2]);
+      c.font = fonte('xtiny').css; c.textBaseline = 'middle';
+      c.fillStyle = cor(SONO_COR.txt); c.textAlign = 'left'; c.fillText(f[0], x, yy);
+      c.fillStyle = cor(sonoCorFator(q)); c.textAlign = 'right'; c.fillText(q, x + ll, yy); c.textAlign = 'left';
+      const bw = ll * f[1] / f[2];
+      c.fillStyle = cor(sonoCorFator(q)); c.fillRect(x, yy + h * .042, bw, h * .014);
+      c.fillStyle = cor(SONO_COR.linha); c.fillRect(x + bw, yy + h * .042, ll - bw, h * .014);
+    });
+  } else if (p === 3) {
+    const l = corda(h * .24); barra((w - l) / 2, h * .24, l, h * .07, [[n.prof, SONO_COR.prof], [n.leve, SONO_COR.leve], [n.rem, SONO_COR.rem], [n.acor, SONO_COR.acor]], n.tot);
+    [['Profundo', n.prof, SONO_COR.prof], ['Leve', n.leve, SONO_COR.leve], ['REM', n.rem, SONO_COR.rem], ['Acordado', n.acor, SONO_COR.acor]].forEach((it, i) => {
+      const yy = h * .38 + i * h * .135, ll = corda(yy), x = (w - ll) / 2;
+      c.fillStyle = cor(it[2]); c.fillRect(x, yy - h * .025, h * .05, h * .05);
+      c.font = fonte('xtiny').css; c.fillStyle = cor(SONO_COR.txt); c.textBaseline = 'middle';
+      c.textAlign = 'left'; c.fillText(it[0], x + h * .07, yy);
+      c.textAlign = 'right'; c.fillText(sonoDur(it[1]) + '  ' + sonoPct(it[1], n.tot), x + ll, yy); c.textAlign = 'left';
+    });
+  } else if (p === 4) {
+    const lv = n.lvl || [];
+    if (!lv.length) return txt(h / 2, 'Sem detalhe da noite', ['xtiny'], SONO_COR.cinza), undefined;
+    const fimN = Math.max(...lv.map(x => x[0] + x[1])) || 1;
+    const yT = h * .26, alt = h * .44, l = corda(h * .5), x0 = (w - l) / 2, faixa = alt / 4, ordem = [3, 2, 1, 0];
+    c.strokeStyle = cor(SONO_COR.linha);
+    for (let k = 0; k < 4; k++) { c.beginPath(); c.moveTo(x0, yT + k * faixa); c.lineTo(x0 + l, yT + k * faixa); c.stroke(); }
+    lv.forEach(x => { const pos = ordem.indexOf(x[2] > 3 ? 1 : x[2]); c.fillStyle = cor(sonoCorEst(x[2])); c.fillRect(x0 + x[0] * l / fimN, yT + (pos < 0 ? 2 : pos) * faixa + 1, Math.max(1.5, x[1] * l / fimN), faixa - 2); });
+    c.font = fonte('xtiny').css; c.fillStyle = cor(SONO_COR.txt); c.textBaseline = 'middle';
+    const lr = corda(yT + alt + h * .05), xr = (w - lr) / 2;
+    c.textAlign = 'left'; c.fillText(n.ini, xr, yT + alt + h * .05);
+    c.textAlign = 'right'; c.fillText(n.fim, xr + lr, yT + alt + h * .05); c.textAlign = 'left';
+    txt(h * .86, n.acn ? n.acn + 'x acordado' : sonoDur(n.tot) + ' dormindo', ['xtiny'], SONO_COR.cinza);
+  } else if (p === 5) {
+    const l = corda(h * .36); linha((w - l) / 2, h * .26, l, h * .20, n.s_fc, SONO_COR.acor);
+    txt(h * .56, 'FC ' + (n.fc_min ?? '--') + '-' + (n.fc_max ?? '--') + ' bpm', ['small', 'xtiny'], SONO_COR.txt);
+    txt(h * .68, 'média ' + (n.fc_med ?? '--'), ['xtiny'], SONO_COR.cinza);
+    txt(h * .79, 'Repouso ' + (n.fcr ?? '--') + ' bpm', ['xtiny'], SONO_COR.leve);
+  } else if (p === 6) {
+    const l = corda(h * .42); linha((w - l) / 2, h * .28, l, h * .24, n.s_est, SONO_COR.aten);
+    txt(h * .62, 'Estresse médio ' + (n.est ?? '--'), ['small', 'xtiny'], SONO_COR.aten);
+    txt(h * .76, 'quanto menor, melhor', ['xtiny'], SONO_COR.cinza);
+  } else if (p === 7) {
+    const l = corda(h * .36); linha((w - l) / 2, h * .26, l, h * .20, n.s_bb, SONO_COR.ok);
+    txt(h * .58, (n.bb == null ? '--' : (n.bb >= 0 ? '+' : '') + n.bb), ['numberMild', 'large', 'small'], SONO_COR.ok);
+    txt(h * .76, 'recarga da noite', ['xtiny'], SONO_COR.txt);
+    txt(h * .86, 'Body Battery', ['xtiny'], SONO_COR.cinza);
+  } else if (p === 8) {
+    const lista = [{ d: sonoDia(n.d), tot: n.tot, prof: n.prof, leve: n.leve, rem: n.rem, acor: n.acor }].concat(SONO.dados.h || []);
+    const mx = Math.max(1, ...lista.map(x => x.tot || 0)), soma = lista.reduce((a, x) => a + (x.tot || 0), 0);
+    const base = h * .72, altMax = h * .42, l = corda(h * .55), x0 = (w - l) / 2, passo = l / lista.length, bw = passo * .66;
+    lista.slice().reverse().forEach((it, i) => {
+      const t = it.tot || 0, alt = t * altMax / mx, x = x0 + i * passo + (passo - bw) / 2;
+      let py = base - alt;
+      c.fillStyle = cor(SONO_COR.linha); c.fillRect(x, base - alt, bw, alt);
+      [[it.prof, SONO_COR.prof], [it.leve, SONO_COR.leve], [it.rem, SONO_COR.rem], [it.acor, SONO_COR.acor]].forEach(([v, cr]) => {
+        if (!v || !t) return; const ph = v * alt / t; c.fillStyle = cor(cr); c.fillRect(x, py, bw, ph + .8); py += ph;
+      });
+    });
+    c.strokeStyle = cor(SONO_COR.cinza); c.beginPath(); c.moveTo(x0, base); c.lineTo(x0 + l, base); c.stroke();
+    txt(h * .80, 'média ' + sonoDur(Math.round(soma / lista.length)) + ' por noite', ['small', 'xtiny'], SONO_COR.txt);
+    txt(h * .88, lista.length + ' noites no relógio', ['xtiny'], SONO_COR.cinza);
+  } else {
+    txt(h * .24, 'Sono 1.0.0', ['small', 'xtiny'], SONO_COR.leve);
+    ['100% offline', 'Desenvolvedor', 'Alequizao', '@alequizao', 'alequizao.dev@gmail.com', 'github.com/alequizao'].forEach((t, i) =>
+      txt(h * .36 + i * h * .10, t, ['xtiny'], i === 1 ? SONO_COR.leve : SONO_COR.txt));
+  }
+  // pontinhos de página
+  const r = 3, esp = r * 3, y = h - h * .06 - r, xx = w / 2 - (SONO_PAGS.length - 1) * esp / 2;
+  for (let i = 0; i < SONO_PAGS.length; i++) { c.fillStyle = cor(i === SONO.pagina ? SONO_COR.txt : SONO_COR.linha); c.beginPath(); c.arc(xx + i * esp, y, i === SONO.pagina ? r : r - 1, 0, 7); c.fill(); }
+}
+
+function sonoFonte(h) {
+  const escala = h / 390, tab = { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMild: 75.3, numberMedium: 93.1, numberHot: 112.3 };
+  return nome => { const px = (tab[nome] || 30) * escala; return { css: `400 ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; };
+}
+function sonoPintar() {
+  const cv = $('#sonoCv'); if (!cv) { clearInterval(SONO.timer); SONO.timer = null; return; }
+  const dpr = window.devicePixelRatio || 1, lado = 360;
+  cv.width = lado * dpr; cv.height = lado * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
+  c.fillStyle = '#000'; c.fillRect(0, 0, lado, lado);
+  sonoDesenhar(c, lado, lado, true, sonoFonte(lado), x => '#' + x.toString(16).padStart(6, '0'));
+  c.restore();
+}
+async function renderSono() {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('sono')}
+  <section class="w"><header class="w-top"><span class="w-ico">🌙</span><span class="w-tit">Sono</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <canvas id="sonoCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #00a9e033;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-sonobt="prev">▲ Cima</button><button class="chip" data-sonobt="start">● START</button><button class="chip" data-sonobt="next">▼ Baixo</button></div>
+   <div class="mini" style="text-align:center;max-width:560px">O <b>Forerunner 55</b> registra o sono, mas <b>não mostra nada disso no relógio</b> — e não tem pontuação de sono. Este app traz a noite inteira para o pulso e <b>funciona 100% offline</b>: sem internet, sem celular e sem servidor. O próprio relógio lê a frequência cardíaca, o estresse e o Body Battery que ele já guarda, descobre a janela em que você dormiu, estima os estágios e <b>calcula a pontuação</b>.<br>São 9 telas: <b>Relatório matinal (Bom dia)</b>, pontuação, estágios, hipnograma da noite, frequência cardíaca, estresse, Body Battery, <b>histórico das últimas 30 noites guardado no relógio</b> e Sobre.<br>Acima está a prévia. <b>▲▼</b> trocam de página e <b>START</b> atualiza.</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="sonoApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="sonoModelo" list="sonoModelos" value="Forerunner® 55 (fr55)" autocomplete="off" required><datalist id="sonoModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="sonoGera">⬇ Baixar o app Sono</button></div>
+   <div class="mini" id="sonoProg"></div></form>
+   <div class="mini" style="margin-top:8px">Já compilados: <a href="app/Sono-fr55.prg">Forerunner 55</a> · <a href="app/Sono-fr165.prg">Forerunner 165</a></div></div>
+  <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> acima (ele já sai com o código da sua conta).<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo <b>Sono.prg</b> para a pasta <b>GARMIN/APPS</b> (no Mac, <b>GARMIN/APPS</b> dentro do volume do relógio).<br>4) Ejete e desconecte o cabo. O relógio reinicia a lista de apps sozinho.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> (ou Adicionar) → <b>Sono</b>.<br>6) Abra o app: ele analisa sozinho, na hora. <b>Não precisa de internet, de celular nem do Garmin Connect.</b><br><b>Permissões:</b> histórico de sensores e perfil do usuário — tudo lido de dentro do relógio. O app não usa GPS e não manda nada para lugar nenhum; o histórico das 30 noites fica guardado no próprio relógio.</div></div>
+  ${tabbar('app')}</div>`;
+  document.querySelectorAll('[data-sonobt]').forEach(b => b.onclick = () => { sonoBotao(b.dataset.sonobt); sonoPintar(); });
+  const cv = $('#sonoCv'); cv.onclick = () => { sonoBotao('next'); sonoPintar(); };
+  let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; };
+  cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); sonoBotao(dy > 0 ? 'prev' : 'next'); sonoPintar(); } };
+  sonoPintar();
+  if (!SONO.dados) { await sonoCarregar(); sonoPintar(); }
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#sonoModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#sonoApp').onsubmit = e => e.preventDefault();
+  $('#sonoGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#sonoModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#sonoGera'); bt.disabled = true; $('#sonoProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('sono_app', { modelo: m.id });
+      const esperar = async (k = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#sonoProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS pelo cabo USB. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || k > 90) { $('#sonoProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(k + 1), 2000); };
+      esperar();
+    } catch (x) { $('#sonoProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+/* ---- App Força (treino de força): prévia interativa e simulador ---- */
+const FORCA = {
+  ex: 0, peso: 20, descanso: 90, auto: true,
+  estado: 'inicio',      // inicio | serie | descanso | pausado | resumo | menu
+  reps: 0, serie: 0, totalReps: 0, volume: 0, seg: 0, resta: 0, fc: 92,
+  menu: null, mi: 0, timer: null, ritmo: 0
+};
+const FORCA_EX = ['Supino reto', 'Supino inclinado', 'Crucifixo', 'Desenvolvimento', 'Elevação lateral', 'Remada', 'Puxada alta', 'Barra fixa', 'Rosca bíceps', 'Tríceps', 'Agachamento', 'Leg press', 'Afundo', 'Levantamento terra', 'Panturrilha', 'Abdominal', 'Flexão de braço', 'Prancha', 'Livre'];
+const forcaTempo = s => { s = Math.max(0, Math.round(s)); const m = Math.floor(s / 60); return m + ':' + String(s % 60).padStart(2, '0'); };
+
+function forcaIniciar() {
+  Object.assign(FORCA, { estado: 'inicio', reps: 0, serie: 0, totalReps: 0, volume: 0, seg: 0, resta: 0, menu: null, mi: 0, ritmo: 0 });
+}
+function forcaTique() {
+  const F = FORCA;
+  if (F.estado === 'serie') {
+    F.seg++; F.ritmo++;
+    if (F.ritmo >= 2) { F.ritmo = 0; F.reps++; }          // repetição a cada 2 s (o relógio conta pelo acelerômetro)
+    F.fc = Math.min(160, F.fc + 2);
+    if (F.auto && F.reps >= 12) forcaFechar();            // série automática
+  } else if (F.estado === 'descanso') {
+    F.seg++; F.resta--; F.fc = Math.max(80, F.fc - 2);
+    if (F.resta <= 0) { F.estado = 'serie'; F.reps = 0; F.ritmo = 0; }
+  } else if (F.estado === 'pausado') { F.fc = Math.max(75, F.fc - 1); }
+}
+function forcaFechar() {
+  const F = FORCA;
+  if (F.reps > 0) { F.serie++; F.totalReps += F.reps; F.volume += F.reps * F.peso; }
+  F.reps = 0; F.resta = F.descanso; F.estado = 'descanso';
+}
+function forcaMenuTreino() {
+  FORCA.menu = ['Voltar ao treino', 'Trocar exercício', 'Peso ' + FORCA.peso + ' kg', 'Descanso ' + FORCA.descanso + ' s', 'Salvar e encerrar', 'Descartar treino']; FORCA.mi = 0;
+}
+function forcaBotao(t) {
+  const F = FORCA;
+  if (F.menu) {
+    if (t === 'next') F.mi = (F.mi + 1) % F.menu.length;
+    else if (t === 'prev') F.mi = (F.mi - 1 + F.menu.length) % F.menu.length;
+    else if (t === 'back') F.menu = null;
+    else if (t === 'start') {
+      const it = F.menu[F.mi];
+      if (it.startsWith('Trocar')) F.ex = (F.ex + 1) % FORCA_EX.length;
+      else if (it.startsWith('Peso')) F.peso += 5;
+      else if (it.startsWith('Descanso')) F.descanso = F.descanso >= 180 ? 30 : F.descanso + 30;
+      else if (it.startsWith('Salvar') || it.startsWith('Descartar')) { if (F.reps > 0) forcaFechar(); F.salvou = it.startsWith('Salvar'); F.estado = 'resumo'; F.menu = null; return; }
+      if (it.startsWith('Voltar')) F.menu = null; else forcaMenuTreino();
+    }
+    return;
+  }
+  if (F.estado === 'inicio') {
+    if (t === 'start') { forcaIniciar(); F.estado = 'serie'; F.fc = 95; }
+    else if (t === 'menu') forcaMenuTreino();
+    else if (t === 'next') F.ex = (F.ex + 1) % FORCA_EX.length;
+    else if (t === 'prev') F.ex = (F.ex - 1 + FORCA_EX.length) % FORCA_EX.length;
+    return;
+  }
+  if (F.estado === 'resumo') { if (t === 'start' || t === 'back') forcaIniciar(); return; }
+  if (t === 'start') {
+    if (F.estado === 'serie') forcaFechar();
+    else if (F.estado === 'descanso') { F.estado = 'serie'; F.reps = 0; F.ritmo = 0; }
+    else if (F.estado === 'pausado') F.estado = 'serie';
+  } else if (t === 'menu') forcaMenuTreino();
+  else if (t === 'back') { if (F.estado === 'pausado') forcaMenuTreino(); else F.estado = 'pausado'; }
+  else if (t === 'next' || t === 'prev') {
+    const d = t === 'prev' ? 1 : -1;
+    if (F.estado === 'descanso') F.resta = Math.max(1, F.resta + d * 15); else F.reps = Math.max(0, F.reps + d);
+  }
+}
+/* réplica do onUpdate do app (Telas.mc): mesmas cores da paleta de 8 cores do FR55 */
+function forcaDesenhar(c, w, h, redondo, fonte, cor) {
+  const F = FORCA, g = w > 260;
+  const fx = fonte('xtiny'), fm = fonte('medium'), fnum = fonte('numberHot') || fonte('numberMedium');
+  const CIANO = '#00ffff', BRANCO = '#ffffff', VERDE = '#00ff00', AMARELO = '#ffff00', VERMELHO = '#ff0000', AZUL = '#0000ff';
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+
+  if (F.menu) {
+    simTexto(c, 'Treino', w / 2, g ? 24 : 14, fx, CIANO);
+    const alt = g ? 40 : 30, y0 = (g ? 60 : 42);
+    F.menu.forEach((it, i) => {
+      const y = y0 + i * alt;
+      if (i === F.mi) { c.fillStyle = '#0000ff'; c.fillRect(w * 0.06, y - 3, w * 0.88, alt - 6); }
+      simTexto(c, it, w / 2, y, fx, i === F.mi ? BRANCO : '#00ffff');
+    });
+    return;
+  }
+  if (F.estado === 'inicio') {
+    simTexto(c, 'FORÇA', w / 2, g ? 34 : 22, g ? fm : fonte('small'), CIANO);
+    simTexto(c, FORCA_EX[F.ex], w / 2, g ? 76 : 54, fx, BRANCO);
+    simTexto(c, F.peso + ' kg · descanso ' + F.descanso + 's', w / 2, g ? 102 : 76, fx, AMARELO);
+    simTexto(c, 'START para começar', w / 2, h - (g ? 64 : 48), fx, VERDE);
+    simTexto(c, 'MENU = opções', w / 2, h - (g ? 42 : 30), fx, BRANCO);
+    return;
+  }
+  if (F.estado === 'resumo') {
+    simTexto(c, F.salvou ? 'Treino salvo' : 'Treino descartado', w / 2, g ? 28 : 16, fx, F.salvou ? VERDE : VERMELHO);
+    const linhas = [['Séries', F.serie], ['Repetições', F.totalReps], ['Volume', F.volume + ' kg'], ['Tempo', forcaTempo(F.seg)]];
+    const dy = g ? 30 : 24, y0 = g ? 62 : 42;
+    linhas.forEach((l, i) => { simTexto(c, l[0], w / 2 - 6, y0 + i * dy, fx, AZUL, 'right'); simTexto(c, String(l[1]), w / 2 + 6, y0 + i * dy, fx, BRANCO, 'left'); });
+    simTexto(c, 'START volta ao início', w / 2, h - (g ? 40 : 28), fx, AMARELO);
+    return;
+  }
+  // treino
+  simTexto(c, FORCA_EX[F.ex], w / 2, g ? 24 : 14, fx, CIANO);
+  simTexto(c, 'Série ' + (F.serie + 1) + ' · ' + F.peso + ' kg', w / 2, g ? 48 : 34, fx, BRANCO);
+  if (F.estado === 'descanso') {
+    const pct = F.descanso > 0 ? F.resta / F.descanso : 0;
+    c.lineWidth = 6; c.strokeStyle = AZUL; c.beginPath(); c.arc(w / 2, h / 2, w / 2 - 5, 0, Math.PI * 2); c.stroke();
+    if (pct > 0) { c.strokeStyle = AMARELO; c.beginPath(); c.arc(w / 2, h / 2, w / 2 - 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct); c.stroke(); }
+    c.textBaseline = 'middle'; c.font = fnum.css; c.fillStyle = AMARELO; c.textAlign = 'center';
+    c.fillText(forcaTempo(F.resta), w / 2, h / 2); c.textBaseline = 'top';
+    simTexto(c, 'DESCANSO', w / 2, h / 2 + (g ? 44 : 32), fx, BRANCO);
+  } else if (F.estado === 'pausado') {
+    c.textBaseline = 'middle'; c.font = fm.css; c.fillStyle = VERMELHO; c.textAlign = 'center';
+    c.fillText('PAUSADO', w / 2, h / 2); c.textBaseline = 'top';
+    simTexto(c, 'START retoma', w / 2, h / 2 + (g ? 40 : 28), fx, BRANCO);
+  } else {
+    c.textBaseline = 'middle'; c.font = fnum.css; c.fillStyle = VERDE; c.textAlign = 'center';
+    c.fillText(String(F.reps), w / 2, h / 2); c.textBaseline = 'top';
+    simTexto(c, 'repetições', w / 2, h / 2 + (g ? 48 : 34), fx, BRANCO);
+  }
+  const yb = h - (g ? 44 : 32), dx = g ? 68 : 52;
+  simTexto(c, String(F.fc), w / 2 - dx, yb, fx, VERMELHO);
+  simTexto(c, forcaTempo(F.seg), w / 2, yb, fx, BRANCO);
+  simTexto(c, String(F.totalReps), w / 2 + dx, yb, fx, CIANO);
+}
+/* prévia da aba (fora do simulador) */
+function forcaPintar() {
+  const cv = $('#forcaCv'); if (!cv) { clearInterval(FORCA.timer); FORCA.timer = null; return; }
+  const dpr = window.devicePixelRatio || 1, lado = 360;
+  cv.width = lado * dpr; cv.height = lado * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
+  const fonte = n => { const px = { xtiny: 23, small: 29, medium: 35, numberHot: 86, numberMedium: 76 }[n] || 22; return { css: `${n.startsWith('number') ? 700 : 400} ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; };
+  forcaDesenhar(c, lado, lado, true, fonte, x => '#' + x.toString(16).padStart(6, '0'));
+  c.restore();
+}
+async function renderForca() {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('forca')}
+  <section class="w"><header class="w-top"><span class="w-ico">🏋️</span><span class="w-tit">Força — treino de musculação</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <canvas id="forcaCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #00a9e033;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-forcabt="prev">▲ Cima</button><button class="chip" data-forcabt="start">● START</button><button class="chip" data-forcabt="next">▼ Baixo</button><button class="chip" data-forcabt="menu">☰ MENU</button><button class="chip" data-forcabt="back">↩ VOLTAR</button></div>
+   <div class="mini" style="text-align:center;max-width:560px">O <b>Forerunner 165</b> tem o perfil <b>Treino de força</b>; o <b>Forerunner 55 não tem</b>. Este app traz o mesmo treino para o FR55 e <b>funciona 100% offline</b>.<br>Ele <b>conta as repetições sozinho</b> pelo acelerômetro do relógio, separa as <b>séries</b>, começa o <b>descanso</b> com anel e vibração, mostra <b>frequência cardíaca, tempo e total de repetições</b>, e grava a atividade em <b>FIT</b> — ela aparece no <b>Garmin Connect como Treino de força</b>, com repetições e peso em cada série.<br>Guarda ainda os <b>20 últimos treinos no próprio relógio</b>.<br>Acima está a prévia: <b>START</b> começa e fecha a série, <b>▲▼</b> corrigem as repetições, <b>MENU</b> abre o menu do treino e <b>VOLTAR</b> pausa.</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="forcaApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="forcaModelo" list="forcaModelos" value="Forerunner® 55 (fr55)" autocomplete="off" required><datalist id="forcaModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="forcaGera">⬇ Baixar o app Força</button></div>
+   <div class="mini" id="forcaProg"></div></form>
+   <div class="mini" style="margin-top:8px">Já compilados: <a href="app/Forca-fr55.prg">Forerunner 55</a> · <a href="app/Forca-fr165.prg">Forerunner 165</a></div></div>
+  <div class="card"><h3>Como usar no relógio</h3><div class="mini"><b>START</b> começa o treino e, a cada série, <b>fecha a série</b> e inicia o descanso (o relógio vibra duas vezes).<br>Com a <b>série automática</b> ligada, basta parar de se mexer por 8 segundos que ele fecha a série sozinho.<br><b>▲ ▼</b> corrigem a contagem (ou aumentam/diminuem 15 s no descanso). <b>MENU</b> (segurar UP) troca o exercício, muda o peso, as repetições, o descanso e encerra salvando ou descartando. <b>VOLTAR</b> pausa.<br>São 19 exercícios prontos (supino, agachamento, terra, rosca, tríceps, barra, abdominal, prancha…) e a sensibilidade da contagem tem 3 níveis.</div></div>
+  <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo <b>Forca.prg</b> para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> → <b>Força</b>.<br><b>Permissões:</b> sensores (acelerômetro, para contar as repetições), gravação de atividade em FIT e perfil do usuário. O app não usa GPS e não manda nada para servidor nenhum — o treino vai para o Garmin Connect pela sincronização normal do relógio.</div></div>
+  ${tabbar('app')}</div>`;
+  document.querySelectorAll('[data-forcabt]').forEach(b => b.onclick = () => { forcaBotao(b.dataset.forcabt); forcaPintar(); });
+  const cv = $('#forcaCv'); cv.onclick = () => { forcaBotao('start'); forcaPintar(); };
+  forcaIniciar(); forcaPintar();
+  clearInterval(FORCA.timer);
+  FORCA.timer = setInterval(() => { if (!$('#forcaCv')) { clearInterval(FORCA.timer); FORCA.timer = null; return; } forcaTique(); forcaPintar(); }, 1000);
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#forcaModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#forcaApp').onsubmit = e => e.preventDefault();
+  $('#forcaGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#forcaModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#forcaGera'); bt.disabled = true; $('#forcaProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('forca_app', { modelo: m.id });
+      const esperar = async (k = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#forcaProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS pelo cabo USB. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || k > 90) { $('#forcaProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(k + 1), 2000); };
+      esperar();
+    } catch (x) { $('#forcaProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+
+/* ================= app "Gasolina Perto" (réplica em canvas do GasolinaApp.mc + gerar o app do relógio) =================
+ * Gasolina Perto · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
+ * Mesmas telas, cores e teclas do app do relógio (Tela.mc / Detalhe.mc), com dados reais de /gasolina/api/perto.
+ * Posição: o GPS do navegador só é usado se você já tiver liberado; senão, um ponto fixo de Maceió (avisado na tela). */
+const GAS_COMB = ['Gasolina comum', 'Gas. aditivada', 'Álcool', 'Diesel comum', 'Diesel aditiv.', 'GNV'];
+const GAS_PADRAO = { lat: -9.6498, lon: -35.7089, nome: 'Maceió (Ponta Verde)' };
+const GAS = { c: 1, p: null, t: 0, r: 5, sel: 0, menu: -1, busca: 0, err: null, lat: null, lon: null, origem: '', ini: 0,
+  aviso: null, avisoAte: 0, tela: 'lista', timer: null, prev: 'fr165' };
+try { const c = +localStorage.getItem('gas_c'); if (c >= 1 && c <= 6) GAS.c = c; } catch (e) { }
+const GAS_COR = {
+  amoled: { ac: '#00e676', am: '#ffb300', tx: '#ffffff', cz: '#9e9e9e', card: '#0e2a1a', err: '#ff5252', trilha: '#1e3a2a' },
+  mip: { ac: '#00ff00', am: '#ffff00', tx: '#ffffff', cz: '#00ffff', card: '#000000', err: '#ff0000', trilha: '#0000ff' } };
+const gasVirg = s => s.replace('.', ',');
+const gasPreco = v => gasVirg((+v).toFixed(3));
+const gasKm = k => { k = +k; return k < 1 ? Math.floor(k * 100) * 10 + ' m' : gasVirg(k.toFixed(k < 10 ? 1 : 0)) + ' km'; };
+const gasHa = t => { const d = Math.floor(Date.now() / 1000) - t; return d < 60 ? 'agora' : d < 3600 ? `há ${Math.floor(d / 60)} min` : d < 86400 ? `há ${Math.floor(d / 3600)} h` : `há ${Math.floor(d / 86400)} d`; };
+const gasRumo = (la1, lo1, la2, lo2) => { const r = Math.PI / 180, f1 = la1 * r, f2 = la2 * r, dl = (lo2 - lo1) * r;
+  const b = Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r; return b < 0 ? b + 360 : b; };
+const gasDist = (la1, lo1, la2, lo2) => { const r = Math.PI / 180, a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); };
+const gasCardeal = b => ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'][Math.floor((b + 22.5) / 45) % 8];
+function gasErroRede(st) { return !st ? ['Sem internet', 'O celular não\nrespondeu a tempo'] : st === 400 ? ['Posição inválida', 'Espere o GPS e\ntente de novo'] : st >= 500 ? ['Servidor fora', `Tente daqui a\npouco (${st})`] : [`Falhou (${st})`, 'Tente de novo']; }
+function gasAviso(t) { GAS.aviso = t; GAS.avisoAte = Date.now() + 1600; gasAnimar(); }
+function gasVibrar() { try { navigator.vibrate?.(60); } catch (e) { } const cv = SIM.canvas && SIM.app === 'gasolina' ? SIM.canvas : $('#gasCv'); if (cv) { cv.classList.add('sim-vibra'); setTimeout(() => cv.classList.remove('sim-vibra'), 250); } }
+/* busca: GPS (do navegador, se já liberado) → preços */
+async function gasPosicao(pedir) {
+  let ok = false;
+  try { if (!pedir && navigator.permissions) ok = (await navigator.permissions.query({ name: 'geolocation' })).state === 'granted'; } catch (e) { }
+  if (pedir || ok) {
+    const pos = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res(p), () => res(null), { timeout: 8000, maximumAge: 120000 }) : res(null));
+    if (pos) { GAS.lat = pos.coords.latitude; GAS.lon = pos.coords.longitude; GAS.origem = 'seu GPS'; return; }
+    if (pedir) toast('Localização negada — usando Maceió');
+  }
+  if (GAS.lat == null || GAS.origem !== 'seu GPS') { GAS.lat = GAS_PADRAO.lat; GAS.lon = GAS_PADRAO.lon; GAS.origem = GAS_PADRAO.nome; }
+}
+async function gasBuscar(pedirGps) {
+  if (GAS.busca === 2) return;
+  GAS.err = null; GAS.busca = 1; GAS.ini = Date.now(); gasAnimar();
+  await gasPosicao(pedirGps);
+  await new Promise(r => setTimeout(r, 500));            // deixa ver o "Buscando GPS..." (no relógio leva segundos)
+  GAS.busca = 2; const c = GAS.c; gasAnimar();
+  let st = 0, j = null;
+  try { const r = await fetch(`/gasolina/api/perto?lat=${GAS.lat.toFixed(5)}&lon=${GAS.lon.toFixed(5)}&c=${c}&n=5`); st = r.status; if (r.ok) j = await r.json(); } catch (e) { st = 0; }
+  await new Promise(r => setTimeout(r, 350));
+  GAS.busca = 0;
+  if (c !== GAS.c) return gasBuscar();                    // trocou de combustível no meio
+  if (j && Array.isArray(j.p)) {
+    GAS.p = j.p; GAS.r = Math.round(j.r || 5); GAS.t = Math.floor(Date.now() / 1000); GAS.sel = 0;
+    if (!j.p.length) GAS.err = ['Sem postos', `Nenhum preço num raio\nde ${GAS.r} km`]; else gasVibrar();
+  } else GAS.err = gasErroRede(st);
+  gasPintarTudo();
+}
+function gasAnimar() {
+  gasPintarTudo();
+  if (GAS.timer) return;
+  GAS.timer = setInterval(() => {
+    const vivo = $('#gasCv') || (SIM.canvas && SIM.app === 'gasolina' && $('#simCanvas'));
+    if (!vivo) { clearInterval(GAS.timer); GAS.timer = null; return; }
+    gasPintarTudo();
+    if (!GAS.busca && !GAS.aviso) { clearInterval(GAS.timer); GAS.timer = null; }
+  }, 90);
+}
+function gasPintarTudo() { if ($('#gasCv')) gasPintar(); if (SIM.canvas && SIM.app === 'gasolina' && $('#simCanvas')) simDesenhar(); }
+/* teclas: as mesmas do TelaDelegate / DetalheDelegate */
+function gasBotao(t) {
+  const G = GAS, n = G.p ? G.p.length : 0;
+  if (G.tela === 'detalhe') {
+    if (t === 'next' && n) G.sel = (G.sel + 1) % n; else if (t === 'prev' && n) G.sel = (G.sel - 1 + n) % n; else if (t === 'back') G.tela = 'lista';
+    return gasPintarTudo();
+  }
+  if (G.menu >= 0) {
+    if (t === 'next') G.menu = (G.menu + 1) % 7; else if (t === 'prev') G.menu = (G.menu + 6) % 7; else if (t === 'back') G.menu = -1; else if (t === 'start') gasEscolher();
+    return gasPintarTudo();
+  }
+  if (t === 'menu') G.menu = G.c;
+  else if ((t === 'next' || t === 'prev') && n) G.sel = (G.sel + (t === 'next' ? 1 : n - 1)) % n;
+  else if (t === 'start') { if (n) G.tela = 'detalhe'; else if (!G.busca) gasBuscar(); }
+  gasPintarTudo();
+}
+function gasToque(y, H) {   // onTap do relógio (FR165)
+  const G = GAS;
+  if (G.tela === 'detalhe') return;
+  if (G.menu >= 0) { const hR = Math.floor(H * 15 / 100), dy = y - (H / 2 + H * 3 / 100); const j = G.menu + (dy >= 0 ? Math.floor((dy + hR / 2) / hR) : -Math.floor((hR / 2 - dy) / hR));
+    if (j >= 0 && j <= 6) { G.menu = j; gasEscolher(); } return gasPintarTudo(); }
+  if (G.p?.length) { if (y < H * 0.30) return gasBotao('prev'); if (y > H * 0.70) return gasBotao('next'); }
+  gasBotao('start');
+}
+function gasEscolher() {
+  const G = GAS, m = G.menu; G.menu = -1;
+  if (m === 0) { gasAviso('Atualizando'); gasVibrar(); return gasBuscar(); }
+  if (m !== G.c) { G.c = m; G.sel = 0; G.p = null; G.err = null; try { localStorage.setItem('gas_c', m); } catch (e) { } }
+  gasAviso(GAS_COMB[m - 1]); gasVibrar(); gasBuscar();
+}
+/* ---- desenho (réplica do onUpdate de Tela.mc e Detalhe.mc) ---- */
+function gasDesenhar(c, W, H, mip, fonte) {
+  const K = GAS_COR[mip ? 'mip' : 'amoled'], G = GAS, g = W > 260;
+  const txt = (t, x, y, f, cor, al = 'center') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = 'middle';
+    const ls = String(t).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
+  const larg = (t, f) => { c.font = f.css; return c.measureText(t).width; };
+  const rr = (x, y, w, h, r, cor, borda, pen) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+    if (cor) { c.fillStyle = cor; c.fill(); } if (borda) { c.strokeStyle = borda; c.lineWidth = pen; c.stroke(); } };
+  const bomba = (x, y, s, cor, visor) => { const w = Math.floor(s * 6 / 10), t = Math.floor(s / 8) + 1;
+    rr(x, y, w, s, t, cor); c.fillStyle = cor; c.fillRect(x + w, y + s * 6 / 10, s / 4, t); c.fillRect(x + w + s / 4 - t, y + s / 4, t, s * 4 / 10); c.fillRect(x + w + s / 10, y + s / 10, s / 4, s / 5);
+    c.fillStyle = visor; c.fillRect(x + s / 10, y + s / 7, w - s / 5, s / 4); };
+  const arco = (cx, cy, r, gi, gf, cor, pen) => { c.beginPath(); c.arc(cx, cy, r, -gi * Math.PI / 180, -gf * Math.PI / 180, true); c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); };
+  const cab = (titulo, ocupado) => {
+    const R = W / 2 - (g ? 4 : 2); arco(W / 2, H / 2, R, 58, 122, K.ac, g ? 6 : 4);
+    if (ocupado) { const a = 58 + Math.floor(Date.now() / 25) % 52; arco(W / 2, H / 2, R, a, a + 12, K.am, g ? 6 : 4); }
+    const f = fonte(g ? 'tiny' : 'xtiny'), s = g ? 26 : 13, tw = larg(titulo, f), x = (W - tw - s - 6) / 2, y = g ? H * 0.15 : H * 0.12;
+    bomba(x, y - s / 2, s, K.ac, '#000'); txt(titulo, x + s + 6, y, f, K.ac, 'left');
+  };
+  const preco = (v, y) => { const fp = fonte('large'), fr = fonte(g ? 'tiny' : 'xtiny'), sp = gasPreco(v), wr = larg('R$ ', fr), wp = larg(sp, fp), xp = W / 2 - (wr + wp) / 2;
+    txt('R$ ', xp, y, fr, K.am, 'left'); txt(sp, xp + wr, y, fp, K.am, 'left'); };
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+
+  if (G.tela === 'detalhe' && G.p?.length) {
+    const p = G.p[Math.min(G.sel, G.p.length - 1)];
+    cab(GAS_COMB[G.c - 1], false);
+    txt(p[0], W / 2, H * 0.26, fonte(g ? 'small' : 'tiny'), K.tx);
+    const cx = W / 2, cy = H * 0.49, r = Math.floor(H * 13 / 100);
+    c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.trilha; c.lineWidth = g ? 3 : 2; c.stroke();
+    let km = gasDist(G.lat, G.lon, p[3], p[4]), t;
+    const b = gasRumo(G.lat, G.lon, p[3], p[4]);
+    if (km < 0.04) { c.beginPath(); c.arc(cx, cy, r * 0.45, 0, 7); c.fillStyle = K.ac; c.fill(); t = 'você chegou'; }
+    else {   // navegador não tem bússola aqui: igual ao relógio parado, norte para cima + direção cardeal
+      txt('N', cx, cy - r + (g ? 18 : 9), fonte('xtiny'), K.cz);
+      const R = Math.floor(r * 72 / 100), a = b * Math.PI / 180, s = Math.sin(a), co = Math.cos(a);
+      const pts = [[0, -R], [R * 0.6, R * 0.7], [0, R * 0.3], [-R * 0.6, R * 0.7]].map(([x, y]) => [cx + x * co - y * s, cy + x * s + y * co]);
+      c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fillStyle = K.ac; c.fill();
+      t = 'fica a ' + gasCardeal(b);
+    }
+    preco(p[1], H * 0.71);
+    txt(gasKm(km) + ' · ' + t, W / 2, H * 0.81, fonte('xtiny'), K.tx);
+    txt('preço ' + gasHa(p[5]), W / 2, H * 0.88, fonte('xtiny'), K.cz);
+  } else if (G.menu >= 0) {
+    cab('Combustível', false);
+    const hR = Math.floor(H * 15 / 100);
+    for (let j = G.menu - 2; j <= G.menu + 2; j++) {
+      if (j < 0 || j > 6) continue;
+      const y = H / 2 + (j - G.menu) * hR + H * 0.03, t = j === 0 ? 'Atualizar agora' : GAS_COMB[j - 1];
+      if (j === G.menu) { const x0 = W * 0.10; rr(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7, K.card, K.ac, 2); txt(t, W / 2, y, fonte(g ? 'small' : 'tiny'), K.tx); }
+      else txt(t, W / 2, y, fonte('xtiny'), K.cz);
+      if (j === G.c) { const xk = W * 0.80, s = g ? 8 : 4; c.beginPath(); c.moveTo(xk - s, y); c.lineTo(xk - s / 3, y + s * 2 / 3); c.lineTo(xk + s, y - s * 2 / 3); c.strokeStyle = K.ac; c.lineWidth = g ? 3 : 2; c.stroke(); }
+    }
+  } else {
+    cab(GAS_COMB[G.c - 1], G.busca > 0 && !!G.p);
+    if (G.p?.length) {
+      const n = G.p.length; if (G.sel >= n) G.sel = 0;
+      const viz = (y, p) => { const nome = p[0].length > 12 ? p[0].slice(0, 11) + '.' : p[0]; txt(nome + '  ' + gasPreco(p[1]), W / 2, y, fonte('xtiny'), K.cz); };
+      if (G.sel > 0) viz(H * 0.23, G.p[G.sel - 1]);
+      if (G.sel < n - 1) viz(H * 0.76, G.p[G.sel + 1]);
+      const x0 = W * 0.08, yC = H * 0.31, wC = W - 2 * x0, hC = H * 0.38, p = G.p[G.sel];
+      rr(x0, yC, wC, hC, g ? 18 : 9, K.card, K.ac, g ? 3 : 2);
+      txt(G.sel === 0 ? 'MAIS BARATO' : `${G.sel + 1}º mais barato`, W / 2, yC + hC * 0.13, fonte('xtiny'), K.ac);
+      txt(p[0], W / 2, yC + hC * 0.33, fonte(g ? 'small' : 'tiny'), K.tx);
+      preco(p[1], yC + hC * 0.60);
+      txt(gasKm(p[2]) + ' · ' + p[6], W / 2, yC + hC * 0.86, fonte('xtiny'), K.cz);
+      const r = g ? 5 : 3, passo = g ? 16 : 9, xd = W - (g ? 16 : 9);
+      for (let k = 0; k < n; k++) { const yd = H / 2 + (k * 2 - (n - 1)) * passo / 2; c.beginPath(); c.arc(xd, yd, k === G.sel ? r : r - 1, 0, 7);
+        if (k === G.sel) { c.fillStyle = K.ac; c.fill(); } else { c.strokeStyle = K.cz; c.lineWidth = 1; c.stroke(); } }
+      let rod = `${gasHa(G.t)} · até ${G.r} km`, cr = K.cz;
+      if (G.busca === 1) { rod = 'Buscando GPS...'; cr = K.am; } else if (G.busca === 2) { rod = 'Atualizando...'; cr = K.am; } else if (G.err) { rod = G.err[0] + ' · ' + gasHa(G.t); cr = K.err; }
+      txt(rod, W / 2, H * 0.89, fonte('xtiny'), cr);
+    } else if (G.err && !G.busca) {
+      const cx = W / 2, cy = H * 0.35, r = g ? 34 : 17;
+      c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.err; c.lineWidth = g ? 5 : 3; c.stroke();
+      c.fillStyle = K.err; c.fillRect(cx - (g ? 3 : 1), cy - r * 0.55, g ? 7 : 4, r * 0.7); c.beginPath(); c.arc(cx, cy + r * 0.45, g ? 4 : 2, 0, 7); c.fill();
+      txt(G.err[0], cx, H * 0.55, fonte(g ? 'medium' : 'small'), K.err);
+      txt(G.err[1], cx, H * 0.69, fonte('xtiny'), K.tx);
+      txt('START: tentar de novo', cx, H * 0.86, fonte('xtiny'), K.ac);
+    } else {
+      const cx = W / 2, cy = H * 0.45, r = Math.floor(W * 17 / 100), a = (Date.now() / 3) % 360;
+      c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.trilha; c.lineWidth = g ? 8 : 4; c.stroke();
+      c.beginPath(); c.arc(cx, cy, r, -(90 - a) * Math.PI / 180, -(90 - a - 100) * Math.PI / 180, false); c.strokeStyle = G.busca === 2 ? K.am : K.ac; c.stroke();
+      const s = r * 0.9; bomba(cx - s * 0.45, cy - s / 2, s, K.ac, K.am);
+      txt(G.busca === 2 ? 'Consultando preços...' : 'Buscando GPS...', cx, H * 0.71, fonte(g ? 'small' : 'tiny'), K.tx);
+      txt(G.busca === 2 ? 'pelo celular' : `${Math.floor((Date.now() - G.ini) / 1000)} s · céu aberto ajuda`, cx, H * 0.81, fonte('xtiny'), K.cz);
+    }
+  }
+  if (G.aviso) {   // pílula verde com ✓
+    if (Date.now() > G.avisoAte) G.aviso = null;
+    else { const f = fonte(g ? 'small' : 'tiny'), h = f.h + 8, w = larg(G.aviso, f) + h + 16, x = (W - w) / 2, y = H * 0.80 - h / 2;
+      c.fillStyle = '#000'; c.fillRect(0, y - 4, W, h + 8); rr(x, y, w, h, h / 2, K.ac); const cx = x + h / 2 + 4, cy = y + h / 2; c.beginPath(); c.moveTo(cx - h / 5, cy); c.lineTo(cx - h / 14, cy + h / 6); c.lineTo(cx + h / 4, cy - h / 5); c.strokeStyle = '#000'; c.lineWidth = h > 30 ? 4 : 2; c.stroke();
+      txt(G.aviso, x + h + 8, cy, f, '#000', 'left'); }
+  }
+}
+/* prévia da aba (fora do simulador): tela do FR165 (390 px, AMOLED) ou do FR55 (208 px, MIP) em tamanho real de pixels */
+const GAS_FONTES = { fr165: { xtiny: 26, tiny: 30, small: 38, medium: 45, large: 52, peso: 400 }, fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, peso: 700 } };
+function gasPintar() {
+  const cv = $('#gasCv'); if (!cv) return;
+  const m = GAS.prev, lado = m === 'fr55' ? 208 : 390, F = GAS_FONTES[m], dpr = window.devicePixelRatio || 1, esc2 = (m === 'fr55' ? 360 / 208 : 360 / 390) * dpr;
+  cv.width = 360 * dpr; cv.height = 360 * dpr;
+  const c = cv.getContext('2d'); c.setTransform(esc2, 0, 0, esc2, 0, 0); c.imageSmoothingEnabled = m !== 'fr55';
+  c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
+  gasDesenhar(c, lado, lado, m === 'fr55', n => ({ css: `${F.peso} ${F[n] || F.xtiny}px Roboto, Arial, sans-serif`, h: Math.round((F[n] || F.xtiny) * 1.17) }));
+  c.restore();
+}
+async function renderGasolina() {
+  GAS.tela = 'lista'; GAS.menu = -1;
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('gasolina')}
+  <section class="w gas-w"><header class="w-top"><span class="w-ico gas-ico">${ICO.gasolina}</span><span class="w-tit">Gasolina Perto — o posto mais barato perto de você</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <div class="chips"><button class="chip ${GAS.prev === 'fr165' ? 'ativo' : ''}" data-gasprev="fr165">Forerunner 165 (AMOLED)</button><button class="chip ${GAS.prev === 'fr55' ? 'ativo' : ''}" data-gasprev="fr55">Forerunner 55 (MIP)</button></div>
+   <canvas id="gasCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #00e67633;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-gasbt="prev">▲ Cima</button><button class="chip" data-gasbt="start">● START</button><button class="chip" data-gasbt="next">▼ Baixo</button><button class="chip" data-gasbt="menu">☰ MENU</button><button class="chip" data-gasbt="back">↩ VOLTAR</button><button class="chip" id="gasGps">📍 Usar minha localização</button></div>
+   <div class="mini" id="gasOrigem" style="text-align:center"></div>
+   <div class="mini" style="text-align:center;max-width:560px">Mostra os <b>5 postos mais baratos perto de você</b> em Maceió e região, com <b>preço, distância e há quanto tempo o preço foi informado</b>. Ao abrir um posto, uma <b>seta aponta para ele</b> (pela bússola ou pelo rumo do GPS andando; parado, mostra a direção: N, NE, L…). Troque entre <b>gasolina comum, aditivada, álcool, diesel e GNV</b> no MENU — o relógio lembra a última escolha.<br>
+   Os preços são <b>reais</b>, da SEFAZ-AL (programa Economiza Alagoas), atualizados de hora em hora em <a href="/gasolina/" target="_blank" rel="noopener">alequizao.com/gasolina</a>. Sem dado, o app diz que não tem — nada inventado.</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="gasApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="gasModelo" list="gasModelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="gasModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="gasGera">⬇ Baixar o Gasolina Perto</button></div>
+   <div class="mini" id="gasProg"></div></form>
+   <div class="mini" style="margin-top:8px">Já compilados: <a href="app/GasolinaPerto-fr165.prg" download>Forerunner 165</a> · <a href="app/GasolinaPerto-fr165m.prg" download>Forerunner 165 Music</a> · <a href="app/GasolinaPerto-fr55.prg" download>Forerunner 55</a></div></div>
+  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir, ele <b>busca o GPS</b> (anel verde girando) e depois <b>consulta os preços pelo celular</b> (anel âmbar). Chegou a lista, o relógio vibra.<br><b>▲ ▼</b> (ou deslizar) andam entre os postos — o selecionado fica no cartão verde, com o preço grande. <b>START</b> (ou tocar no cartão) abre o posto com a <b>seta</b>; lá, ▲ ▼ passam para o próximo posto sem voltar.<br><b>MENU</b> (segurar UP) troca o combustível ou atualiza agora. No rodapé aparece <b>há quanto tempo</b> a lista foi consultada e o raio usado (começa em 5 km e amplia até 40 km se houver poucos postos).<br>Sem GPS, sem celular ou sem postos, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): mostra o menor preço da última consulta e há quanto tempo. O FR55 não aceita glance em apps.</div></div>
+  <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> do seu modelo acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> (ou ▲▼ na lista de apps) → <b>Gasolina Perto</b>.<br><b>Permissões:</b> GPS (sua posição, usada só para calcular a distância — não é gravada), comunicação (consulta pelo celular pareado, que precisa estar com o Garmin Connect aberto em segundo plano) e sensores (bússola, se o relógio tiver).</div></div>
+  ${tabbar('app')}</div>`;
+  const pinta = () => gasPintar();
+  document.querySelectorAll('[data-gasbt]').forEach(b => b.onclick = () => { gasBotao(b.dataset.gasbt); pinta(); });
+  document.querySelectorAll('[data-gasprev]').forEach(b => b.onclick = () => { GAS.prev = b.dataset.gasprev; document.querySelectorAll('[data-gasprev]').forEach(x => x.classList.toggle('ativo', x === b)); pinta(); });
+  const cv = $('#gasCv');
+  cv.onclick = e => { const r = cv.getBoundingClientRect(); gasToque((e.clientY - r.top) / r.height * 100, 100); pinta(); };
+  let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; };
+  cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); gasBotao(dy > 0 ? 'prev' : 'next'); } };
+  const origem = () => { const o = $('#gasOrigem'); if (o) o.textContent = GAS.lat != null ? `Posição da prévia: ${GAS.origem}${GAS.origem === GAS_PADRAO.nome ? ' (ponto fixo — toque em "Usar minha localização")' : ''}` : ''; };
+  $('#gasGps').onclick = async () => { GAS.origem = ''; await gasBuscar(true); origem(); };
+  pinta(); gasBuscar().then(origem);
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#gasModelos') && ($('#gasModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join('')); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#gasApp').onsubmit = e => e.preventDefault();
+  $('#gasGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#gasModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#gasGera'); bt.disabled = true; $('#gasProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('gasolina_app', { modelo: m.id });
+      const esperar = async (k = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#gasProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS pelo cabo USB. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || k > 90) { $('#gasProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(k + 1), 2000); };
+      esperar();
+    } catch (x) { $('#gasProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+
+/* ================= app "Próximo Ônibus" (réplica em canvas do OnibusApp.mc/Tela.mc + favoritos + gerar o app do relógio) =================
+ * Próximo Ônibus · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
+ * Mesmas telas, cores e teclas do app do relógio, com dados reais de /agendamentos/relogio_onibus.php
+ * (ao vivo = GPS dos ônibus pelo CittaMobi; programado = tabela de hoje da parada). Favoritos: os do painel
+ * (os mesmos que o app gerado aqui sincroniza) + os salvos no "Perto de mim" do simulador (ficam só neste navegador). */
+const ONI_API = '/agendamentos/relogio_onibus.php';
+const ONI_PADRAO = { lat: -9.6670, lon: -35.7160, nome: 'Maceió (Pajuçara)' };
+const ONI = { f: [], d: null, t: 0, sel: 0, modo: 0, menu: 0, busca: 0, err: null, p: null, psel: 0, al: false, alOk: 0, faixa: 0,
+  aviso: null, avisoAte: 0, lat: null, lon: null, origem: '', ini: 0, timer: null, prev: 'fr165', min: -1, pedido: '', carregado: false, painel: [] };
+try { ONI.al = localStorage.getItem('oni_al') === '1'; } catch (e) { }
+const ONI_COR = {
+  amoled: { am: '#ffc400', az: '#448aff', tx: '#ffffff', cz: '#90a4ae', card: '#0d1b3a', ok: '#00e676', err: '#ff5252', tri: '#1a2a4f' },
+  mip: { am: '#ffff00', az: '#00aaff', tx: '#ffffff', cz: '#aaaaaa', card: '#000055', ok: '#00ff00', err: '#ff0000', tri: '#0000aa' } };
+const ONI_FONTES = { fr165: { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMedium: 93.1, peso: 400 },
+  fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, numberMedium: 44, peso: 700 } };
+const oniAgora = () => Math.floor(Date.now() / 1000);
+const oniHa = t => { const d = oniAgora() - t; return d < 60 ? 'agora' : d < 3600 ? `há ${Math.floor(d / 60)} min` : d < 86400 ? `há ${Math.floor(d / 3600)} h` : `há ${Math.floor(d / 86400)} d`; };
+const oniMin = e => { const d = e - oniAgora(); return d <= 0 ? 0 : Math.floor(d / 60); };
+const oniHora = e => new Date(e * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Maceio' });
+const oniFuturas = ch => ch.filter(e => e > oniAgora() - 60);
+const oniM = m => m < 1000 ? `${m} m` : `${(Math.floor(m / 100) / 10).toFixed(1).replace('.', ',')} km`;
+const oniIdx = (l, id, stop) => l.findIndex(x => x[0] === id && x[1] === stop);
+function oniItensMenu() {
+  const m = [[0, 'Atualizar agora'], [1, 'Perto de mim'], [2, ONI.al ? 'Alerta 2 min: SIM' : 'Alerta 2 min: NÃO']];
+  if (ONI.f.length && ONI.sel > 0) m.push([3, 'Tornar principal']);
+  if (ONI.f.length) m.push([4, 'Remover favorito']);
+  m.push([5, 'Sincronizar painel']);
+  return m;
+}
+function oniErroRede(st) { return !st ? ['Sem internet', 'O celular não\nrespondeu a tempo'] : st === 400 ? ['Sem linha/ponto', 'Favorito inválido:\nremova no MENU'] : st >= 500 ? ['Fonte fora', `Horários indisponíveis\nagora (${st})`] : [`Falhou (${st})`, 'Tente de novo']; }
+function oniAviso(t) { ONI.aviso = t; ONI.avisoAte = Date.now() + 1600; oniPintarTudo(); }
+function oniVibrar(forte) { try { navigator.vibrate?.(forte ? [500, 250, 500, 250, 700] : 60); } catch (e) { }
+  const cv = SIM.canvas && SIM.app === 'onibus' ? SIM.canvas : $('#oniCv'); if (cv) { cv.classList.add('sim-vibra'); setTimeout(() => cv.classList.remove('sim-vibra'), forte ? 1500 : 250); } }
+/* favoritos: painel (origem 1) + os salvos no simulador (origem 0, localStorage) — igual ao aoSync do relógio */
+function oniLocais() { try { return JSON.parse(localStorage.getItem('oni_f') || '[]').filter(x => Array.isArray(x) && x.length >= 6); } catch (e) { return []; } }
+function oniGuardarLocais() { try { localStorage.setItem('oni_f', JSON.stringify(ONI.f.filter(x => x[5] !== 1))); } catch (e) { } }
+async function oniSincronizar() {
+  let painel = ONI.painel;
+  try { const j = await api('onibus_favs_ler'); painel = j.favs || []; ONI.painel = painel; } catch (e) { }
+  let ox = []; try { ox = JSON.parse(localStorage.getItem('oni_x') || '[]'); } catch (e) { }   // do painel, mas removidos no "relógio"
+  const n = painel.filter(x => !ox.includes(`${x.id}.${x.stop}`)).slice(0, 4).map(x => [x.id, x.stop, x.cod, x.destino, x.ponto, 1]);
+  for (const x of oniLocais()) if (n.length < 4 && oniIdx(n, x[0], x[1]) < 0) n.push(x);
+  const mudou = n.length !== ONI.f.length || n.some(x => oniIdx(ONI.f, x[0], x[1]) < 0);   // mesma lista em outra ordem: mantém a ordem
+  if (mudou) { ONI.f = n; ONI.d = null; ONI.sel = 0; }
+  ONI.carregado = true;
+}
+async function oniAtualizar(sync) {
+  ONI.err = null;
+  if (ONI.busca === 2) return;
+  if (sync || !ONI.carregado) { ONI.busca = 2; oniAnimar(); await oniSincronizar(); }
+  if (!ONI.f.length) { ONI.busca = 0; return oniPintarTudo(); }
+  ONI.busca = 2; oniAnimar();
+  const s = ONI.f.map(x => `${x[0]}.${x[1]}`).join(','); ONI.pedido = s;
+  let st = 0, j = null;
+  try { const r = await fetch(`${ONI_API}?a=prox&f=${encodeURIComponent(s)}`, { cache: 'no-store' }); st = r.status; if (r.ok) j = await r.json(); } catch (e) { st = 0; }
+  await new Promise(r => setTimeout(r, 350));            // deixa ver o "Consultando horários..." (no relógio passa pelo celular)
+  ONI.busca = 0;
+  if (ONI.f.map(x => `${x[0]}.${x[1]}`).join(',') !== s) return oniAtualizar();   // favoritos mudaram no meio
+  if (j && Array.isArray(j.f) && j.f.length === ONI.f.length) {
+    const agora = oniAgora();
+    j.f.forEach((it, i) => { it[4] = it[4].map(sg => agora + sg); if (it[3] >= 0) { ONI.f[i][2] = it[0]; ONI.f[i][3] = it[1]; ONI.f[i][4] = it[2]; } });
+    ONI.d = j.f; ONI.t = agora; oniVibrar(false);
+  } else ONI.err = oniErroRede(st);
+  oniPintarTudo();
+}
+async function oniPosicao(pedir) {
+  let ok = false;
+  try { if (!pedir && navigator.permissions) ok = (await navigator.permissions.query({ name: 'geolocation' })).state === 'granted'; } catch (e) { }
+  if (pedir || ok) {
+    const pos = await new Promise(res => navigator.geolocation ? navigator.geolocation.getCurrentPosition(p => res(p), () => res(null), { timeout: 8000, maximumAge: 120000 }) : res(null));
+    if (pos) { ONI.lat = pos.coords.latitude; ONI.lon = pos.coords.longitude; ONI.origem = 'seu GPS'; return; }
+    if (pedir) toast('Localização negada — usando Maceió');
+  }
+  if (ONI.lat == null || ONI.origem !== 'seu GPS') { ONI.lat = ONI_PADRAO.lat; ONI.lon = ONI_PADRAO.lon; ONI.origem = ONI_PADRAO.nome; }
+}
+async function oniPerto(pedirGps) {
+  if (ONI.busca === 2) return;
+  ONI.err = null; ONI.p = null; ONI.psel = 0; ONI.busca = 1; ONI.ini = Date.now(); oniAnimar();
+  await oniPosicao(pedirGps);
+  await new Promise(r => setTimeout(r, 600));
+  ONI.busca = 2; oniAnimar();
+  let st = 0, j = null;
+  try { const r = await fetch(`${ONI_API}?a=perto&lat=${ONI.lat.toFixed(5)}&lon=${ONI.lon.toFixed(5)}`, { cache: 'no-store' }); st = r.status; if (r.ok) j = await r.json(); } catch (e) { st = 0; }
+  await new Promise(r => setTimeout(r, 300));
+  ONI.busca = 0;
+  if (j && Array.isArray(j.p)) {
+    const l = []; j.p.forEach(p => p[2].forEach(x => { if (l.length < 16) l.push([x[0], x[1], x[2], x[3], p[0], p[1]]); }));
+    ONI.p = l; ONI.psel = 0;
+    if (!l.length) ONI.err = ['Nada perto', 'Nenhum ponto a 1,5 km\ncom local conhecido']; else oniVibrar(false);
+  } else ONI.err = oniErroRede(st);
+  oniPintarTudo();
+}
+/* laço de 250 ms: anima quando precisa; parado, redesenha quando o minuto vira; alerta 2 min; atualiza sozinho */
+function oniAnimar() {
+  oniPintarTudo();
+  if (ONI.timer) return;
+  let n = 0;
+  ONI.timer = setInterval(() => {
+    const vivo = $('#oniCv') || (SIM.canvas && SIM.app === 'onibus' && $('#simCanvas'));
+    if (!vivo) { clearInterval(ONI.timer); ONI.timer = null; return; }
+    let anima = ONI.busca > 0 || !!ONI.aviso || Date.now() < ONI.faixa;
+    if (++n % 4 === 0) {
+      oniAlerta(); oniAuto();
+      const m = Math.floor(Date.now() / 60000); if (m !== ONI.min) { ONI.min = m; anima = true; }
+    }
+    if (anima) oniPintarTudo();
+  }, 250);
+}
+function oniAlerta() {
+  if (!ONI.al || !ONI.d || ONI.sel >= ONI.d.length) return;
+  const ch = oniFuturas(ONI.d[ONI.sel][4]); if (!ch.length) return;
+  const d = ch[0] - oniAgora();
+  if (d <= 120 && d > -30 && ONI.alOk !== ch[0]) { ONI.alOk = ch[0]; ONI.faixa = Date.now() + 8000; oniVibrar(true); oniPintarTudo(); }
+}
+function oniAuto() {
+  if (ONI.modo !== 0 || ONI.busca || ONI.err || !ONI.d || !ONI.f.length || ONI.sel >= ONI.d.length) return;
+  const idade = oniAgora() - ONI.t;
+  if (idade > 300 || (idade > 60 && ONI.d[ONI.sel][3] > 0 && !oniFuturas(ONI.d[ONI.sel][4]).length)) oniAtualizar();
+}
+function oniPintarTudo() { if ($('#oniCv')) oniPintar(); if (SIM.canvas && SIM.app === 'onibus' && $('#simCanvas')) simDesenhar(); }
+/* teclas: as mesmas do TelaDelegate */
+function oniBotao(t) {
+  const O = ONI;
+  if (t === 'back') { if (O.modo !== 0) { O.modo = 0; O.p = null; O.err = null; if (O.busca === 1) O.busca = 0; } return oniPintarTudo(); }
+  if (t === 'next' || t === 'prev') {
+    const d = t === 'next' ? 1 : -1;
+    if (O.modo === 1) { const n = oniItensMenu().length; O.menu = (O.menu + d + n) % n; }
+    else if (O.modo === 2) { if (O.p?.length) O.psel = (O.psel + d + O.p.length) % O.p.length; }
+    else if (O.f.length > 1) { O.sel = (O.sel + d + O.f.length) % O.f.length; O.alOk = 0; }
+    return oniPintarTudo();
+  }
+  if (t === 'menu') { if (O.modo === 0) { O.modo = 1; O.menu = 0; } return oniPintarTudo(); }
+  // start
+  if (O.modo === 1) return oniEscolher();
+  if (O.modo === 2) { if (O.p?.length) oniSalvar(); else if (!O.busca) oniPerto(); return oniPintarTudo(); }
+  if (!O.f.length) { O.modo = 2; oniPerto(); return; }
+  if (O.err && !O.busca) { O.err = null; oniAtualizar(); return; }
+  O.modo = 1; O.menu = 0; oniPintarTudo();
+}
+function oniToque(y, H) {   // onTap do relógio (FR165)
+  const O = ONI;
+  if (O.modo === 1) { const n = oniItensMenu().length, hR = Math.floor(H * 15 / 100), dy = y - (H / 2 + H * 3 / 100);
+    const j = O.menu + (dy >= 0 ? Math.floor((dy + hR / 2) / hR) : -Math.floor((hR / 2 - dy) / hR));
+    if (j >= 0 && j < n) { O.menu = j; oniEscolher(); } return; }
+  if ((O.modo === 2 && O.p?.length > 1) || (O.modo === 0 && O.f.length > 1 && O.d)) { if (y < H * 0.30) return oniBotao('prev'); if (y > H * 0.70) return oniBotao('next'); }
+  oniBotao('start');
+}
+function oniEscolher() {
+  const O = ONI, m = oniItensMenu(); if (O.menu >= m.length) O.menu = 0;
+  const c = m[O.menu][0]; O.modo = 0;
+  const mover = (l, i) => [l[i], ...l.slice(0, i), ...l.slice(i + 1)];
+  if (c === 0) { oniAviso('Atualizando'); oniVibrar(false); O.err = null; oniAtualizar(); }
+  else if (c === 1) { O.modo = 2; oniPerto(); }
+  else if (c === 2) { O.al = !O.al; O.alOk = 0; try { localStorage.setItem('oni_al', O.al ? '1' : '0'); } catch (e) { } oniAviso(O.al ? 'Alerta ligado' : 'Alerta desligado'); oniVibrar(false); }
+  else if (c === 3) { O.f = mover(O.f, O.sel); if (O.d && O.sel < O.d.length) O.d = mover(O.d, O.sel); O.sel = 0; oniGuardarLocais(); oniAviso('Principal'); oniVibrar(false); }
+  else if (c === 4) {
+    const rem = O.f[O.sel];
+    O.f = O.f.filter((x, i) => i !== O.sel); if (O.d) O.d = O.d.filter((x, i) => i !== O.sel); if (O.sel >= O.f.length) O.sel = 0; oniGuardarLocais();
+    if (rem && rem[5] === 1) { try { const ox = JSON.parse(localStorage.getItem('oni_x') || '[]'); ox.push(`${rem[0]}.${rem[1]}`); localStorage.setItem('oni_x', JSON.stringify(ox.slice(-8))); } catch (e) { } }
+    oniAviso('Removido'); oniVibrar(false);
+  } else if (c === 5) { oniAviso('Sincronizando'); oniAtualizar(true); }
+  oniPintarTudo();
+}
+function oniSalvar() {
+  const O = ONI, p = O.p[O.psel], i = oniIdx(O.f, p[0], p[1]);
+  if (i >= 0) { O.sel = i; O.modo = 0; O.p = null; return oniAviso('Já é favorito'); }
+  if (O.f.length >= 4) { oniAviso('Máx. 4: remova um'); return oniVibrar(false); }
+  O.f.push([p[0], p[1], p[2], p[3], p[4], 0]); if (O.d) O.d.push([p[2], p[3], p[4], 0, [], 'consultando...']);
+  O.sel = O.f.length - 1; oniGuardarLocais(); O.modo = 0; O.p = null;
+  oniAviso('Favorito salvo'); oniVibrar(false); oniAtualizar();
+}
+/* ---- desenho (réplica do onUpdate de Tela.mc) ---- */
+function oniDesenhar(c, W, H, mip, fonte) {
+  const K = ONI_COR[mip ? 'mip' : 'amoled'], O = ONI, g = W > 260, agora = Date.now();
+  const txt = (t, x, y, f, cor, al = 'center') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = 'middle';
+    const ls = String(t).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
+  const larg = (t, f) => { c.font = f.css; return c.measureText(t).width; };
+  const rr = (x, y, w, h, r, cor, borda, pen) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+    if (cor) { c.fillStyle = cor; c.fill(); } if (borda) { c.strokeStyle = borda; c.lineWidth = pen; c.stroke(); } };
+  const circ = (x, y, r, cor, pen) => { c.beginPath(); c.arc(x, y, r, 0, 7); if (pen) { c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); } else { c.fillStyle = cor; c.fill(); } };
+  const onibus = (x, y, s, cor, vidro) => { const w = s * 0.8, r = s / 6 + 1;
+    rr(x, y, w, s * 0.9, r, cor); c.fillStyle = cor; c.fillRect(x - s / 12, y + s / 5, s / 12 + 1, s / 6); c.fillRect(x + w, y + s / 5, s / 12 + 1, s / 6);
+    rr(x + s / 10, y + s / 5, w - s / 5, s * 0.3, r / 2 + 1, vidro); c.fillStyle = vidro; c.fillRect(x + s / 6, y + s / 14, w - s / 3, s / 12 + 1);
+    circ(x + s / 5, y + s * 0.65, s / 14 + 1, vidro); circ(x + w - s / 5, y + s * 0.65, s / 14 + 1, vidro);
+    c.fillStyle = vidro; c.fillRect(x + s / 10, y + s * 0.9 - 1, s / 6, s / 10 + 1); c.fillRect(x + w - s / 10 - s / 6, y + s * 0.9 - 1, s / 6, s / 10 + 1); };
+  const arco = (cx, cy, r, gi, gf, cor, pen) => { c.beginPath(); c.arc(cx, cy, r, -gi * Math.PI / 180, -gf * Math.PI / 180, true); c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); };
+  const cab = (titulo, ocupado) => {
+    const R = W / 2 - (g ? 4 : 2); arco(W / 2, H / 2, R, 58, 122, K.am, g ? 6 : 4);
+    if (ocupado) { const a = 58 + Math.floor(agora / 25) % 52; arco(W / 2, H / 2, R, a, a + 12, K.az, g ? 6 : 4); }
+    const f = fonte(g ? 'tiny' : 'xtiny'), s = g ? 24 : 13, tw = larg(titulo, f), x = (W - tw - s - 6) / 2, y = g ? H * 0.13 : H * 0.12;
+    onibus(x + s / 10, y - s / 2, s, K.am, '#000'); txt(titulo, x + s + 6, y, f, K.am, 'left');
+  };
+  const selo = (y, cod, dest, fs, fd) => {
+    const pad = g ? 10 : 5, hS = fs.h + (g ? 2 : 0) - 4, wc = larg(cod, fs) + 2 * pad, ws = g ? 14 : 8, max = W * 0.84 - wc - ws - (g ? 12 : 6);
+    let wd = larg(dest, fd);
+    if (wd > max && fd !== fonte('xtiny')) { fd = fonte('xtiny'); wd = larg(dest, fd); }   // cabe na curva: fonte menor, depois corta com "."
+    while (wd > max && dest.length > 4) { dest = dest.slice(0, -2).replace(/[ .-]+$/, '') + '.'; wd = larg(dest, fd); }
+    let x = (W - wc - ws - wd - (g ? 12 : 6)) / 2; if (x < W / 12) x = W / 12;
+    rr(x, y - hS / 2, wc, hS, g ? 8 : 4, K.am); txt(cod, x + wc / 2, y, fs, '#000');
+    const xs = x + wc + (g ? 6 : 3), t = ws / 2; c.beginPath(); c.moveTo(xs, y - t); c.lineTo(xs + ws - 2, y); c.lineTo(xs, y + t); c.closePath(); c.fillStyle = K.az; c.fill();
+    txt(dest, xs + ws + (g ? 6 : 3), y, fd, K.tx, 'left');
+  };
+  const carregando = (t1, t2) => {
+    const cx = W / 2, cy = H * 0.45, s = Math.floor(W * 22 / 100), yE = cy + s * 0.62, x0 = Math.floor(W * 18 / 100), x1 = W - x0, pas = g ? 30 : 16;
+    c.fillStyle = K.tri; c.fillRect(x0, yE, x1 - x0, g ? 8 : 4);
+    c.fillStyle = O.busca === 1 ? K.az : K.am; const off = Math.floor(agora / 20) % pas;
+    for (let x = x0 - off; x < x1; x += pas) { const a = Math.max(x, x0), b = Math.min(x + pas / 2, x1); if (b > a) c.fillRect(a, yE + (g ? 2 : 1), b - a, g ? 4 : 2); }
+    const pulo = Math.floor(agora / 150) % 2 ? (g ? 2 : 1) : 0;
+    onibus(cx - s * 0.4, cy - s / 2 - pulo, s, K.am, '#000');
+    txt(t1, cx, H * 0.71, fonte(g ? 'tiny' : 'xtiny'), K.tx);
+    txt(O.busca === 1 ? `${Math.floor((agora - O.ini) / 1000)} s · céu aberto ajuda` : t2, cx, H * 0.81, fonte('xtiny'), K.cz);
+  };
+  const erro = () => {
+    const cx = W / 2, cy = H * 0.35, r = g ? 34 : 17;
+    circ(cx, cy, r, K.err, g ? 5 : 3); c.fillStyle = K.err; c.fillRect(cx - (g ? 3 : 1), cy - r * 0.55, g ? 7 : 4, r * 0.7); circ(cx, cy + r * 0.45, g ? 4 : 2, K.err);
+    txt(O.err[0], cx, H * 0.55, fonte(g ? 'medium' : 'small'), K.err);
+    txt(O.err[1], cx, H * 0.69, fonte('xtiny'), K.tx);
+    txt('START: tentar de novo', cx, H * 0.86, fonte('xtiny'), K.am);
+  };
+  c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+
+  if (O.modo === 1) {
+    const m = oniItensMenu(), n = m.length; if (O.menu >= n) O.menu = 0;
+    cab('Opções', false);
+    const hR = Math.floor(H * 15 / 100);
+    for (let j = O.menu - 2; j <= O.menu + 2; j++) {
+      if (j < 0 || j >= n) continue;
+      const y = H / 2 + (j - O.menu) * hR + H * 0.03, t = m[j][1];
+      if (j === O.menu) { const x0 = W * 0.10; rr(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7, K.card, K.am, 2); txt(t, W / 2, y, fonte(g ? 'small' : 'tiny'), K.tx); }
+      else txt(t, W / 2, y, fonte('xtiny'), K.cz);
+    }
+  } else if (O.modo === 2) {
+    cab('Perto de mim', O.busca > 0 && !!O.p);
+    if (!O.p?.length) { if (O.err && !O.busca) erro(); else carregando(O.busca === 1 ? 'Buscando GPS...' : 'Procurando pontos...', 'pelo celular'); }
+    else {
+      const n = O.p.length; if (O.psel >= n) O.psel = 0;
+      const viz = (y, p) => { let d = p[3]; if (d.length > 11) { d = d.slice(0, 10).replace(/[ -]+$/, ''); if (!d.endsWith('.')) d += '.'; } txt(`${p[2]}  ${d}`, W / 2, y, fonte('xtiny'), K.cz); };
+      if (O.psel > 0) viz(H * 0.22, O.p[O.psel - 1]);
+      if (O.psel < n - 1) viz(H * 0.80, O.p[O.psel + 1]);
+      const x0 = W * 0.07, yC = H * 0.29, wC = W - 2 * x0, hC = H * 0.43, p = O.p[O.psel], ja = oniIdx(O.f, p[0], p[1]) >= 0;
+      rr(x0, yC, wC, hC, g ? 18 : 9, K.card, K.am, g ? 3 : 2);
+      selo(yC + hC * 0.20, String(p[2]), p[3], fonte(g ? 'tiny' : 'xtiny'), fonte(g ? 'tiny' : 'xtiny'));
+      txt(p[4], W / 2, yC + hC * 0.44, fonte('xtiny'), K.az);
+      txt(oniM(p[5]) + ' de você', W / 2, yC + hC * 0.63, fonte('xtiny'), K.cz);
+      txt(ja ? 'já é favorito' : 'START: salvar', W / 2, yC + hC * 0.85, fonte('xtiny'), ja ? K.ok : K.am);
+      txt(`${O.psel + 1} de ${n}`, W / 2, H * 0.90, fonte('xtiny'), K.cz);
+    }
+  } else {
+    cab(g ? 'Próximo Ônibus' : 'Próx. Ônibus', O.busca > 0 && !!O.d);
+    if (!O.f.length) {
+      const s = Math.floor(W * 20 / 100); onibus(W / 2 - s * 0.4, H * 0.34 - s / 2, s, K.az, '#000');
+      txt('Nenhum favorito', W / 2, H * 0.56, fonte(g ? 'small' : 'tiny'), K.tx);
+      txt('START: pontos perto\nde mim', W / 2, H * 0.69, fonte('xtiny'), K.am);
+      txt('ou escolha no painel', W / 2, H * 0.84, fonte('xtiny'), K.cz);
+    } else if (O.d && O.sel < O.d.length) {
+      const n = O.d.length, it = O.d[O.sel], ch = oniFuturas(it[4]), fonteDado = it[3], fx = fonte('xtiny');
+      selo(H * 0.27, String(it[0]), it[1], fonte(g ? 'tiny' : 'xtiny'), fonte(g ? 'tiny' : 'xtiny'));
+      txt(it[2], W / 2, H * 0.36, fx, K.az);
+      if (agora < O.faixa) {
+        c.fillStyle = K.am; c.fillRect(0, H * 0.43, W, H * 0.22);
+        txt('CHEGANDO!', W / 2, H * 0.50, fonte(g ? 'medium' : 'small'), '#000'); txt('vá para o ponto', W / 2, H * 0.59, fx, '#000');
+      } else if (fonteDado <= 0 || !ch.length) {
+        txt(fonteDado < 0 ? 'Sem linha/ponto' : 'Sem previsão', W / 2, H * 0.50, fonte(g ? 'medium' : 'small'), fonteDado < 0 ? K.err : K.cz);
+        txt(fonteDado > 0 ? 'os previstos já passaram' : it[5], W / 2, H * 0.61, fx, K.tx);
+      } else {
+        const m = oniMin(ch[0]);
+        if (m === 0) txt('chegando', W / 2, H * 0.55, fonte('large'), K.am);
+        else {   // até 59 min: "chega em 12 min"; mais longe: "chega às 14:32"
+          txt(m < 60 ? 'chega em' : 'chega às', W / 2, H * 0.42, fx, K.cz);
+          const fn = fonte('numberMedium'), fm = fonte(g ? 'small' : 'tiny'), sn = m < 60 ? String(m) : oniHora(ch[0]), wn = larg(sn, fn), wm = m < 60 ? larg(' min', fm) : 0, x = (W - wn - wm) / 2, y = H * 0.57;
+          txt(sn, x, y, fn, K.am, 'left'); if (m < 60) txt(' min', x + wn, y + fn.h / 5, fm, K.am, 'left');
+        }
+        txt(ch.slice(0, 3).map(oniHora).join('  '), W / 2, H * 0.70, fonte(g ? 'tiny' : 'xtiny'), K.tx);
+      }
+      let rod = (fonteDado === 1 ? 'ao vivo' : fonteDado === 2 ? 'programado' : '') + ' · ' + oniHa(O.t), cr = fonteDado === 1 ? K.ok : K.am;
+      if (fonteDado <= 0) { rod = 'atualizado ' + oniHa(O.t); cr = K.cz; }
+      if (O.busca === 2) { rod = 'Atualizando...'; cr = K.az; } else if (O.err) { rod = O.err[0] + ' · ' + oniHa(O.t); cr = K.err; }
+      const yr = H * 0.80, wr = larg(rod, fx), rp = g ? 5 : 3;
+      if (fonteDado > 0 && !O.busca && !O.err) { circ((W - wr) / 2 - rp - 4, yr, rp, cr); txt(rod, (W - wr) / 2 + rp, yr, fx, cr, 'left'); }
+      else txt(rod, W / 2, yr, fx, cr);
+      const yb = H * 0.89;
+      if (O.al) {
+        const b = g ? 10 : 5, xb = W / 2 - larg('2 min', fx) / 2 - b - 2;
+        circ(xb, yb - b / 3, b * 0.6, K.am); c.fillStyle = K.am; c.fillRect(xb - b * 0.6, yb - b / 3, b * 1.2 + 1, b * 0.6); c.fillRect(xb - b * 0.9, yb + b / 4, b * 1.8 + 1, g ? 3 : 2); circ(xb, yb + b / 2 + 1, g ? 3 : 1, K.am);
+        txt('2 min', xb + b + 2, yb, fx, K.am, 'left');
+      } else if (n === 1) txt('START: opções', W / 2, yb, fx, K.cz);
+      if (n > 1 && agora >= O.faixa) { const r = g ? 5 : 3, passo = g ? 16 : 9, xd = W - (g ? 16 : 9);
+        for (let k = 0; k < n; k++) { const yd = H / 2 + (k * 2 - (n - 1)) * passo / 2; if (k === O.sel) circ(xd, yd, r, K.am); else circ(xd, yd, r - 1, K.cz, 1); } }
+    } else if (O.err && !O.busca) erro();
+    else carregando('Consultando horários...', 'pelo celular');
+  }
+  if (O.aviso) {   // pílula amarela com ✓
+    if (agora > O.avisoAte) O.aviso = null;
+    else { const f = fonte(g ? 'small' : 'tiny'), h = f.h + 8, w = larg(O.aviso, f) + h + 16, x = (W - w) / 2, y = H * 0.80 - h / 2;
+      c.fillStyle = '#000'; c.fillRect(0, y - 4, W, h + 8); rr(x, y, w, h, h / 2, K.am); const cx = x + h / 2 + 4, cy = y + h / 2; c.beginPath(); c.moveTo(cx - h / 5, cy); c.lineTo(cx - h / 14, cy + h / 6); c.lineTo(cx + h / 4, cy - h / 5); c.strokeStyle = '#000'; c.lineWidth = h > 30 ? 4 : 2; c.stroke();
+      txt(O.aviso, x + h + 8, cy, f, '#000', 'left'); }
+  }
+}
+/* prévia da aba (fora do simulador): FR165 (390 px, AMOLED) ou FR55 (208 px, MIP) em tamanho real de pixels */
+function oniPintar() {
+  const cv = $('#oniCv'); if (!cv) return;
+  const m = ONI.prev, lado = m === 'fr55' ? 208 : 390, F = ONI_FONTES[m], dpr = window.devicePixelRatio || 1, esc2 = (m === 'fr55' ? 360 / 208 : 360 / 390) * dpr;
+  cv.width = 360 * dpr; cv.height = 360 * dpr;
+  const c = cv.getContext('2d'); c.setTransform(esc2, 0, 0, esc2, 0, 0); c.imageSmoothingEnabled = m !== 'fr55';
+  c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
+  oniDesenhar(c, lado, lado, m === 'fr55', n => { const px = F[n] || F.xtiny, peso = n === 'numberMedium' && m === 'fr55' ? 900 : F.peso; return { css: `${peso} ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; });
+  c.restore();
+}
+/* favoritos do painel: lista + busca de linha → ponto */
+function oniListaPainel() {
+  const el = $('#oniFavs'); if (!el) return;
+  const l = ONI.painel;
+  el.innerHTML = l.length ? l.map((f, i) => `<div class="oni-fav"><span class="oni-cod">${esc(f.cod)}</span><div class="oni-fav-t"><b>${esc(f.destino)}</b><span>${esc(f.ponto)}${i === 0 ? ' · <em>principal (glance)</em>' : ''}</span></div>
+    ${i > 0 ? `<button class="btn peq sec" data-onisobe="${i}" title="Tornar principal">▲</button>` : ''}<button class="btn peq sec" data-onirem="${i}" title="Remover">✕</button></div>`).join('')
+    : '<div class="mini">Nenhum favorito ainda. Busque a linha abaixo e escolha o ponto onde você pega o ônibus.</div>';
+  const salvar = async nova => { try { localStorage.removeItem('oni_x'); } catch (e) { } try { const j = await api('onibus_favs_salvar', { favs: nova }); ONI.painel = j.favs; oniListaPainel(); toast('Favoritos salvos ✓'); ONI.carregado = false; oniAtualizar(); } catch (x) { toast(x.message); } };
+  el.querySelectorAll('[data-onirem]').forEach(b => b.onclick = () => salvar(l.filter((x, i) => i !== +b.dataset.onirem)));
+  el.querySelectorAll('[data-onisobe]').forEach(b => b.onclick = () => { const i = +b.dataset.onisobe; salvar([l[i], ...l.filter((x, k) => k !== i)]); });
+  const add = $('#oniAdd'); if (add) add.hidden = l.length >= 4;
+}
+async function renderOnibus() {
+  ONI.modo = 0; ONI.p = null;
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('onibus')}
+  <section class="w oni-w"><header class="w-top"><span class="w-ico oni-ico">${ICO.onibus}</span><span class="w-tit">Próximo Ônibus — quando ele chega no seu ponto</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <div class="chips"><button class="chip ${ONI.prev === 'fr165' ? 'ativo' : ''}" data-oniprev="fr165">Forerunner 165 (AMOLED)</button><button class="chip ${ONI.prev === 'fr55' ? 'ativo' : ''}" data-oniprev="fr55">Forerunner 55 (MIP)</button></div>
+   <canvas id="oniCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #ffc40033;touch-action:pan-y;cursor:pointer"></canvas>
+   <div class="chips"><button class="chip" data-onibt="prev">▲ Cima</button><button class="chip" data-onibt="start">● START</button><button class="chip" data-onibt="next">▼ Baixo</button><button class="chip" data-onibt="menu">☰ MENU</button><button class="chip" data-onibt="back">↩ VOLTAR</button><button class="chip" id="oniGps">📍 Usar minha localização</button></div>
+   <div class="mini" id="oniOrigem" style="text-align:center"></div>
+   <div class="mini" style="text-align:center;max-width:560px">Mostra <b>em quantos minutos chega o próximo ônibus</b> no seu ponto favorito (Maceió e Rio Largo), com os <b>próximos horários</b>. A contagem anda sozinha a cada minuto, sem gastar internet. Com o <b>alerta de 2 min</b> ligado o relógio vibra quando o ônibus estiver chegando — e, se você fechar o app, ainda pede para abri-lo 2 min antes.<br>
+   <b>Ao vivo</b> (bolinha verde) é o GPS dos ônibus; <b>programado</b> (bolinha amarela) é a tabela de hoje daquela parada, quando nenhum ônibus está sendo rastreado. Fonte: CittaMobi (não é a SMTT). Sem dado, o app diz que não tem — nada inventado.</div>
+  </div></section>
+  <div class="card"><h3>Seus pontos favoritos</h3><div class="mini" style="margin-bottom:8px">Até 4. O primeiro é o <b>principal</b> (aparece na glance do FR165). O app gerado abaixo traz esta lista sozinho; no relógio você também pode salvar pontos pelo <b>Perto de mim</b>.</div>
+   <div id="oniFavs"></div>
+   <div id="oniAdd" style="margin-top:10px"><div class="campo"><label>Linha (número ou bairro)</label><input id="oniBusca" placeholder="ex.: 0004, Ponta Verde, Benedito Bentes" autocomplete="off"></div>
+    <div id="oniLinhas" class="oni-res"></div>
+    <div id="oniPonto" hidden><div class="campo"><label>Ponto onde você pega o ônibus</label><select id="oniParada"></select></div><div class="mini" id="oniInfo"></div><div class="chips" style="margin-top:6px"><button class="btn" id="oniSalvar">＋ Adicionar favorito</button></div></div></div></div>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="oniApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="oniModelo" list="oniModelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="oniModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="oniGera">⬇ Baixar o Próximo Ônibus</button></div>
+   <div class="mini" id="oniProg"></div></form>
+   <div class="mini" style="margin-top:8px">Já compilados (sem os favoritos do painel — salve pelo "Perto de mim"): <a href="app/ProximoOnibus-fr165.prg" download>Forerunner 165</a> · <a href="app/ProximoOnibus-fr165m.prg" download>Forerunner 165 Music</a> · <a href="app/ProximoOnibus-fr55.prg" download>Forerunner 55</a></div></div>
+  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir aparece na hora a <b>última consulta</b> e ele atualiza pelo celular (ônibus andando na estrada = consultando). Chegou, o relógio vibra.<br><b>▲ ▼</b> (ou deslizar) trocam de favorito. No centro, <b>"chega em X min"</b> em amarelo e, embaixo, os próximos horários. O rodapé diz se é <b>ao vivo</b> ou <b>programado</b> e <b>há quanto tempo</b> foi atualizado; ele se atualiza sozinho a cada 5 min ou quando o ônibus da tela passa.<br><b>START</b> (ou MENU) abre as opções: <b>Atualizar agora</b>, <b>Perto de mim</b> (GPS → pontos a até 1,5 km → linhas; START salva o favorito), <b>Alerta 2 min</b> (sininho no rodapé; vibra forte e mostra a faixa "CHEGANDO!"), <b>Tornar principal</b>, <b>Remover favorito</b> e <b>Sincronizar painel</b>.<br>Sem celular, sem internet, sem linha/ponto ou com a fonte fora do ar, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): linha, "chega em X min" e os próximos horários do favorito principal. O FR55 não aceita glance em apps.</div></div>
+  <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> do seu modelo acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> (ou ▲▼ na lista de apps) → <b>Próximo Ônibus</b>.<br><b>Permissões:</b> GPS (só no "Perto de mim"; a posição não é gravada), comunicação (consulta pelo celular pareado, com o Garmin Connect aberto em segundo plano) e segundo plano (só para o aviso de 2 min com o app fechado — um evento agendado, sem internet).</div></div>
+  ${tabbar('app')}</div>`;
+  const pinta = () => oniPintar();
+  document.querySelectorAll('[data-onibt]').forEach(b => b.onclick = () => { oniBotao(b.dataset.onibt); pinta(); });
+  document.querySelectorAll('[data-oniprev]').forEach(b => b.onclick = () => { ONI.prev = b.dataset.oniprev; document.querySelectorAll('[data-oniprev]').forEach(x => x.classList.toggle('ativo', x === b)); pinta(); });
+  const cv = $('#oniCv');
+  cv.onclick = e => { const r = cv.getBoundingClientRect(); oniToque((e.clientY - r.top) / r.height * 100, 100); pinta(); };
+  let y0 = null; cv.ontouchstart = e => { y0 = e.touches[0].clientY; };
+  cv.ontouchend = e => { if (y0 === null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null; if (Math.abs(dy) > 30) { e.preventDefault(); oniBotao(dy > 0 ? 'prev' : 'next'); } };
+  const origem = () => { const o = $('#oniOrigem'); if (o) o.textContent = ONI.lat != null ? `Posição do "Perto de mim": ${ONI.origem}${ONI.origem === ONI_PADRAO.nome ? ' (ponto fixo — toque em "Usar minha localização")' : ''}` : ''; };
+  $('#oniGps').onclick = async () => { ONI.origem = ''; ONI.modo = 2; await oniPerto(true); origem(); };
+  pinta(); oniAnimar();
+  ONI.carregado = false; oniAtualizar().then(() => { oniListaPainel(); origem(); });
+  // busca de linha (debounce 300 ms, cancela a anterior) → paradas da linha escolhida
+  let tmr = null, ctl = null, linha = null;
+  $('#oniBusca').oninput = () => { clearTimeout(tmr); tmr = setTimeout(async () => {
+    const q = $('#oniBusca').value.trim(); if (q.length < 2) { $('#oniLinhas').innerHTML = ''; return; }
+    ctl?.abort(); ctl = new AbortController();
+    try { const j = await fetch(`${ONI_API}?a=linhas&q=${encodeURIComponent(q)}`, { signal: ctl.signal }).then(r => r.json());
+      $('#oniLinhas').innerHTML = (j.l || []).length ? j.l.map(l => `<button class="oni-linha" data-oniid="${l.id}"><span class="oni-cod">${esc(l.cod)}</span><span><b>${esc(l.nome)}</b><small>${esc(l.empresa)} · sentido ${esc(l.destino)}</small></span></button>`).join('') : '<div class="mini">Nenhuma linha encontrada.</div>';
+      $('#oniLinhas').querySelectorAll('[data-oniid]').forEach(b => b.onclick = async () => {
+        $('#oniLinhas').querySelectorAll('.oni-linha').forEach(x => x.classList.toggle('ativo', x === b));
+        const p = await fetch(`${ONI_API}?a=paradas&l=${b.dataset.oniid}`).then(r => r.json()).catch(() => null);
+        if (!p || !p.s) return toast('Não consegui carregar os pontos dessa linha');
+        linha = { id: +b.dataset.oniid, cod: p.cod, destino: p.destino, s: p.s.filter(x => x.nome) };
+        if (!linha.s.length) { $('#oniPonto').hidden = true; return toast('Essa linha está sem a lista de pontos agora'); }
+        $('#oniParada').innerHTML = linha.s.map((x, i) => `<option value="${i}">${i + 1}. ${esc(x.nome.split(',').slice(0, 2).join(','))}</option>`).join('');
+        $('#oniInfo').textContent = `Linha ${p.cod} sentido ${p.destino}${p.info ? ' · hoje ' + p.info : ''}`;
+        $('#oniPonto').hidden = false;
+      });
+    } catch (e) { if (e.name !== 'AbortError') $('#oniLinhas').innerHTML = '<div class="mini">Busca indisponível agora.</div>'; }
+  }, 300); };
+  $('#oniSalvar').onclick = async () => {
+    if (!linha) return; const s = linha.s[+$('#oniParada').value]; if (!s) return;
+    if (ONI.painel.some(x => x.id === linha.id && x.stop === s.id)) return toast('Esse ponto já está nos favoritos');
+    if (ONI.painel.length >= 4) return toast('Máximo de 4 favoritos');
+    const bt = $('#oniSalvar'); bt.disabled = true; bt.textContent = 'Salvando…';
+    try { const j = await api('onibus_favs_salvar', { favs: [...ONI.painel, { id: linha.id, stop: s.id, cod: linha.cod, destino: linha.destino, ponto: s.curto }] });
+      ONI.painel = j.favs; oniListaPainel(); toast('Favorito adicionado ✓'); $('#oniPonto').hidden = true; $('#oniLinhas').innerHTML = ''; $('#oniBusca').value = ''; linha = null;
+      ONI.carregado = false; oniAtualizar();
+    } catch (x) { toast(x.message); }
+    bt.disabled = false; bt.textContent = '＋ Adicionar favorito';
+  };
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#oniModelos') && ($('#oniModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join('')); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#oniApp').onsubmit = e => e.preventDefault();
+  $('#oniGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#oniModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#oniGera'); bt.disabled = true; $('#oniProg').textContent = '⚙️ Compilando com os seus favoritos (cerca de 30 s)…';
+    try {
+      const a = await api('onibus_app', { modelo: m.id });
+      const esperar = async (k = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#oniProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS pelo cabo USB. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || k > 90) { $('#oniProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(k + 1), 2000); };
+      esperar();
+    } catch (x) { $('#oniProg').textContent = '❌ ' + x.message; bt.disabled = false; }
+  };
+}
+
+/* ================= mostrador "Painel Total" (réplica em canvas do PainelApp.mc) ================= */
+const PAINEL = {
+  dados: null,          // dados reais do usuário (preenchidos por painelCarregar)
+  cor: '#FF0000',       // cor de destaque
+  segundos: true
+};
+const PN_COR = { branco: '#FFFFFF', cinza: '#555555', cinzaC: '#AAAAAA', verde: '#00CC00', verdeC: '#55DD55', azul: '#00AAFF', laranja: '#FF8800', amarelo: '#FFCC00', preto: '#000000' };
+const PN_DIAS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const PN_MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+function painelDados() {
+  const d = PAINEL.dados || {};
+  const ag = new Date();
+  return Object.assign({
+    hora: ag.getHours(), min: ag.getMinutes(), seg: ag.getSeconds(),
+    dow: ag.getDay(), dia: ag.getDate(), mes: ag.getMonth(),
+    fc: null, zona: 0, cal: 0, bateria: 100, passos: 0, meta: 10000,
+    distancia: 0, pisos: 0, metaPisos: 10, subida: 0, estresse: null,
+    intensidade: 0, metaIntensidade: 150, bodyBattery: null,
+    temp: null, tmax: null, tmin: null, condicao: 'Sem previsão', chuva: false, limpo: false,
+    gps: 0, nascer: '--:--', porSol: '--:--', notificacoes: 0, alarmes: 0,
+    bluetooth: true, celular: true, naoPerturbe: false
+  }, d);
+}
+
+function painelDesenhar(c, w, h, redondo, fonte, cor) {
+  const D = painelDados();
+  const k = w / 390, px = v => v * k, cx = w / 2, cy = h / 2, raio = Math.min(w, h) / 2;
+  const dest = PAINEL.cor;
+  const F = n => ({ css: (n >= 30 ? 700 : 600) + ' ' + px(n) + "px 'Roboto Condensed', Roboto, Arial Narrow, sans-serif", h: px(n) });
+  const fx = { hora: F(42), num: F(22), min: F(14), micro: F(10) };
+  const txt = (x, y, f, t, cr, just) => { c.font = f.css; c.fillStyle = cr; c.textAlign = just || 'center'; c.textBaseline = 'middle'; c.fillText(String(t), x, y); c.textAlign = 'left'; };
+  const barra = (x, y, lg, al, frac, cr) => {
+    frac = Math.max(0, Math.min(1, frac || 0));
+    const r = al / 2;
+    const rr = (bx, by, bw, bh, cc) => { c.fillStyle = cc; c.beginPath(); c.roundRect(bx, by, bw, bh, r); c.fill(); };
+    rr(x, y, lg, al, PN_COR.cinza);
+    if (frac > 0) rr(x, y, Math.max(al, lg * frac), al, cr);
+  };
+
+  c.fillStyle = '#000'; c.fillRect(0, 0, w, h);
+
+  // ---- aro de minutos ----
+  const rExt = raio - px(3), rInt = raio - px(17);
+  for (let i = 0; i < 60; i++) {
+    const a = (i * 6 - 90) * Math.PI / 180, co = Math.cos(a), se = Math.sin(a);
+    let cr = PN_COR.cinzaC, gr = px(2);
+    if (i % 5 === 0) { cr = dest; gr = px(6); }
+    if (i % 15 === 0) { cr = PN_COR.branco; gr = px(6); }
+    if (i === D.min) { cr = PN_COR.branco; gr = px(4); }
+    c.strokeStyle = cr; c.lineWidth = gr; c.beginPath();
+    c.moveTo(cx + rInt * co, cy + rInt * se); c.lineTo(cx + rExt * co, cy + rExt * se); c.stroke();
+  }
+  const tri = (pts, cr) => { c.fillStyle = cr; c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); c.lineTo(pts[1][0], pts[1][1]); c.lineTo(pts[2][0], pts[2][1]); c.closePath(); c.fill(); };
+  const t0 = px(11);
+  tri([[cx - t0, cy - raio + px(20)], [cx + t0, cy - raio + px(20)], [cx, cy - raio + px(41)]], dest);
+  tri([[cx - t0, cy + raio - px(20)], [cx + t0, cy + raio - px(20)], [cx, cy + raio - px(41)]], dest);
+
+  // ---- grade ----
+  c.strokeStyle = '#2A2A2A'; c.lineWidth = px(2);
+  [[96, 92, 148, 70], [242, 70, 294, 92], [30, 142, 148, 142], [242, 142, 360, 142],
+   [24, 186, 122, 186], [268, 186, 366, 186], [28, 238, 128, 238], [262, 238, 362, 238],
+   [34, 290, 140, 290], [250, 290, 356, 290], [96, 336, 294, 336],
+   [148, 106, 148, 142], [242, 106, 242, 142], [122, 186, 122, 238], [268, 186, 268, 238],
+   [140, 290, 140, 336], [250, 290, 250, 336]].forEach(l => {
+    c.beginPath(); c.moveTo(px(l[0]), px(l[1])); c.lineTo(px(l[2]), px(l[3])); c.stroke();
+  });
+
+  // ---- ícones ----
+  const poly = (pts, cr) => { c.fillStyle = cr; c.beginPath(); pts.forEach((p, i) => i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.closePath(); c.fill(); };
+  const circ = (x, y, r, cr) => { c.fillStyle = cr; c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); };
+  const linha = (x1, y1, x2, y2, cr, lw) => { c.strokeStyle = cr; c.lineWidth = lw; c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.stroke(); };
+
+  const coracao = (x, y, t, cr) => { const r = t / 3; circ(x - r, y - r / 2, r, cr); circ(x + r, y - r / 2, r, cr); poly([[x - t / 1.15, y - r / 2], [x + t / 1.15, y - r / 2], [x, y + t / 1.1]], cr); };
+  const chama = (x, y, t, cr) => { poly([[x, y - t], [x + t / 1.6, y], [x + t / 2.2, y + t / 1.2], [x - t / 2.2, y + t / 1.2], [x - t / 1.6, y - t / 8]], cr); poly([[x, y - t / 6], [x + t / 4, y + t / 2.6], [x - t / 4, y + t / 2.6]], '#000'); };
+  const pilha = (x, y, lg, al, pct, cr) => {
+    c.strokeStyle = cr; c.lineWidth = px(2); c.beginPath(); c.roundRect(x - lg / 2, y - al / 2, lg, al, px(3)); c.stroke();
+    c.fillStyle = cr; c.fillRect(x + lg / 2, y - al / 5, px(3), al * 2 / 5);
+    const interno = lg - px(6), cc = interno * pct / 100;
+    if (cc > 0) c.fillRect(x - lg / 2 + px(3), y - al / 2 + px(3), cc, al - px(6));
+  };
+  const pegadas = (x, y, cr) => { c.fillStyle = cr; circ(x - px(4), y - px(8), px(3), cr); c.beginPath(); c.roundRect(x - px(7), y - px(4), px(6), px(10), px(3)); c.fill(); circ(x + px(5), y - px(3), px(3), cr); c.beginPath(); c.roundRect(x + px(2), y + px(1), px(6), px(9), px(3)); c.fill(); };
+  const estrada = (x, y, cr) => { linha(x - px(9), y + px(10), x - px(3), y - px(10), cr, px(3)); linha(x + px(9), y + px(10), x + px(3), y - px(10), cr, px(3)); linha(x, y - px(6), x, y - px(1), cr, px(2)); linha(x, y + px(4), x, y + px(9), cr, px(2)); };
+  const montanha = (x, y, t, cr) => { poly([[x - t, y + t / 1.6], [x - t / 3, y - t / 1.6], [x + t / 3, y + t / 1.6]], cr); poly([[x - t / 4, y + t / 1.6], [x + t / 2.5, y - t / 2.4], [x + t, y + t / 1.6]], cr); };
+  const setaSubida = (x, y, t, cr) => { linha(x - t / 1.4, y + t / 1.4, x + t / 2, y - t / 2, cr, px(3)); poly([[x + t, y - t], [x + t, y - t / 8], [x + t / 8, y - t]], cr); };
+  const boneco = (x, y, t, cr) => { circ(x, y - t / 1.8, t / 3, cr); poly([[x - t / 1.5, y + t / 1.6], [x, y - t / 6], [x + t / 1.5, y + t / 1.6]], cr); };
+  const corredor = (x, y, t, cr) => { circ(x, y - t / 1.7, t / 4, cr); linha(x - t / 3, y - t / 5, x + t / 3, y, cr, px(3)); linha(x - t / 3, y - t / 5, x - t / 1.4, y + t / 4, cr, px(3)); linha(x + t / 3, y, x + t / 2.2, y + t / 1.6, cr, px(3)); linha(x + t / 3, y, x - t / 2.4, y + t / 1.5, cr, px(3)); };
+  const raioIco = (x, y, t, cr) => poly([[x + t / 3, y - t], [x - t / 2.2, y + t / 6], [x - t / 12, y + t / 6], [x - t / 3, y + t], [x + t / 2.2, y - t / 5], [x + t / 12, y - t / 5]], cr);
+  const pino = (x, y, t, cr) => { circ(x, y - t / 3, t / 1.6, cr); poly([[x - t / 1.9, y], [x + t / 1.9, y], [x, y + t]], cr); circ(x, y - t / 3, t / 4, '#000'); };
+  const iconeClima = (x, y, t, chuva, limpo) => {
+    circ(x + t / 3, y - t / 2.2, t / 2.4, PN_COR.amarelo);
+    if (limpo) { for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; linha(x + t / 3 + (t / 1.9) * Math.cos(a), y - t / 2.2 + (t / 1.9) * Math.sin(a), x + t / 3 + (t / 1.3) * Math.cos(a), y - t / 2.2 + (t / 1.3) * Math.sin(a), PN_COR.amarelo, px(2)); } return; }
+    circ(x - t / 2.4, y + t / 6, t / 2.6, PN_COR.branco); circ(x + t / 8, y, t / 2.1, PN_COR.branco); circ(x + t / 1.6, y + t / 5, t / 3, PN_COR.branco);
+    c.fillStyle = PN_COR.branco; c.fillRect(x - t / 2.4, y + t / 6, t * 1.2, t / 2.6);
+    if (chuva) for (let i = 0; i < 3; i++) { const gx = x - t / 2 + i * (t / 2.2); linha(gx, y + t / 1.4, gx - t / 6, y + t * 1.1, PN_COR.azul, px(2)); }
+  };
+  const solHorizonte = (x, y, t, cr, nascendo) => {
+    circ(x, y, t / 2.2, cr);
+    c.fillStyle = '#000'; c.fillRect(x - t, y + t / 4, t * 2, t);
+    linha(x - t, y + t / 3, x + t, y + t / 3, cr, px(2));
+    linha(x, y - t, x, y - t / 1.5, cr, px(2));
+    linha(x - t / 1.2, y - t / 2, x - t / 1.7, y - t / 3, cr, px(2));
+    linha(x + t / 1.2, y - t / 2, x + t / 1.7, y - t / 3, cr, px(2));
+    poly(nascendo ? [[x - t / 4, y - t / 2.6], [x + t / 4, y - t / 2.6], [x, y - t / 1.5]]
+                  : [[x - t / 4, y - t / 1.5], [x + t / 4, y - t / 1.5], [x, y - t / 2.6]], cr);
+  };
+  const balao = (x, y, t, cr) => { c.fillStyle = cr; c.beginPath(); c.roundRect(x - t / 1.3, y - t / 1.8, t * 1.5, t, px(3)); c.fill(); poly([[x - t / 3, y + t / 2.4], [x, y + t / 2.4], [x - t / 2.4, y + t]], cr); linha(x - t / 2.6, y, x + t / 2.6, y, '#000', px(2)); };
+  const despertador = (x, y, t, cr) => { c.strokeStyle = cr; c.lineWidth = px(2); c.beginPath(); c.arc(x, y, t / 1.4, 0, 7); c.stroke(); linha(x - t, y - t, x - t / 2, y - t / 1.6, cr, px(2)); linha(x + t, y - t, x + t / 2, y - t / 1.6, cr, px(2)); linha(x, y, x, y - t / 2.6, cr, px(2)); linha(x, y, x + t / 3, y + t / 4, cr, px(2)); };
+  const bluetooth = (x, y, t, cr) => { linha(x, y - t, x, y + t, cr, px(2)); linha(x, y - t, x + t / 1.6, y - t / 2.4, cr, px(2)); linha(x + t / 1.6, y - t / 2.4, x - t / 1.6, y + t / 2.4, cr, px(2)); linha(x, y + t, x + t / 1.6, y + t / 2.4, cr, px(2)); linha(x + t / 1.6, y + t / 2.4, x - t / 1.6, y - t / 2.4, cr, px(2)); };
+  const celular = (x, y, t, cr) => { c.strokeStyle = cr; c.lineWidth = px(2); c.beginPath(); c.roundRect(x - t / 1.8, y - t, t * 1.1, t * 2, px(3)); c.stroke(); c.fillStyle = cr; c.fillRect(x - t / 5, y + t / 1.5, t / 2.5, px(2)); };
+  const lua = (x, y, t, cr) => { circ(x, y, t, cr); circ(x + t / 2.2, y - t / 2.6, t, '#000'); };
+
+  // ---- FC ----
+  coracao(cx, px(38), px(13), dest);
+  txt(cx, px(70), fx.num, D.fc == null ? '--' : D.fc, PN_COR.branco);
+  txt(cx, px(92), fx.micro, D.zona > 0 ? 'Z' + D.zona : 'Z-', PN_COR.branco);
+  const n = 10, lgz = px(5), esp = px(2), tot = n * lgz + (n - 1) * esp, x0 = cx - tot / 2, acesos = D.zona * 2;
+  for (let i = 0; i < n; i++) {
+    c.fillStyle = i < acesos ? (i < 2 ? PN_COR.verde : (i < 6 ? dest : PN_COR.laranja)) : PN_COR.cinza;
+    c.fillRect(x0 + i * (lgz + esp), px(102), lgz, px(7));
+  }
+
+  // ---- calorias / bateria ----
+  chama(px(112), px(52), px(11), PN_COR.branco);
+  txt(px(112), px(70), fx.micro, 'CAL', PN_COR.cinzaC);
+  txt(px(112), px(86), fx.min, D.cal, PN_COR.branco);
+  pilha(px(278), px(57), px(32), px(16), D.bateria, D.bateria <= 20 ? dest : D.bateria <= 40 ? PN_COR.amarelo : PN_COR.verde);
+  txt(px(278), px(82), fx.min, D.bateria + '%', PN_COR.branco);
+
+  // ---- passos / distância ----
+  pegadas(px(56), px(108), PN_COR.branco);
+  txt(px(76), px(98), fx.micro, 'PASSOS', PN_COR.cinzaC, 'left');
+  txt(px(76), px(112), fx.min, D.passos, PN_COR.branco, 'left');
+  txt(px(80), px(127), fx.micro, '/ ' + D.meta, PN_COR.cinzaC, 'left');
+  barra(px(40), px(134), px(76), px(6), D.passos / D.meta, dest);
+
+  estrada(px(296), px(108), PN_COR.branco);
+  txt(px(352), px(98), fx.micro, 'DISTÂNCIA', PN_COR.cinzaC, 'right');
+  txt(px(314), px(112), fx.min, D.distancia.toFixed(1), PN_COR.branco, 'left');
+  txt(px(316), px(127), fx.micro, 'km', PN_COR.cinzaC, 'left');
+  barra(px(274), px(134), px(76), px(6), D.distancia / 10, dest);
+
+  // ---- data ----
+  txt(cx, px(131), fx.min, PN_DIAS[D.dow] + ', ' + D.dia + ' de ' + PN_MESES[D.mes], PN_COR.branco);
+
+  // ---- pisos / subida ----
+  montanha(px(50), px(158), px(13), PN_COR.branco);
+  txt(px(72), px(148), fx.micro, 'PISOS', PN_COR.cinzaC, 'left');
+  txt(px(72), px(163), fx.min, D.pisos, PN_COR.branco, 'left');
+  barra(px(40), px(172), px(58), px(6), D.pisos / D.metaPisos, dest);
+
+  setaSubida(px(298), px(158), px(12), PN_COR.branco);
+  txt(px(350), px(148), fx.micro, 'SUBIDA', PN_COR.cinzaC, 'right');
+  txt(px(318), px(163), fx.min, D.subida, PN_COR.branco, 'left');
+  txt(px(320), px(177), fx.micro, 'm', PN_COR.cinzaC, 'left');
+  barra(px(292), px(172), px(58), px(6), D.subida / 500, dest);
+
+  // ---- hora ----
+  c.font = fx.hora.css; c.fillStyle = PN_COR.branco; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(String(D.hora).padStart(2, '0') + ':' + String(D.min).padStart(2, '0'), cx, px(172));
+  c.textAlign = 'left'; c.textBaseline = 'top';
+  if (PAINEL.segundos) txt(px(262), px(233), fx.min, String(D.seg).padStart(2, '0'), PN_COR.cinzaC);
+
+  // ---- estresse / intensidade ----
+  boneco(px(52), px(212), px(13), PN_COR.laranja);
+  txt(px(74), px(196), fx.micro, 'ESTRESSE', PN_COR.cinzaC, 'left');
+  txt(px(74), px(211), fx.min, D.estresse == null ? '--' : D.estresse, PN_COR.branco, 'left');
+  const nivel = D.estresse == null ? -1 : (D.estresse >= 76 ? 3 : D.estresse >= 51 ? 2 : D.estresse >= 26 ? 1 : 0);
+  const coresE = [PN_COR.verde, PN_COR.amarelo, PN_COR.laranja, dest];
+  for (let i = 0; i < 4; i++) { c.fillStyle = i <= nivel ? coresE[i] : PN_COR.cinza; c.fillRect(px(40) + i * (px(58) / 4), px(219), px(58) / 4 - px(2), px(6)); }
+
+  corredor(px(300), px(212), px(13), PN_COR.verdeC);
+  txt(px(352), px(196), fx.micro, 'INTENSIDADE', PN_COR.cinzaC, 'right');
+  txt(px(318), px(211), fx.min, D.intensidade, PN_COR.branco, 'left');
+  txt(px(320), px(225), fx.micro, 'min', PN_COR.cinzaC, 'left');
+  barra(px(292), px(219), px(58), px(6), D.intensidade / D.metaIntensidade, PN_COR.laranja);
+
+  // ---- clima ----
+  iconeClima(px(152), px(249), px(17), D.chuva, D.limpo);
+  txt(px(176), px(247), fx.num, (D.temp == null ? '--' : D.temp) + '°', PN_COR.branco, 'left');
+  tri([[px(238), px(254)], [px(250), px(254)], [px(244), px(245)]], dest);
+  txt(px(256), px(246), fx.micro, (D.tmax == null ? '--' : D.tmax) + '°', PN_COR.branco, 'left');
+  tri([[px(238), px(262)], [px(250), px(262)], [px(244), px(271)]], PN_COR.azul);
+  txt(px(256), px(260), fx.micro, (D.tmin == null ? '--' : D.tmin) + '°', PN_COR.branco, 'left');
+  txt(cx, px(274), fx.micro, D.condicao, PN_COR.branco);
+
+  // ---- body battery / gps ----
+  raioIco(px(50), px(262), px(13), PN_COR.azul);
+  txt(px(70), px(249), fx.micro, 'BODY', PN_COR.cinzaC, 'left');
+  txt(px(70), px(261), fx.micro, 'BATTERY', PN_COR.cinzaC, 'left');
+  txt(px(70), px(274), fx.min, D.bodyBattery == null ? '--' : D.bodyBattery, PN_COR.branco, 'left');
+  barra(px(44), px(282), px(58), px(6), (D.bodyBattery || 0) / 100, PN_COR.azul);
+
+  pino(px(300), px(258), px(12), dest);
+  txt(px(320), px(251), fx.micro, 'GPS', PN_COR.cinzaC, 'left');
+  for (let i = 0; i < 4; i++) { const al = px(5 + i * 4); c.fillStyle = i < D.gps ? PN_COR.verdeC : PN_COR.cinza; c.fillRect(px(320) + i * px(8), px(272) - al, px(6), al); }
+
+  // ---- sol, notificações, alarme ----
+  solHorizonte(px(114), px(296), px(13), PN_COR.amarelo, true);
+  txt(px(114), px(312), fx.micro, 'NASCER', PN_COR.cinzaC);
+  txt(px(114), px(326), fx.min, D.nascer, PN_COR.branco);
+  solHorizonte(px(276), px(296), px(13), PN_COR.laranja, false);
+  txt(px(276), px(312), fx.micro, 'PÔR DO SOL', PN_COR.cinzaC);
+  txt(px(276), px(326), fx.min, D.porSol, PN_COR.branco);
+
+  balao(px(170), px(302), px(13), PN_COR.branco);
+  if (D.notificacoes > 0) { circ(px(180), px(296), px(8), dest); txt(px(180), px(295), fx.micro, D.notificacoes > 9 ? '9+' : D.notificacoes, PN_COR.branco); }
+  despertador(px(221), px(302), px(11), PN_COR.branco);
+  txt(px(221), px(322), fx.min, D.alarmes > 0 ? D.alarmes : '--', PN_COR.branco);
+
+  // ---- rodapé ----
+  bluetooth(px(166), px(348), px(10), D.bluetooth ? PN_COR.azul : PN_COR.cinza);
+  celular(px(195), px(348), px(10), D.celular ? PN_COR.branco : PN_COR.cinza);
+  lua(px(224), px(348), px(8), D.naoPerturbe ? PN_COR.branco : PN_COR.cinza);
+}
+
+/* ================= mostrador "Painel Total" (prévia + gerar o app do relógio) ================= */
+async function painelCarregar() {
+  try {
+    const d = S.dash || await api('dashboard').catch(() => null);
+    const h = (d && d.hoje) || {};
+    const m = S.metas || {};
+    PAINEL.dados = {
+      fc: S.fcAtual || h.fc || null,
+      zona: h.fc ? Math.max(1, Math.min(5, Math.round(((h.fc - 60) / 130) * 5))) : 0,
+      cal: Math.round(h.calorias_ativas || h.calorias || 0),
+      bateria: Math.round(h.bateria_relogio != null ? h.bateria_relogio : 95),
+      passos: Math.round(h.passos || 0), meta: m.passos || 10000,
+      distancia: +(h.distancia_km || 0).toFixed(1),
+      pisos: Math.round(h.andares || 0), metaPisos: 10,
+      subida: Math.round(h.subida_m || 0),
+      estresse: h.stress != null ? Math.round(h.stress) : null,
+      intensidade: Math.round(h.minutos_intensidade || 0), metaIntensidade: m.minutos_intensidade || 150,
+      bodyBattery: h.energia != null ? Math.round(h.energia) : null,
+      notificacoes: 0, alarmes: 0, gps: 3, bluetooth: true, celular: true, naoPerturbe: false
+    };
+  } catch (e) { PAINEL.dados = null; }
+}
+function painelPintar() {
+  const cv = $('#painelCv'); if (!cv) return;
+  const lado = 390, dpr = window.devicePixelRatio || 1;
+  cv.width = lado * dpr; cv.height = lado * dpr;
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  painelDesenhar(c, lado, lado, true, null, null);
+}
+async function renderPainel() {
+  app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('painel')}
+  <section class="w"><header class="w-top"><span class="w-ico">📊</span><span class="w-tit">Painel Total</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
+   <canvas id="painelCv" style="width:min(320px,84vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #ff000033;background:#000"></canvas>
+   <div class="chips">${['Vermelho', 'Laranja', 'Azul', 'Verde', 'Amarelo', 'Branco'].map((n, i) => `<button class="chip${i ? '' : ' ativo'}" data-painelcor="${['#FF0000', '#FF8800', '#00AAFF', '#00CC00', '#FFCC00', '#FFFFFF'][i]}">${n}</button>`).join('')}</div>
+   <div class="mini" style="text-align:center;max-width:580px"><b>Mostrador (watch face)</b> com tudo na mesma tela: hora grande, data, frequência cardíaca com zona, calorias, bateria, passos com meta, distância, andares, subida, estresse, minutos de intensidade, Body Battery, clima com máxima e mínima, GPS, nascer e pôr do sol, notificações, alarmes e os ícones de Bluetooth, celular e não perturbe. Os ícones são desenhados por código e as letras usam fontes próprias, bem pequenas, para caber tudo sem abreviar. A cor de destaque e os segundos são configuráveis no Garmin Connect.</div>
+  </div></section>
+  <div class="card"><h3>Gerar para o seu relógio</h3>
+   <form id="painelApp"><div class="campo"><label>Modelo do relógio (digite ou escolha)</label><input id="painelModelo" list="painelModelos" value="Forerunner® 165 (fr165)" autocomplete="off" required><datalist id="painelModelos"></datalist></div>
+   <div class="chips"><button class="btn" id="painelGera">⬇ Baixar o mostrador Painel Total</button></div>
+   <div class="mini" id="painelProg"></div></form>
+   <div class="mini" style="margin-top:8px">Já compilados: <a href="app/PainelTotal-fr165.prg">Forerunner 165</a> · <a href="app/PainelTotal-fr165m.prg">Forerunner 165 Music</a></div></div>
+  <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo <b>PainelTotal.prg</b> para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: segure <b>MENU</b> no mostrador → <b>Editar/Trocar mostrador</b> → escolha <b>Painel Total</b>.<br><b>Permissões:</b> posição (para nascer/pôr do sol e sinal de GPS), perfil do usuário (zonas de FC) e complicações (Body Battery). Nada é enviado para a internet.</div></div>
+  ${tabbar('app')}</div>`;
+  document.querySelectorAll('[data-painelcor]').forEach(b => b.onclick = () => {
+    PAINEL.cor = b.dataset.painelcor;
+    document.querySelectorAll('[data-painelcor]').forEach(x => x.classList.toggle('ativo', x === b));
+    painelPintar();
+  });
+  await painelCarregar();
+  painelPintar();
+  let modelos = []; fetch('app/modelos.json?v=2').then(x => x.json()).catch(() => []).then(l => { modelos = l; $('#painelModelos').innerHTML = l.map(m => `<option value="${esc(m.nome)} (${m.id})">`).join(''); });
+  const achar = t => { const n = x => x.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, ''); const id = (t.match(/\(([a-z0-9_]+)\)\s*$/) || [])[1], q = n(t); return modelos.find(m => m.id === id) || modelos.find(m => m.id === q) || modelos.find(m => m.nome.split('/').some(x => n(x) === q)); };
+  $('#painelApp').onsubmit = e => e.preventDefault();
+  $('#painelGera').onclick = async e => {
+    e.preventDefault(); const m = achar($('#painelModelo').value); if (!m) return toast('Escolha o modelo do relógio');
+    const bt = $('#painelGera'); bt.disabled = true; $('#painelProg').textContent = '⚙️ Compilando (cerca de 30 s)…';
+    try {
+      const a = await api('painel_app', { modelo: m.id });
+      const esperar = async (k = 0) => { const s = await apiGet('app_status', { id: a.id });
+        if (s.status === 'pronto') { $('#painelProg').innerHTML = `✅ Pronto! Copie para GARMIN/APPS pelo cabo USB. <a href="api.php?acao=app_baixar&id=${a.id}">Baixar de novo</a>`; location.href = 'api.php?acao=app_baixar&id=' + a.id; bt.disabled = false; return; }
+        if (s.status === 'erro' || k > 90) { $('#painelProg').textContent = '❌ ' + (s.erro || 'Demorou demais'); bt.disabled = false; return; }
+        setTimeout(() => esperar(k + 1), 2000); };
+      esperar();
+    } catch (x) { $('#painelProg').textContent = '❌ ' + x.message; bt.disabled = false; }
   };
 }

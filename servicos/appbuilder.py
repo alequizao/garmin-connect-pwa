@@ -12,6 +12,7 @@ FONTE_WALKIE = conf.get('compilador', 'fonte_walkie', '/opt/ciq/walkie')
 FONTE_MIMEI = conf.get('compilador', 'fonte_mimei', '/opt/ciq/mimei')
 URL_MIMEI = conf.get('app', 'url_mimei', 'https://alequizao.com/garmin/mimei.php')
 URL_WALKIE = conf.get('app', 'url_walkie', 'https://alequizao.com/garmin/walkie.php')
+URL_SONO = conf.get('app', 'url_sono', 'https://alequizao.com/garmin/sono.php')
 TRACCAR = conf.get('traccar', 'api', 'http://127.0.0.1:8082/api')
 AUTH = (conf.get('traccar', 'usuario'), conf.get('traccar', 'senha'))
 logging.basicConfig(filename='/var/log/garmin-appbuilder.log', level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -29,18 +30,21 @@ def traccar_device(nome, unico):
 
 def compilar(p):
     tmp = f'/tmp/ciq-build-{p["id"]}'
-    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree({'walkie': FONTE_WALKIE, 'mimei': FONTE_MIMEI, 'ben10': '/opt/ciq/ben10', 'omnitrix': '/opt/ciq/omnitrix', 'tama': '/opt/ciq/tama'}.get(p.get('tipo'), FONTE), tmp)
+    shutil.rmtree(tmp, ignore_errors=True); shutil.copytree({'walkie': FONTE_WALKIE, 'mimei': FONTE_MIMEI, 'ben10': '/opt/ciq/ben10', 'omnitrix': '/opt/ciq/omnitrix', 'tama': '/opt/ciq/tama', 'locais': '/opt/ciq/locais', 'sono': '/opt/ciq/sono-offline', 'forca': '/opt/ciq/forca', 'painel': '/opt/ciq/painel', 'gasolina': '/opt/ciq/gasolina', 'onibus': '/opt/ciq/onibus'}.get(p.get('tipo'), FONTE), tmp)
     modelo = p['modelo'] or 'fr165'
     if not os.path.isfile(f'/root/.Garmin/ConnectIQ/Devices/{modelo}/compiler.json'): raise Exception(f'Modelo {modelo} não encontrado')
     mf = f'{tmp}/manifest.xml'; m = open(mf).read()
     m = re.sub(r'<iq:products>.*?</iq:products>', f'<iq:products><iq:product id="{modelo}"/></iq:products>', m, flags=re.S)
-    m = re.sub(r'minApiLevel="[0-9.]+"', 'minApiLevel="2.4.0"', m); open(mf, 'w').write(m)
-    mc = f'{tmp}/source/' + {'walkie': 'RadioApp.mc', 'mimei': 'MeMimeiApp.mc', 'ben10': 'Ben10App.mc', 'omnitrix': 'OmnitrixApp.mc', 'tama': 'BichinhoApp.mc'}.get(p.get('tipo'), 'RastreadorApp.mc'); s = open(mc).read()
+    # o Força usa Menu2 e acelerômetro e o Gasolina Perto e o Próximo Ônibus (token = favoritos do painel) têm glance: precisam de API 3.1 (nos outros a 2.4 aceita relógios antigos)
+    m = re.sub(r'minApiLevel="[0-9.]+"', 'minApiLevel="3.1.0"' if p.get('tipo') in ('forca', 'gasolina', 'onibus') else ('minApiLevel="3.2.0"' if p.get('tipo') == 'painel' else 'minApiLevel="2.4.0"'), m); open(mf, 'w').write(m)
+    mc = f'{tmp}/source/' + {'walkie': 'RadioApp.mc', 'mimei': 'MeMimeiApp.mc', 'ben10': 'Ben10App.mc', 'omnitrix': 'OmnitrixApp.mc', 'tama': 'BichinhoApp.mc', 'locais': 'MeusLocaisApp.mc', 'sono': 'SonoApp.mc', 'forca': 'ForcaApp.mc', 'painel': 'PainelApp.mc', 'gasolina': 'GasolinaApp.mc', 'onibus': 'OnibusApp.mc'}.get(p.get('tipo'), 'RastreadorApp.mc'); s = open(mc).read()
     s = re.sub(r'const TOKEN = "[^"]*";', f'const TOKEN = "{p["token"]}";', s)
-    s = re.sub(r'const URL = "[^"]*";', 'const URL = "' + {'walkie': URL_WALKIE, 'mimei': URL_MIMEI}.get(p.get('tipo'), conf.get('app', 'url_relogio', 'https://alequizao.com/garmin/relogio.php')) + '";', s); open(mc, 'w').write(s)
+    s = re.sub(r'const URL = "[^"]*";', 'const URL = "' + {'walkie': URL_WALKIE, 'mimei': URL_MIMEI, 'sono': URL_SONO}.get(p.get('tipo'), conf.get('app', 'url_relogio', 'https://alequizao.com/garmin/relogio.php')) + '";', s); open(mc, 'w').write(s)
     os.makedirs(SAIDA, exist_ok=True)
     out = f'{SAIDA}/{p["token"]}.prg'
-    r = subprocess.run(['java', '-Xms512m', '-Dfile.encoding=UTF-8', '-jar', f'{sdk()}/bin/monkeybrains.jar', '-o', out, '-f', f'{tmp}/monkey.jungle', '-y', CHAVE, '-d', modelo],
+    cmd = ['java', '-Xms512m', '-Dfile.encoding=UTF-8', '-jar', f'{sdk()}/bin/monkeybrains.jar', '-o', out, '-f', f'{tmp}/monkey.jungle', '-y', CHAVE, '-d', modelo]
+    if p.get('tipo') in ('sono', 'forca', 'painel', 'gasolina', 'onibus'): cmd += ['-r', '-O', '1']   # release; -O3 é agressivo demais e derruba o app no relógio (Erro IQ)
+    r = subprocess.run(cmd,
                        capture_output=True, text=True, cwd=tmp, env=dict(os.environ, HOME='/root'), timeout=300)
     shutil.rmtree(tmp, ignore_errors=True)
     if 'BUILD SUCCESSFUL' not in r.stdout + r.stderr: raise Exception(((r.stdout + r.stderr).strip().splitlines() or ['erro'])[-1][:250])
@@ -56,7 +60,7 @@ def main():
             if not p: time.sleep(3); continue
             cur.execute("UPDATE relogio_apps SET status='compilando', erro=NULL WHERE id=%s", (p['id'],))
             try:
-                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') not in ('walkie', 'mimei', 'ben10', 'omnitrix', 'tama') else (None, False)
+                did, novo = traccar_device(p['nome'], p['device']) if p.get('tipo') not in ('walkie', 'mimei', 'ben10', 'omnitrix', 'tama', 'locais', 'sono', 'forca', 'painel', 'gasolina', 'onibus') else (None, False)
                 compilar(p)
                 cur.execute("UPDATE relogio_apps SET status='pronto', traccar_id=%s, pronto_em=NOW() WHERE id=%s", (did, p['id']))
                 log.info(f"app {p['id']} ({p['device']}) pronto; traccar {did} {'criado' if novo else 'existente'}")

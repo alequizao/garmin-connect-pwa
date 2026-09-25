@@ -1,0 +1,10 @@
+<resources>
+  <font id="pnZ" filename="pnZ.fnt"/>
+  <font id="pnU" filename="pnU.fnt"/>
+  <font id="pnR" filename="pnR.fnt"/>
+  <font id="pnT" filename="pnT.fnt"/>
+  <font id="pnV" filename="pnV.fnt"/>
+  <font id="pnC" filename="pnC.fnt"/>
+  <font id="pnN" filename="pnN.fnt"/>
+  <font id="pnH" filename="pnH.fnt"/>
+</resources>

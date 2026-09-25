@@ -8,6 +8,7 @@
  */
 require __DIR__ . '/config.php';
 require __DIR__ . '/lib_mimei.php';
+require __DIR__ . '/lib_mimei116.php';
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store');
 $d = json_decode(file_get_contents('php://input'), true) ?: $_POST;
@@ -29,6 +30,12 @@ mimeiSemear($uid);
 // consumo: conta (usuario_id) ou relógio público (aparelho)
 [$cWhere, $cArgs, $cUid, $cAp] = $pub ? ['usuario_id=0 AND aparelho=?', [$aparelho], 0, $aparelho] : ['usuario_id=?', [$uid], $uid, null];
 $kcalRelogio = isset($d['kcal']) && is_numeric($d['kcal']) ? max(0, min(20000, (int)$d['kcal'])) : null;
+/* 1.15.0: guarda as calorias ativas do dia (a maior do dia) para o saldo da semana */
+db()->exec("CREATE TABLE IF NOT EXISTS mimei_dias (usuario_id INT NOT NULL, aparelho VARCHAR(64) NOT NULL DEFAULT '', data DATE NOT NULL, queimado INT NOT NULL DEFAULT 0, PRIMARY KEY (usuario_id, aparelho, data)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+if ($kcalRelogio !== null) {
+  db()->prepare("INSERT INTO mimei_dias (usuario_id, aparelho, data, queimado) VALUES (?,?,CURDATE(),?) ON DUPLICATE KEY UPDATE queimado=GREATEST(queimado, VALUES(queimado))")
+    ->execute([$pub ? 0 : $uid, $pub ? $aparelho : '', $kcalRelogio]);
+}
 
 /* 1.13.0: registros feitos sem internet chegam em "pendentes" [{lanche, qtd, chave, dia}]; a chave evita duplicar
    quando o relógio reenvia. "recebidas" devolve as chaves gravadas (ou já existentes) para o relógio limpar a fila. */
@@ -74,10 +81,16 @@ if ($pub) {
 }
 $st = db()->prepare("SELECT nome, qtd FROM mimei_consumo WHERE $cWhere AND data=CURDATE() ORDER BY id DESC LIMIT 1"); $st->execute($cArgs);
 $u = $st->fetch(); $r['ultimo'] = $u ? rtrim(rtrim(number_format((float)$u['qtd'], 1, ',', ''), '0'), ',') . 'x ' . $u['nome'] : null;
-$lanches = array_map(function ($l) use ($r) {
-  $l['pode'] = $l['kcal'] > 0 ? round($r['saldo'] / $l['kcal'], 1) : 0;
-  unset($l['emoji']); return $l;
-}, mimeiLanches($uid, $base));
+/* 1.17.0: bebidas zero ('zero' => true) não entram na conversão (pode = 0). Apps anteriores à 1.17.0 não conhecem o selo
+   ZERO e mostrariam "cabem 150x": para eles as zero ficam fora da lista. Para economizar memória, 'zero' só vai quando é true. */
+$v117 = version_compare((string)($d['versao'] ?? '0'), '1.17.0', '>=');
+$lanches = [];
+foreach (mimeiLanches($uid, $base) as $l) {
+  if ($l['zero'] && !$v117) continue;
+  $l['pode'] = ($l['kcal'] > 0 && !$l['zero']) ? round($r['saldo'] / $l['kcal'], 1) : 0;
+  if (!$l['zero']) unset($l['zero']);
+  unset($l['emoji']); $lanches[] = $l;
+}
 /* Compatibilidade: apps < 1.9.0 (sem sabores) guardam todos os ícones na memória do relógio e estouram com a lista cheia.
    Para eles, cada grupo vira um item só (o sabor mais consumido, com o nome do grupo) e só os campos que conhecem. */
 if (version_compare((string)($d['versao'] ?? '0'), '1.9.0', '<')) {
@@ -100,5 +113,50 @@ if (version_compare((string)($d['versao'] ?? '0'), '1.13.0', '>=')) {
   $extra['recebidas'] = $recebidas;
   $extra['dia'] = date('Y-m-d');
   if ($pub) $extra['codigo'] = mimeiCodigoAparelho($aparelho);
+}
+if (version_compare((string)($d['versao'] ?? '0'), '1.15.0', '>=')) {
+  // saldo dos últimos 7 dias (só dias com calorias registradas)
+  $st = db()->prepare("SELECT data, queimado FROM mimei_dias WHERE usuario_id=? AND aparelho=? AND data >= CURDATE() - INTERVAL 6 DAY");
+  $st->execute([$pub ? 0 : $uid, $pub ? $aparelho : '']); $q7 = $st->fetchAll(PDO::FETCH_KEY_PAIR);
+  if ($q7) {
+    $st = db()->prepare("SELECT data, SUM(kcal) FROM mimei_consumo WHERE $cWhere AND data >= CURDATE() - INTERVAL 6 DAY GROUP BY data");
+    $st->execute($cArgs); $c7 = $st->fetchAll(PDO::FETCH_KEY_PAIR);
+    $qs = array_sum(array_map('intval', $q7)); $cs = 0;
+    foreach ($q7 as $dia => $_) $cs += (int)($c7[$dia] ?? 0);
+    $extra['semana'] = ['queimado' => $qs, 'comido' => $cs, 'saldo' => $qs - $cs, 'dias' => count($q7)];
+  }
+  // sugestão: o que mais foi comido perto deste horário (±1 h) nos últimos 60 dias, se repetiu pelo menos 2 vezes
+  $h = (int)date('G');
+  $st = db()->prepare("SELECT lanche_id, MAX(nome) nome, COUNT(*) n FROM mimei_consumo WHERE $cWhere AND lanche_id IS NOT NULL AND data >= CURDATE() - INTERVAL 60 DAY AND HOUR(criado) BETWEEN ? AND ? GROUP BY lanche_id ORDER BY n DESC, MAX(id) DESC LIMIT 1");
+  $st->execute(array_merge($cArgs, [max(0, $h - 1), min(23, $h + 1)]));
+  if (($sg = $st->fetch()) && $sg['n'] >= 2) $extra['sugestao'] = ['id' => (int)$sg['lanche_id'], 'nome' => $sg['nome']];
+}
+/* 1.16.0: nomes no idioma do relógio (en/es), sequência, conquistas e duelo com amigo */
+$v116 = version_compare((string)($d['versao'] ?? '0'), '1.16.0', '>=');
+if ($v116) {
+  $lg = mimei116Lingua($d['idioma'] ?? '');
+  if ($lg !== 'pt') {
+    $lanches = array_map(fn($l) => mimei116TraduzLanche($l, $lg), $lanches);
+    if (!empty($extra['hoje'])) {
+      $ids = array_column($extra['hoje'], 'id');
+      $st = db()->prepare("SELECT id, lanche_id FROM mimei_consumo WHERE id IN (" . implode(',', array_map('intval', $ids)) . ")"); $st->execute(); $mapa = $st->fetchAll(PDO::FETCH_KEY_PAIR);
+      foreach ($extra['hoje'] as &$hh) $hh['nome'] = mimei116NomePorId((int)($mapa[$hh['id']] ?? 0), $hh['nome'], $lg);
+      unset($hh);
+    }
+    if (!empty($extra['sugestao'])) $extra['sugestao']['nome'] = mimei116NomePorId($extra['sugestao']['id'], $extra['sugestao']['nome'], $lg);
+  }
+  /* relógios monocromáticos/pouca memória (Instinct, Descent G1) mandam "leve": sem URL de ícone e "hoje" com até 15 itens */
+  if (!empty($d['leve'])) {
+    $lanches = array_map(function ($l) { unset($l['icone']); return $l; }, $lanches);
+    if (!empty($extra['hoje'])) $extra['hoje'] = array_slice($extra['hoje'], 0, 15);
+  }
+  try {
+    $cx = ['uid' => $pub ? 0 : $uid, 'ap' => $pub ? $aparelho : ''];
+    $dias116 = mimei116Dias($cx); $seq = mimei116Seq($cx, $dias116);
+    $extra['seq'] = $seq[0]; $extra['seqMax'] = $seq[1];
+    $treinos = isset($d['treinos']) && is_numeric($d['treinos']) ? (int)$d['treinos'] : null;
+    $extra['conq'] = array_keys(mimei116Conquistas($cx, $treinos, $dias116, $seq));
+    if ($pub && !empty($extra['codigo']) && ($du = mimei116Duelo($extra['codigo'], $aparelho))) $extra['duelo'] = $du;
+  } catch (Throwable $e) { error_log('mimei 1.16: ' . $e->getMessage()); }
 }
 echo json_encode(['ok' => true, 'resumo' => $r, 'lanches' => $lanches] + $extra, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

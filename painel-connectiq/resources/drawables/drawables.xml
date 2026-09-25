@@ -1,0 +1,23 @@
+<drawables>
+  <bitmap id="LauncherIcon" filename="icone.png"/>
+  <bitmap id="icCoracao" filename="coracao.png"/>
+  <bitmap id="icChama" filename="chama.png"/>
+  <bitmap id="icBateria" filename="bateria.png"/>
+  <bitmap id="icPegadas" filename="pegadas.png"/>
+  <bitmap id="icEstrada" filename="estrada.png"/>
+  <bitmap id="icMontanha" filename="montanha.png"/>
+  <bitmap id="icSubida" filename="subida.png"/>
+  <bitmap id="icEstresse" filename="estresse.png"/>
+  <bitmap id="icCorredor" filename="corredor.png"/>
+  <bitmap id="icRaio" filename="raio.png"/>
+  <bitmap id="icPino" filename="pino.png"/>
+  <bitmap id="icSinal" filename="sinal.png"/>
+  <bitmap id="icClima" filename="clima.png"/>
+  <bitmap id="icNascer" filename="nascer.png"/>
+  <bitmap id="icPorsol" filename="porsol.png"/>
+  <bitmap id="icMensagem" filename="mensagem.png"/>
+  <bitmap id="icAlarme" filename="alarme.png"/>
+  <bitmap id="icBluetooth" filename="bluetooth.png"/>
+  <bitmap id="icCelular" filename="celular.png"/>
+  <bitmap id="icLua" filename="lua.png"/>
+</drawables>

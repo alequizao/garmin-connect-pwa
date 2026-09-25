@@ -25,3 +25,11 @@ app/sim/
 app/mimei/
 app/loja-*/
 app.min.js
+
+# artefatos de compilação do Connect IQ
+app/external-mir/
+app/internal-mir/
+app/gen/
+*.prg.debug.xml
+*-fit_contributions.json
+app/meuslocais-telas.png

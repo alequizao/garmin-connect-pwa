@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+  <iq:application id="3f2a91c47d6b48e09c1af53b28d7e604" type="watch-app" name="@Strings.AppName" entry="SonoApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.1.0">
+    <iq:products>
+      <iq:product id="fr55"/>
+      <iq:product id="fr165"/>
+      <iq:product id="fr165m"/>
+    </iq:products>
+    <iq:permissions>
+      <iq:uses-permission id="SensorHistory"/>
+      <iq:uses-permission id="UserProfile"/>
+    </iq:permissions>
+    <iq:languages><iq:language>por</iq:language><iq:language>eng</iq:language></iq:languages>
+    <iq:barrels/>
+  </iq:application>
+</iq:manifest>

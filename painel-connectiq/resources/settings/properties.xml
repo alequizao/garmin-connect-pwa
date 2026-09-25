@@ -1,0 +1,4 @@
+<properties>
+  <property id="corDestaque" type="number">0</property>
+  <property id="segundos" type="boolean">true</property>
+</properties>

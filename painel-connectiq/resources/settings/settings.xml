@@ -1,0 +1,15 @@
+<settings>
+  <setting propertyKey="@Properties.corDestaque" title="@Strings.tituloCor">
+    <settingConfig type="list">
+      <listEntry value="0">@Strings.corVermelho</listEntry>
+      <listEntry value="1">@Strings.corLaranja</listEntry>
+      <listEntry value="2">@Strings.corAzul</listEntry>
+      <listEntry value="3">@Strings.corVerde</listEntry>
+      <listEntry value="4">@Strings.corAmarelo</listEntry>
+      <listEntry value="5">@Strings.corBranco</listEntry>
+    </settingConfig>
+  </setting>
+  <setting propertyKey="@Properties.segundos" title="@Strings.tituloSeg">
+    <settingConfig type="boolean"/>
+  </setting>
+</settings>

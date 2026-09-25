@@ -487,3 +487,277 @@ details.mimei-arrastando>summary{background:var(--card2)}
 /* ME MIMEI · revisão 2026-09-17: alvos de toque >=44px só na tela #mm */
 #mm .ico-btn{width:44px;height:44px}
 #mm a.btn.peq{min-width:44px;min-height:44px}
+
+.pessoas{display:flex;gap:8px;padding:10px 0 2px}.pessoa-bt{flex:1;padding:9px 6px;border-radius:20px;border:1.5px solid var(--azul);background:none;color:var(--txt,#fff);font-size:14px}.pessoa-bt small{opacity:.7;font-size:11px}.pessoa-bt.on{background:var(--azul);color:#fff}.pessoa-aviso{font-size:12px;color:var(--txt2);text-align:center;padding:4px 0}
+.casal{width:100%;border-collapse:collapse;font-size:14px}.casal th,.casal td{padding:7px 4px;text-align:center;border-bottom:1px solid #2a2a2c}.casal tbody th{text-align:left;font-weight:400;color:var(--txt2)}.casal thead th{font-size:15px}.casal tr.sec th{color:var(--azul);font-size:12px;letter-spacing:.08em;padding-top:14px;text-align:left}
+.casal-res{display:flex;gap:10px;margin-bottom:8px}.casal-res>div{flex:1;display:flex;flex-direction:column;align-items:center;padding:8px;border-radius:12px;background:#1b1c1f}.casal-res b{font-size:22px;font-weight:500}.casal-res .ganhou{box-shadow:0 0 0 1.5px #f5c23b}
+.periodos{display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:none}.periodos::-webkit-scrollbar{display:none}.per-bt{flex:0 0 auto;padding:6px 12px;border-radius:16px;border:1px solid #3a3b3f;background:none;color:var(--txt2);font-size:13px}.per-bt.on{background:#fff;color:#000;border-color:#fff}.per-nav{display:flex;align-items:center;justify-content:center;gap:8px;padding:6px 0}.per-nav input[type=date]{background:#1b1c1f;color:#fff;border:1px solid #3a3b3f;border-radius:10px;padding:6px 8px;font-size:14px;min-width:0}.per-seta{background:none;border:none;color:var(--azul);font-size:28px;padding:0 10px}.per-seta:disabled{opacity:.25}
+.be-casal{display:flex;gap:10px;flex-wrap:wrap}.be-casal .be-p{flex:1;min-width:150px}.be-top{display:flex;align-items:center;gap:12px}.be-emo{font-size:46px;line-height:1}.be-nome{font-size:17px}.be-mot{margin:8px 0 0;padding-left:0;list-style:none;font-size:13px;line-height:1.6}.be-cont{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;font-size:15px}.be-corr{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px}.be-corr button{font-size:22px;background:#1b1c1f;border:1.5px solid transparent;border-radius:50%;width:40px;height:40px;padding:0}.be-corr button.on{border-color:#b28cff}
+
+/* fonte condensada usada na prévia do mostrador Painel Total (igual à do relógio) */
+@font-face { font-family: "Roboto Condensed"; src: url("app/RobotoCondensed.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+
+/* ---- Aba Depressão (privada) ---- */
+.dep-gauge{display:flex;align-items:center;gap:14px}
+.dep-emo{font-size:44px;line-height:1}
+.dep-nivel{font-size:22px;font-weight:700}
+.dep-strip{display:flex;gap:6px;overflow-x:auto;padding:4px 0}
+.dep-dia{display:flex;flex-direction:column;align-items:center;min-width:34px;font-size:18px}
+.dep-dia i{font-size:10px;color:#888;font-style:normal;margin-top:2px}
+.dep-dri{display:flex;flex-direction:column;gap:8px}
+.dep-dri-i{display:flex;align-items:center;gap:10px;font-size:15px}
+.dep-dri-i span{font-size:20px}
+.dep-dri-i b{flex:1;font-weight:600}
+.dep-dri-i i{font-style:normal;color:#ff8a00;font-weight:700}
+
+/* ---- Casal ao vivo (card de atividade em andamento) ---- */
+.casal-vivo:empty{display:none}
+.casal-vivo .w.vivo{border:1px solid rgba(255,77,79,.5);box-shadow:0 0 0 1px rgba(255,77,79,.15)}
+.casal-vivo .w.vivo .w-ico{animation:vivoPulso 1.4s ease-in-out infinite}
+@keyframes vivoPulso{0%,100%{opacity:1}50%{opacity:.35}}
+
+/* ================================================================
+   iOS PREMIUM — design system, tema automático (claro/escuro)  v3.0.0 (2026-09-23)
+   Camada de tokens + componentes; reaponta cores fixas p/ tokens.
+   ================================================================ */
+:root{
+  --bg:#0a0a0b;--bg2:#161618;--card:#1c1c1e;--card-top:#242426;--card2:#2c2c2e;
+  --linha:rgba(255,255,255,.07);--linha2:rgba(255,255,255,.12);
+  --txt:#f5f5f7;--txt2:#9b9ba3;--txt3:#67676e;
+  --raio:18px;--raio-lg:22px;--raio-sm:12px;
+  --hairline:rgba(255,255,255,.09);--trilha:rgba(255,255,255,.10);
+  --ic-bg:#2c2c2e;--campo-bg:#1c1c1e;--campo-borda:#3a3a3c;--btn-sec:#2c2c2e;
+  --dobra:#0a0a0b;--toast-bg:#2c2c2e;--toast-txt:#f5f5f7;--sup:#242426;
+  --tabbar-bg:rgba(18,18,20,.72);--blur:saturate(180%) blur(20px);
+  --sombra:0 1px 2px rgba(0,0,0,.4),0 12px 30px -14px rgba(0,0,0,.65);
+  --sombra-sm:0 1px 2px rgba(0,0,0,.35);
+  --fonte:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:light){:root{
+  --bg:#f2f2f7;--bg2:#ffffff;--card:#ffffff;--card-top:#ffffff;--card2:#eceef3;
+  --linha:rgba(60,60,67,.12);--linha2:rgba(60,60,67,.20);
+  --txt:#111114;--txt2:#6b6b71;--txt3:#a0a0a6;
+  --azul:#0a74d1;--azul2:#0a5fb8;
+  --hairline:rgba(60,60,67,.14);--trilha:rgba(60,60,67,.11);
+  --ic-bg:#eef0f4;--campo-bg:#f4f5f7;--campo-borda:rgba(60,60,67,.22);--btn-sec:#e6e7eb;
+  --dobra:#f2f2f7;--toast-bg:#111114;--toast-txt:#fff;--sup:#f6f7f9;
+  --tabbar-bg:rgba(255,255,255,.82);
+  --sombra:0 1px 2px rgba(0,0,0,.06),0 12px 28px -14px rgba(0,0,0,.18);
+  --sombra-sm:0 1px 2px rgba(0,0,0,.08);
+}}
+html,body{background:var(--bg)}
+/* ---- cartões premium: elevação + hairline + cantos iOS ---- */
+.w,.card{box-shadow:var(--sombra);border:.5px solid var(--hairline);border-radius:var(--raio-lg)}
+.w-top,.card>h3:first-child,.card>.w-top:first-child{background:var(--card-top);color:var(--txt);border-bottom:.5px solid var(--hairline)}
+.w-tit{font-weight:600;letter-spacing:-.2px}
+.w-corpo{padding:15px 18px 17px}
+.w-barra,.barra,.fase-b{background:var(--trilha)}
+.w-ok{background:linear-gradient(135deg,transparent 50%,var(--dobra) 50%)}
+.num,.num-atv,.grande,.num-grande{letter-spacing:-1.5px}
+.kv dt{color:var(--txt2)}
+.kv dd{color:var(--txt);font-weight:600}
+/* ---- topo/cabeçalhos: hairline no lugar da faixa azul forte ---- */
+.topo,.barra-topo{border-bottom:.5px solid var(--hairline)}
+.topo h1,.modal-box h2{letter-spacing:-.4px;font-weight:600}
+.ico-btn{background:var(--card2)}
+.relogio-bt{background:var(--card2);border-color:var(--hairline)}
+.relogio-bt .dot{border-color:var(--card)}
+/* ---- tab bar translúcida (liquid glass) ---- */
+.tabbar{background:var(--tabbar-bg);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);border-top:.5px solid var(--hairline)}
+.tabbar button{color:var(--txt2)}
+.tabbar button.ativo{color:var(--azul)}
+.tabbar button.gravar .i{box-shadow:0 0 0 4px var(--tabbar-bg),0 8px 18px -4px color-mix(in srgb,var(--azul) 70%,transparent)}
+/* ---- botões / chips / segmentos ---- */
+.btn{border-radius:14px;font-weight:600;letter-spacing:-.2px;box-shadow:var(--sombra-sm)}
+.btn.sec{background:var(--btn-sec);color:var(--txt)}
+.chip{background:var(--card2);color:var(--txt2);border:.5px solid var(--hairline)}
+.chip.ativo{background:var(--azul);color:#fff;border-color:transparent}
+.seg{background:var(--card2)}
+.esporte{background:var(--card2);color:var(--txt2)}
+.ctrl.volta,.stepper button,.agua-botoes button{background:var(--btn-sec);color:var(--txt)}
+/* ---- inputs ---- */
+.campo input,.campo select,.campo textarea,.enviar input,.sim-barra input,.sim-barra select{background:var(--campo-bg);border:1px solid var(--campo-borda);color:var(--txt)}
+.campo label{color:var(--txt2)}
+/* ---- listas / tabelas ---- */
+.lista .item{border-bottom:.5px solid var(--hairline)}
+.lista .item .ic{background:var(--ic-bg)}
+.lista .item .info b,.lista .item .dir b{color:var(--txt)}
+.mais-lista .ic{background:var(--ic-bg)}
+.tabela th{color:var(--txt2)}.tabela td,.tabela th{border-bottom:.5px solid var(--hairline)}
+.casal th,.casal td{border-color:var(--hairline)}
+.recursos span,.guia,.push-status{background:var(--card2);border-color:var(--hairline)}
+.insight,.rodape,.strava-bloco,.corr{border-color:var(--hairline)}
+/* ---- toast / modal premium ---- */
+#toast{background:var(--toast-bg);color:var(--toast-txt);box-shadow:var(--sombra);font-weight:500}
+.modal-box{box-shadow:0 -12px 44px rgba(0,0,0,.45)}
+/* ---- feedback de toque + foco (estados completos) ---- */
+.w.click,.card.click,.item[data-tela],.chip,.btn,.esporte,.seg button,.pessoa-bt{transition:transform .12s ease,filter .15s ease,background .15s ease,box-shadow .15s ease}
+.w.click:active,.card.click:active,.item[data-tela]:active,.chip:active,.btn:active,.esporte:active,.seg button:active{transform:scale(.98)}
+.btn:active{filter:brightness(.94)}
+:focus-visible{outline:2px solid var(--azul);outline-offset:2px}
+/* ---- AJAX: brilho ao atualizar + esqueleto de carregamento ---- */
+@keyframes flashUpd{0%{box-shadow:0 0 0 2px color-mix(in srgb,var(--azul) 55%,transparent),var(--sombra)}100%{box-shadow:var(--sombra)}}
+.flash-upd>.w,.flash-upd>.card{animation:flashUpd 1s ease-out}
+@keyframes shimmer{from{background-position:200% 0}to{background-position:-200% 0}}
+.skeleton{background:linear-gradient(90deg,var(--card2),color-mix(in srgb,var(--card2) 55%,var(--txt3)),var(--card2));background-size:200% 100%;animation:shimmer 1.3s linear infinite;border-radius:10px;color:transparent!important;pointer-events:none}
+/* ---- Casal ao vivo: card premium com destaque suave ---- */
+.casal-vivo .w.vivo{border:.5px solid color-mix(in srgb,var(--verm) 55%,transparent);box-shadow:0 0 0 1px color-mix(in srgb,var(--verm) 20%,transparent),var(--sombra)}
+@media (prefers-reduced-motion:reduce){.flash-upd>.w,.flash-upd>.card,.skeleton{animation:none}}
+
+/* ================================================================
+   iOS PREMIUM v3.1 — refinamento de ícones, tipografia e elementos
+   ================================================================ */
+body{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:-.1px}
+/* ---- ÍCONES: chip arredondado tingido pela cor do widget (estilo iOS Ajustes) ---- */
+.w-ico{width:32px;height:32px;border-radius:10px;background:color-mix(in srgb,currentColor 20%,transparent);font-size:18px;flex:0 0 auto}
+.w-ico svg{width:19px;height:19px;stroke-width:2}
+.w-atv .w-ico{background:rgba(0,0,0,.14)}
+.ico-btn{background:var(--card2);box-shadow:var(--sombra-sm)}
+.ico-btn:active{background:var(--btn-sec)}
+.barra-topo svg{stroke-width:2.1}
+.tabbar svg{stroke-width:1.9}
+.tabbar button.ativo svg{stroke-width:2.6}
+.mais-lista .ic{border-radius:11px}.mais-lista .ic svg{width:22px;height:22px}
+/* ---- TIPOGRAFIA: escala iOS, números tabulares mais firmes ---- */
+.w-tit{font-size:17px}
+.kv dt{font-size:11px;letter-spacing:.3px}
+.kv dd{font-size:17px}
+.sec-titulo,.mais-grupo,.lateral-sep{letter-spacing:.2px}
+.lista .item .info b{font-size:16px;letter-spacing:-.2px}
+.lista .item .info span{color:var(--txt2)}
+.mini{color:var(--txt2)}
+/* ---- CARDS: respiro e divisórias hairline ---- */
+.card>:first-child:not(h3):not(.w-top){margin-top:15px}
+.rodape b{color:var(--txt)}
+.w-barra{height:6px}
+/* ---- SEGMENTED CONTROL estilo iOS (trilho + thumb) ---- */
+.seg{padding:3px;border-radius:12px;box-shadow:inset 0 0 0 .5px var(--hairline)}
+.seg button{border-radius:9px;color:var(--txt2);font-weight:600}
+.seg button.ativo{background:var(--card);color:var(--txt);box-shadow:var(--sombra-sm)}
+/* ---- CHIPS / períodos / pessoas ---- */
+.chip{font-weight:500}
+.per-bt{border-color:var(--hairline);color:var(--txt2)}
+.per-bt.on{background:var(--txt);color:var(--bg);border-color:var(--txt)}
+.pessoa-bt{border-color:var(--azul);color:var(--txt)}
+.pessoa-bt.on{background:var(--azul);color:#fff}
+/* ---- ESPORTES (grade de gravação): cartão premium ---- */
+.esporte{border:.5px solid var(--hairline);border-radius:16px}
+.esporte.ativo{background:var(--azul2);color:#fff;border-color:transparent;box-shadow:var(--sombra-sm)}
+/* ---- ANEL / gráficos: traço mais fino e elegante ---- */
+.anel .centro{letter-spacing:-.5px}
+/* ---- CAMPOS: foco com halo iOS ---- */
+.campo input:focus,.campo select:focus,.campo textarea:focus,.enviar input:focus{border-color:var(--azul);box-shadow:0 0 0 3px color-mix(in srgb,var(--azul) 22%,transparent)}
+/* ---- desktop: barra lateral premium ---- */
+@media (min-width:960px){
+  .tabbar{background:var(--bg2);-webkit-backdrop-filter:none;backdrop-filter:none;border-right:.5px solid var(--hairline)}
+  .tabbar:before{border-bottom:.5px solid var(--hairline);color:var(--txt)}
+  .tabbar button:hover{background:var(--card2)}
+  .tabbar button.ativo{background:color-mix(in srgb,var(--azul) 14%,transparent)}
+}
+
+/* ---- fix: barra lateral do desktop rola quando tem muitos itens ---- */
+@media (min-width:960px){
+  .tabbar{overflow-y:auto;overscroll-behavior:contain}
+  .tabbar::-webkit-scrollbar{width:0;background:transparent}
+}
+
+/* ================================================================
+   iOS PREMIUM v3.2 — ícones de linha nos apps + auditoria a11y (WCAG AA)
+   ================================================================ */
+/* ícones de linha no seletor de apps (antes emojis) */
+.seg-apps button{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px}
+.seg-apps button svg{width:17px;height:17px;flex:0 0 auto;stroke-width:1.9}
+/* a11y: contraste do texto secundário no tema claro (>=4.5:1 também sobre cards cinza) */
+@media (prefers-color-scheme:light){:root{--txt2:#5f5f66;--txt3:#7c7c84}}
+/* a11y: alvos de toque confortáveis (>=44px nos controles principais) */
+.ico-btn{width:44px;height:44px}
+.chip,.per-bt,.pessoa-bt{min-height:40px;display:inline-flex;align-items:center;justify-content:center}
+.per-seta{min-width:44px;min-height:44px}
+.tabbar button{min-height:48px}
+/* a11y: foco visível consistente também em links e itens clicáveis */
+a:focus-visible,.item[data-tela]:focus-visible,.chip:focus-visible,.seg button:focus-visible,.pessoa-bt:focus-visible,.per-bt:focus-visible{outline:2px solid var(--azul);outline-offset:2px;border-radius:8px}
+
+/* ícones de linha nos botões de ação (antes emojis) */
+.ico-btn svg{width:20px;height:20px}
+.enviar .ico-btn svg,.frase .ico-btn svg{width:17px;height:17px}
+.enviar-bt svg{stroke:#fff}
+
+/* 3.4.0 — Gasolina Perto: mesma identidade do app do relógio (verde-combustível + âmbar) */
+.gas-w .gas-ico{color:#00c853}
+.gas-w .w-tit{color:inherit}
+
+/* ---- Aba Depressão 2.0: filtros, Alex × Jeovana, gráficos com dica ---- */
+.dep-seg{flex-wrap:nowrap!important;margin-bottom:10px}
+.dep-seg button{flex:1 1 0!important;min-width:0;padding:9px 2px!important;font-size:12.5px!important}
+.dep-nav{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.dep-nav b{flex:1;text-align:center;font-size:15px;font-weight:600}
+.dep-nav .ico-btn:disabled{opacity:.25;pointer-events:none}
+#depAt{margin-bottom:12px;min-height:16px}
+#dep.dep-carr{opacity:.45;transition:opacity .15s}
+.dep-pessoas{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.dep-p{border:1px solid var(--linha2);border-top:3px solid var(--c);border-radius:14px;padding:12px}
+.dep-p-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.dep-p-nome{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px}
+.dep-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.dep-tag{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:13px;padding:3px 10px;border-radius:20px;border:1.5px solid currentColor}
+.dep-aviso{margin-top:10px;font-size:12.5px;line-height:1.4;background:rgba(245,194,59,.13);border-radius:10px;padding:8px 10px}
+.dep-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--txt2);margin-bottom:8px}
+.dep-leg span{display:inline-flex;align-items:center;gap:6px}
+.dep-leg i{display:inline-block;width:10px;height:10px;border-radius:3px}
+.dep-leg i.vz{box-shadow:inset 0 0 0 1px var(--linha2)}
+.dep-graf{position:relative;width:100%;touch-action:pan-y;user-select:none}
+.dep-graf svg{display:block;overflow:visible}
+.dep-graf svg{stroke:none;stroke-width:1}
+.dep-graf text{fill:var(--txt3);stroke:none;font-size:10.5px;font-weight:400;font-family:var(--fonte)}
+.dep-graf .grade{stroke:var(--linha);stroke-width:1}
+.dep-tip{position:absolute;top:0;z-index:3;pointer-events:none;white-space:nowrap;background:var(--card-top);color:var(--txt);border:1px solid var(--linha2);border-radius:10px;padding:7px 10px;font-size:12px;line-height:1.55;box-shadow:0 6px 18px rgba(0,0,0,.28)}
+.dep-tip .t{color:var(--txt2);margin-bottom:2px}
+.dep-tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.dep-cal-l{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.dep-cal-n{display:flex;align-items:center;gap:6px;width:74px;flex:none;font-size:13px;font-weight:600;padding-top:3px}
+.dep-cal{display:flex;flex-wrap:wrap;gap:2px;flex:1}
+.dep-cal b{display:block;width:12px;height:12px;border-radius:3px;cursor:pointer}
+.dep-cal.g b{display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;font-size:10.5px;font-weight:600;color:#111}
+.dep-cal b.vz{background:transparent;box-shadow:inset 0 0 0 1px var(--linha2);color:var(--txt3)}
+.dep-cal b.sel{outline:2px solid var(--txt);outline-offset:1px}
+.dep-dist{display:flex;gap:2px;flex:1;height:28px;border-radius:6px;overflow:hidden}
+.dep-dist span{display:flex;align-items:center;justify-content:center;min-width:3px;font-size:11.5px;font-weight:700;color:#111}
+.dep-div-eixo{display:flex;justify-content:space-between;margin:0 44px 6px 118px;font-size:11px;color:var(--txt3)}
+.dep-div-r{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+.dep-div-r>span{width:108px;flex:none;font-size:12.5px;color:var(--txt2);line-height:1.2}
+.dep-div-bs{flex:1;display:flex;flex-direction:column;gap:3px}
+.dep-div-t{display:flex;align-items:center;gap:6px}
+.dep-div-tr{position:relative;flex:1;height:9px;background:linear-gradient(var(--linha2),var(--linha2)) center/1px 100% no-repeat}
+.dep-div-tr i{position:absolute;top:0;height:9px;border-radius:4px;background:var(--c)}
+.dep-div-t em{width:38px;flex:none;font-style:normal;font-size:11px;color:var(--txt2);text-align:right}
+.dep-sinc{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.dep-sinc div{background:var(--card2);border-radius:12px;padding:10px 6px;text-align:center}
+.dep-sinc b{display:block;font-size:22px;margin-bottom:2px}
+.dep-sms{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.dep-sm-t{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 8px;margin-bottom:4px;font-size:13px;font-weight:600}
+.dep-sm-t span{font-weight:400;font-size:12px;color:var(--txt2)}
+.dep-mot{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
+.dep-det summary{cursor:pointer;font-size:14px;color:var(--azul);padding:4px 0}
+.dep-tabw{max-height:380px;overflow:auto;margin-top:8px}
+.dep-tab{width:100%;border-collapse:collapse;font-size:12.5px}
+.dep-tab th,.dep-tab td{padding:6px 4px;border-bottom:1px solid var(--linha);text-align:left;white-space:nowrap}
+.dep-tab th{position:sticky;top:0;background:var(--card);color:var(--txt2);font-weight:600}
+@media (max-width:400px){.dep-seg button{font-size:11.5px!important}.dep-div-r>span{width:86px}.dep-div-eixo{margin-left:96px}.dep-cal-n{width:64px}}
+
+/* 3.5.0 — Próximo Ônibus: identidade do app do relógio (amarelo-ônibus + azul) · Desenvolvido por Alequizao */
+.oni-w .oni-ico{color:#ffc400}
+.oni-w .w-tit{color:inherit}
+.oni-cod{display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:28px;padding:0 8px;border-radius:8px;background:#ffc400;color:#111;font-weight:700;font-size:14px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.oni-fav{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--linha)}
+.oni-fav:last-child{border-bottom:0}
+.oni-fav-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.oni-fav-t b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oni-fav-t span{font-size:12.5px;color:#448aff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oni-fav-t em{font-style:normal;color:var(--txt2)}
+.oni-res{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;margin:4px 0 8px}
+.oni-linha{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 10px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;width:100%}
+.oni-linha span:last-child{display:flex;flex-direction:column;min-width:0}
+.oni-linha b{font-weight:500;font-size:14px}
+.oni-linha small{color:var(--txt2);font-size:12px}
+.oni-linha.ativo{border-color:#ffc400;background:rgba(255,196,0,.16)}
+#oniParada{width:100%}

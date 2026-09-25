@@ -1,0 +1,13 @@
+<strings>
+  <string id="AppName">Painel Total</string>
+  <string id="tituloCor">Cor de destaque</string>
+  <string id="tituloSeg">Mostrar segundos</string>
+  <string id="corVermelho">Vermelho</string>
+  <string id="corLaranja">Laranja</string>
+  <string id="corAzul">Azul</string>
+  <string id="corVerde">Verde</string>
+  <string id="corAmarelo">Amarelo</string>
+  <string id="corBranco">Branco</string>
+  <string id="sobreTitulo">Sobre</string>
+  <string id="sobreTexto">Painel Total · Alequizao · @alequizao · alequizao.dev@gmail.com · alequizao.com</string>
+</strings>

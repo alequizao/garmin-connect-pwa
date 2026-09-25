@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+  <iq:application id="7c5e1b90a4d34e2f8b61d7c035a29e14" type="watch-app" name="@Strings.AppName" entry="ForcaApp" launcherIcon="@Drawables.LauncherIcon" minApiLevel="3.1.0">
+    <iq:products>
+      <iq:product id="fr55"/>
+      <iq:product id="fr165"/>
+      <iq:product id="fr165m"/>
+    </iq:products>
+    <iq:permissions>
+      <!-- Fit cobre ActivityRecording e FitContributor (grava a atividade) e faz o app
+           aparecer na lista de Atividades; Sensor é o acelerômetro que conta as repetições -->
+      <iq:uses-permission id="Fit"/>
+      <iq:uses-permission id="Sensor"/>
+    </iq:permissions>
+    <iq:languages><iq:language>por</iq:language><iq:language>eng</iq:language></iq:languages>
+    <iq:barrels/>
+  </iq:application>
+</iq:manifest>

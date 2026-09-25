@@ -1,0 +1,67 @@
+{
+  "settings" : [ {
+    "key" : "corDestaque",
+    "valueType" : "number",
+    "defaultValue" : 0,
+    "configTitle" : "tituloCor",
+    "configPrompt" : null,
+    "configType" : "list",
+    "configError" : null,
+    "configHelpUrl" : null,
+    "configReadonly" : false,
+    "configRequired" : false,
+    "configOptions" : [ {
+      "display" : "corVermelho",
+      "value" : 0
+    }, {
+      "display" : "corLaranja",
+      "value" : 1
+    }, {
+      "display" : "corAzul",
+      "value" : 2
+    }, {
+      "display" : "corVerde",
+      "value" : 3
+    }, {
+      "display" : "corAmarelo",
+      "value" : 4
+    }, {
+      "display" : "corBranco",
+      "value" : 5
+    } ],
+    "configMin" : null,
+    "configMax" : null,
+    "configMaxLength" : null
+  }, {
+    "key" : "segundos",
+    "valueType" : "boolean",
+    "defaultValue" : true,
+    "configTitle" : "tituloSeg",
+    "configPrompt" : null,
+    "configType" : "boolean",
+    "configError" : null,
+    "configHelpUrl" : null,
+    "configReadonly" : false,
+    "configRequired" : false,
+    "configOptions" : null,
+    "configMin" : null,
+    "configMax" : null,
+    "configMaxLength" : null
+  } ],
+  "supportsLiveValidation" : false,
+  "languages" : {
+    "valyrian" : {
+      "tituloCor" : "Cor de destaque",
+      "tituloSeg" : "Mostrar segundos",
+      "corVerde" : "Verde",
+      "sobreTitulo" : "Sobre",
+      "sobreTexto" : "Painel Total · Alequizao · @alequizao · alequizao.dev@gmail.com · alequizao.com",
+      "corLaranja" : "Laranja",
+      "corVermelho" : "Vermelho",
+      "corBranco" : "Branco",
+      "corAzul" : "Azul",
+      "AppName" : "Painel Total",
+      "corAmarelo" : "Amarelo"
+    }
+  }
+}
