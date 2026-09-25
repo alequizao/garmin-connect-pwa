@@ -20,6 +20,7 @@ using Toybox.Time;
 using Toybox.Attention;
 using Toybox.Graphics;
 using Toybox.Lang;
+using Toybox.Math;
 using Toybox.Background;
 
 const API = "https://alequizao.com/agendamentos/relogio_onibus.php";
@@ -50,21 +51,28 @@ var gFix = 0;
 var gIni = 0;
 var gPrim = true;
 
-// ---- paleta de transporte: amarelo-ônibus + azul sobre preto; no MIP (FR55) só cores puras ----
-var cAm = 0xFFFF00;     // amarelo-ônibus (destaque, minutos)
-var cAz = 0x00AAFF;     // azul (linha/ponto, trilhas)
-var cTx = 0xFFFFFF;     // texto
-var cCz = 0xAAAAAA;     // secundário
-var cCard = 0x000055;   // fundo do item selecionado
-var cOk = 0x00FF00;     // ao vivo
-var cErr = 0xFF0000;
-var cTri = 0x0000AA;    // trilha do anel/estrada
+// ---- paleta premium (tokens): preto profundo, UMA cor de destaque (amarelo-ônibus) + azul frio;
+//      cinzas em níveis (texto 2 / texto 3 / superfície / trilha). No MIP (FR55) só cores puras e alto contraste.
+var cAm = 0xFFFF00;     // destaque: anel, minutos, item escolhido
+var cAmE = 0x555500;    // destaque apagado: anel fora da janela de 15 min
+var cAz = 0x55AAFF;     // azul frio: informação secundária, carregando, programado
+var cTx = 0xFFFFFF;     // texto principal
+var cC2 = 0xAAAAAA;     // texto secundário
+var cC3 = 0xAAAAAA;     // texto terciário (no MIP = secundário, para não sumir)
+var cC4 = 0x000055;     // superfície: cartões, chips, item do menu
+var cTri = 0x555555;    // trilha do anel e linhas finas
+var cOk = 0x55FF55;     // ao vivo
+var cErr = 0xFF5555;
+var cLin = [0xFFFF00, 0x55FFAA, 0x55AAFF, 0xFFAA55];   // selo da linha por grupo (centena do número % 4)
+var gRit = 0;           // ritmo de redesenho pedido pela tela: 0 minuto · 1 segundo · 2 250 ms · 3 50 ms (animação)
+var gSl = -9999;        // início do deslize entre favoritos (System.getTimer) e o lado (+1/-1)
+var gSd = 1;
 
 function cores() {
     var s = System.getDeviceSettings();
     if ((s has :requiresBurnInProtection) && s.requiresBurnInProtection) {   // AMOLED (FR165)
-        cAm = 0xFFC400; cAz = 0x448AFF; cTx = 0xFFFFFF; cCz = 0x90A4AE; cCard = 0x0D1B3A;
-        cOk = 0x00E676; cErr = 0xFF5252; cTri = 0x1A2A4F;
+        cAm = 0xF2C14E; cAmE = 0x4A3B17; cAz = 0x8DB3E2; cC2 = 0xA3A9B2; cC3 = 0x5F666F; cC4 = 0x1B1E23;
+        cTri = 0x2A2E35; cOk = 0x5BD68A; cErr = 0xFF6B5E; cLin = [0xF2C14E, 0x6CCFA8, 0x9AA8F5, 0xF09A7A];
     }
 }
 
@@ -97,7 +105,7 @@ class OnibusApp extends Application.AppBase {
         return [new Tela(), new TelaDelegate()];
     }
 
-    function getGlanceView() { return [new Glance()]; }
+    (:gl) function getGlanceView() { return [new Glance()]; }
 
     function getServiceDelegate() { return [new Fundo()]; }
 }
@@ -383,16 +391,37 @@ function futuras(ch) {
 }
 
 // ---------------------------------------------------------------------------------
-// Desenho comum (identidade visual)
+// Desenho comum (identidade premium: preto, um amarelo, anéis e linhas finas — tudo vetorial)
 // ---------------------------------------------------------------------------------
+const TR = -1;          // Graphics.COLOR_TRANSPARENT
+
+function rit(v) { if (v > gRit) { gRit = v; } }
+
+// cor do selo: grupo = algarismo das centenas do número da linha % 4 ("0601" → 6 → 2); sem número → 0
+function corLinha(cod) {
+    var n = cod.length(), d = 0;
+    if (n >= 3) { d = cod.toCharArray()[n - 3].toNumber() - 48; }
+    return cLin[(d >= 0 && d <= 9) ? d % 4 : 0];
+}
+
+// corta com "." até caber em max px (a tela é redonda)
+function cabe(dc, s, f, max) {
+    while (dc.getTextWidthInPixels(s, f) > max && s.length() > 4) {
+        s = s.substring(0, s.length() - 2);
+        while (s.length() > 1 && " .-".find(s.substring(s.length() - 1, s.length())) != null) { s = s.substring(0, s.length() - 1); }
+        s = s + ".";
+    }
+    return s;
+}
+
 // ônibus de frente, vetorial: s = altura
 function onibus(dc, x, y, s, cor, vidro) {
     var w = s * 8 / 10, r = s / 6 + 1;
-    dc.setColor(cor, Graphics.COLOR_TRANSPARENT);
+    dc.setColor(cor, TR);
     dc.fillRoundedRectangle(x, y, w, s * 9 / 10, r);
     dc.fillRectangle(x - s / 12, y + s / 5, s / 12 + 1, s / 6);            // retrovisores
     dc.fillRectangle(x + w, y + s / 5, s / 12 + 1, s / 6);
-    dc.setColor(vidro, Graphics.COLOR_TRANSPARENT);
+    dc.setColor(vidro, TR);
     dc.fillRoundedRectangle(x + s / 10, y + s / 5, w - s / 5, s * 3 / 10, r / 2 + 1);   // para-brisa
     dc.fillRectangle(x + s / 6, y + s / 14, w - s / 3, s / 12 + 1);                   // letreiro
     dc.fillCircle(x + s / 5, y + s * 65 / 100, s / 14 + 1);                        // faróis
@@ -401,44 +430,135 @@ function onibus(dc, x, y, s, cor, vidro) {
     dc.fillRectangle(x + w - s / 10 - s / 6, y + s * 9 / 10 - 1, s / 6, s / 10 + 1);
 }
 
-// cabeçalho igual em todas as telas: arco amarelo no topo + ônibus + título
-function cabecalho(dc, W, H, titulo, ocupado) {
-    var g = W > 260;
-    dc.setPenWidth(g ? 6 : 4);
-    dc.setColor(cAm, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(W / 2, H / 2, W / 2 - (g ? 4 : 2), Graphics.ARC_COUNTER_CLOCKWISE, 58, 122);
-    if (ocupado) {   // um trecho azul corre pelo arco enquanto consulta
-        var a = 58 + (System.getTimer() / 25) % 52;
-        dc.setColor(cAz, Graphics.COLOR_TRANSPARENT);
-        dc.drawArc(W / 2, H / 2, W / 2 - (g ? 4 : 2), Graphics.ARC_COUNTER_CLOCKWISE, a, a + 12);
-    }
-    dc.setPenWidth(1);
-    var f = g ? Graphics.FONT_TINY : Graphics.FONT_XTINY;
-    var s = g ? 24 : 13;
-    var tw = dc.getTextWidthInPixels(titulo, f);
-    var x = (W - tw - s - 6) / 2;
-    var y = g ? H * 13 / 100 : H * 12 / 100;
-    onibus(dc, x + s / 10, y - s / 2, s, cAm, Graphics.COLOR_BLACK);
-    dc.setColor(cAm, Graphics.COLOR_TRANSPARENT);
-    dc.drawText(x + s + 6, y, f, titulo, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
+// título discreto no topo: ícone + texto cinza (telas de apoio; a principal não tem título)
+function titulo(dc, W, H, t, ic) {
+    var g = W > 260, f = Graphics.FONT_XTINY, s = g ? 11 : 6, y = H * 13 / 100, e = g ? 8 : 4;
+    var x = (W - dc.getTextWidthInPixels(t, f) - 2 * s - e) / 2;
+    if (ic < 0) { onibus(dc, x + s / 5, y - s, 2 * s, cAm, 0); } else { icone(dc, ic, x + s, y, s, cAz); }
+    tx(dc, x + 2 * s + e, y, f, t, 6, cC2);
 }
 
-// aviso rápido em pílula amarela com ✓ (salvou favorito, ligou alerta...)
+// anel do bezel: trilha + arco a partir do topo (f = 0..1000 do anel cheio) com pontas redondas
+function anel(dc, W, f, cor, pen) {
+    var c = W / 2, r = c - pen / 2 - 1;
+    dc.setPenWidth(pen);
+    dc.setColor(cTri, TR);
+    dc.drawCircle(c, c, r);
+    if (f > 0) {
+        dc.setColor(cor, TR);
+        if (f >= 1000) { dc.drawCircle(c, c, r); }
+        else {
+            var a = 90 - f * 360 / 1000;
+            dc.drawArc(c, c, r, Graphics.ARC_COUNTER_CLOCKWISE, a, 90);
+            var ra = Math.toRadians(a);
+            dc.fillCircle(c, c - r, pen / 2);
+            dc.fillCircle(c + (r * Math.cos(ra)).toNumber(), c - (r * Math.sin(ra)).toNumber(), pen / 2);
+        }
+    }
+    dc.setPenWidth(1);
+}
+
+// carregando: um trecho azul gira no anel
+function giro(dc, W, pen) {
+    var c = W / 2, a = 90 - (System.getTimer() / 3) % 360;
+    rit(3);
+    dc.setPenWidth(pen);
+    dc.setColor(cAz, TR);
+    dc.drawArc(c, c, c - pen / 2 - 1, Graphics.ARC_COUNTER_CLOCKWISE, a - 60, a);
+    dc.setPenWidth(1);
+}
+
+// ícones vetoriais (s = meio lado): 0 atualizar · 1 local · 2 sino · 3 estrela · 4 lixeira · 5 sincronizar
+function icone(dc, c, x, y, s, cor) {
+    var p = s > 8 ? 3 : 2, t = s * 4 / 10 + 1, r = s * 7 / 10;
+    dc.setColor(cor, TR);
+    dc.setPenWidth(p);
+    if (c == 0) {
+        dc.drawArc(x, y, r, Graphics.ARC_COUNTER_CLOCKWISE, 90, 0);
+        dc.fillPolygon([[x, y - r - t], [x + t + t / 2, y - r], [x, y - r + t]]);
+    } else if (c == 1) {
+        dc.fillCircle(x, y - s / 4, s * 6 / 10);
+        dc.fillPolygon([[x - s / 2, y - s / 8], [x + s / 2, y - s / 8], [x, y + s]]);
+        dc.setColor(0, TR);
+        dc.fillCircle(x, y - s / 4, s / 4);
+    } else if (c == 2) {
+        dc.fillCircle(x, y - s / 5, s * 6 / 10);
+        dc.fillRectangle(x - s * 6 / 10, y - s / 5, s * 12 / 10 + 1, s * 6 / 10);
+        dc.fillRectangle(x - s * 9 / 10, y + s * 4 / 10, s * 18 / 10 + 1, p);
+        dc.fillCircle(x, y + s * 8 / 10, p);
+    } else if (c == 3) {
+        var v = [0, -10, 2, -3, 10, -3, 4, 1, 6, 8, 0, 4, -6, 8, -4, 1, -10, -3, -2, -3], q = [];
+        for (var i = 0; i < 20; i += 2) { q.add([x + v[i] * s / 10, y + v[i + 1] * s / 10]); }
+        dc.fillPolygon(q);
+    } else if (c == 4) {
+        dc.fillRectangle(x - s * 8 / 10, y - s * 6 / 10, s * 16 / 10 + 1, p);
+        dc.fillRectangle(x - s / 4, y - s * 6 / 10 - p, s / 2 + 1, p);
+        dc.fillRectangle(x - s * 6 / 10, y - s * 3 / 10, s * 12 / 10 + 1, s * 12 / 10);
+        dc.setColor(0, TR);
+        dc.fillRectangle(x - s / 4, y - s / 10, p - 1, s * 7 / 10);
+        dc.fillRectangle(x + s / 4 - 1, y - s / 10, p - 1, s * 7 / 10);
+    } else {
+        dc.drawArc(x, y, r, Graphics.ARC_COUNTER_CLOCKWISE, 20, 160);
+        dc.drawArc(x, y, r, Graphics.ARC_COUNTER_CLOCKWISE, 200, 340);
+        var xl = x - r * 94 / 100, yl = y - r * 34 / 100, xr = x + r * 94 / 100, yr = y + r * 34 / 100;
+        dc.fillPolygon([[xl - t, yl], [xl + t, yl], [xl, yl + t + t / 2]]);
+        dc.fillPolygon([[xr - t, yr], [xr + t, yr], [xr, yr - t - t / 2]]);
+    }
+    dc.setPenWidth(1);
+}
+
+// chave liga/desliga (x = borda direita)
+function chave(dc, x, y, s, on) {
+    var w = s * 4, r = s + 1;
+    if (on) {
+        dc.setColor(cAm, TR);
+        dc.fillRoundedRectangle(x - w, y - r, w, 2 * r, r);
+        dc.setColor(0, TR);
+        dc.fillCircle(x - r, y, r - 3);
+    } else {
+        dc.setColor(cC3, TR);
+        dc.setPenWidth(2);
+        dc.drawRoundedRectangle(x - w, y - r, w, 2 * r, r);
+        dc.setPenWidth(1);
+        dc.fillCircle(x - w + r, y, r - 4);
+    }
+}
+
+// botão em pílula: cheio (texto preto) ou vazado (borda e texto na cor)
+function pilula(dc, cx, y, t, f, cor, cheio) {
+    var h = dc.getFontHeight(f) + 4, w = dc.getTextWidthInPixels(t, f) + h;
+    dc.setColor(cor, TR);
+    if (cheio) { dc.fillRoundedRectangle(cx - w / 2, y - h / 2, w, h, h / 2); dc.setColor(0, TR); }
+    else { dc.setPenWidth(2); dc.drawRoundedRectangle(cx - w / 2, y - h / 2, w, h, h / 2); dc.setPenWidth(1); }
+    dc.drawText(cx, y, f, t, 5);
+}
+
+// confirmação rápida (salvou, ligou alerta...): pílula com ✓ que cresce, fica e encolhe
 function desenharAviso(dc, W, H) {
     if (gAviso == null) { return; }
-    if (System.getTimer() > gAvisoAte) { gAviso = null; return; }
-    var f = (W > 260) ? Graphics.FONT_SMALL : Graphics.FONT_TINY;
-    var h = dc.getFontHeight(f) + 8, w = dc.getTextWidthInPixels(gAviso, f) + h + 16;
-    var x = (W - w) / 2, y = H * 80 / 100 - h / 2;
-    dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-    dc.fillRectangle(0, y - 4, W, h + 8);
-    dc.setColor(cAm, Graphics.COLOR_TRANSPARENT);
-    dc.fillRoundedRectangle(x, y, w, h, h / 2);
-    dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-    dc.setPenWidth(h > 30 ? 4 : 2);
-    var cx = x + h / 2 + 4, cy = y + h / 2;
-    dc.drawLine(cx - h / 5, cy, cx - h / 14, cy + h / 6);
-    dc.drawLine(cx - h / 14, cy + h / 6, cx + h / 4, cy - h / 5);
+    var t = System.getTimer(), r = gAvisoAte - t, e = 1600 - r, k = 100;
+    if (r <= 0) { gAviso = null; return; }
+    rit(3);
+    if (e < 160) { k = 60 + e / 4; } else if (r < 160) { k = 60 + r / 4; }
+    var g = W > 260, f = g ? Graphics.FONT_TINY : Graphics.FONT_XTINY, b = g ? 8 : 4;
+    var h = dc.getFontHeight(f) + (g ? 14 : 8), w = dc.getTextWidthInPixels(gAviso, f) + h + (g ? 14 : 6);
+    var hk = h * k / 100, wk = w * k / 100, x = (W - wk) / 2, y = H / 2 - hk / 2;
+    dc.setColor(0, TR);                                   // faixa preta dentro do anel: esconde o número atrás
+    dc.fillRectangle(b + 8, H * 39 / 100, W - 2 * b - 16, H * 28 / 100);
+    dc.setColor(cC4, TR);
+    dc.fillRoundedRectangle(x, y, wk, hk, hk / 2);
+    dc.setColor(cAm, TR);
+    dc.setPenWidth(2);
+    dc.drawRoundedRectangle(x, y, wk, hk, hk / 2);
+    if (k >= 100) {
+        var cx = x + h / 2 + (g ? 4 : 2), cy = y + h / 2;
+        dc.setPenWidth(g ? 4 : 2);
+        dc.drawLine(cx - h / 5, cy, cx - h / 14, cy + h / 6);
+        dc.drawLine(cx - h / 14, cy + h / 6, cx + h / 4, cy - h / 5);
+        tx(dc, x + h + (g ? 4 : 2), cy, f, gAviso, 6, cTx);
+    }
     dc.setPenWidth(1);
-    dc.drawText(x + h + 8, cy, f, gAviso, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
 }
+
+// texto numa cor (junta setColor + drawText: economiza código)
+function tx(dc, x, y, f, s, j, c) { dc.setColor(c, TR); dc.drawText(x, y, f, s, j); }

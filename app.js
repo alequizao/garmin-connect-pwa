@@ -3701,11 +3701,12 @@ async function renderForca() {
 const GAS_COMB = ['Gasolina comum', 'Gas. aditivada', 'Álcool', 'Diesel comum', 'Diesel aditiv.', 'GNV'];
 const GAS_PADRAO = { lat: -9.6498, lon: -35.7089, nome: 'Maceió (Ponta Verde)' };
 const GAS = { c: 1, p: null, t: 0, r: 5, sel: 0, menu: -1, busca: 0, err: null, lat: null, lon: null, origem: '', ini: 0,
-  aviso: null, avisoAte: 0, tela: 'lista', timer: null, prev: 'fr165' };
+  aviso: null, avisoAte: 0, tela: 'lista', timer: null, prev: 'fr165', trAte: 0, trDir: 0, cheg: -1 };
 try { const c = +localStorage.getItem('gas_c'); if (c >= 1 && c <= 6) GAS.c = c; } catch (e) { }
+/* tokens do visual premium (iguais a cores() em GasolinaApp.mc): AMOLED = verde-combustível + escala de preço + 3 cinzas; MIP = 8 cores puras */
 const GAS_COR = {
-  amoled: { ac: '#00e676', am: '#ffb300', tx: '#ffffff', cz: '#9e9e9e', card: '#0e2a1a', err: '#ff5252', trilha: '#1e3a2a' },
-  mip: { ac: '#00ff00', am: '#ffff00', tx: '#ffffff', cz: '#00ffff', card: '#000000', err: '#ff0000', trilha: '#0000ff' } };
+  amoled: { ac: '#2ed18a', am: '#ffb547', rd: '#ff6f61', tx: '#ffffff', t2: '#aeb4b0', t3: '#6b726e', ln: '#232826', card: '#131816' },
+  mip: { ac: '#00ff00', am: '#ffff00', rd: '#ff0000', tx: '#ffffff', t2: '#ffffff', t3: '#ffffff', ln: '#0000ff', card: '#000000' } };
 const gasVirg = s => s.replace('.', ',');
 const gasPreco = v => gasVirg((+v).toFixed(3));
 const gasKm = k => { k = +k; return k < 1 ? Math.floor(k * 100) * 10 + ' m' : gasVirg(k.toFixed(k < 10 ? 1 : 0)) + ' km'; };
@@ -3714,8 +3715,12 @@ const gasRumo = (la1, lo1, la2, lo2) => { const r = Math.PI / 180, f1 = la1 * r,
   const b = Math.atan2(Math.sin(dl) * Math.cos(f2), Math.cos(f1) * Math.sin(f2) - Math.sin(f1) * Math.cos(f2) * Math.cos(dl)) / r; return b < 0 ? b + 360 : b; };
 const gasDist = (la1, lo1, la2, lo2) => { const r = Math.PI / 180, a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)); };
 const gasCardeal = b => ['N', 'NE', 'L', 'SE', 'S', 'SO', 'O', 'NO'][Math.floor((b + 22.5) / 45) % 8];
+/* diferença para o selecionado ("+R$ 0,02") e cor semântica do preço (escala relativa, mínimo R$ 0,10) — iguais a dif()/corPreco() do .mc */
+const gasDif = (v, ref) => { let d = +v - +ref, s = '+'; if (d < 0) { d = -d; s = '-'; } return d < 0.0005 ? 'mesmo preço' : s + 'R$ ' + gasVirg(d.toFixed(d < 0.0095 ? 3 : 2)); };
+const gasCorPreco = (v, K) => { const l = GAS.p.map(x => +x[1]), lo = Math.min(...l), hi = Math.max(...l), t = (+v - lo) / (hi - lo > 0.1 ? hi - lo : 0.1); return t < 0.34 ? K.ac : t < 0.67 ? K.am : K.rd; };
 function gasErroRede(st) { return !st ? ['Sem internet', 'O celular não\nrespondeu a tempo'] : st === 400 ? ['Posição inválida', 'Espere o GPS e\ntente de novo'] : st >= 500 ? ['Servidor fora', `Tente daqui a\npouco (${st})`] : [`Falhou (${st})`, 'Tente de novo']; }
 function gasAviso(t) { GAS.aviso = t; GAS.avisoAte = Date.now() + 1600; gasAnimar(); }
+function gasTrans(d) { GAS.trDir = d; GAS.trAte = Date.now() + 220; gasAnimar(); }   // slide curto, igual a trans() do .mc
 function gasVibrar() { try { navigator.vibrate?.(60); } catch (e) { } const cv = SIM.canvas && SIM.app === 'gasolina' ? SIM.canvas : $('#gasCv'); if (cv) { cv.classList.add('sim-vibra'); setTimeout(() => cv.classList.remove('sim-vibra'), 250); } }
 /* busca: GPS (do navegador, se já liberado) → preços */
 async function gasPosicao(pedir) {
@@ -3732,19 +3737,20 @@ async function gasBuscar(pedirGps) {
   if (GAS.busca === 2) return;
   GAS.err = null; GAS.busca = 1; GAS.ini = Date.now(); gasAnimar();
   await gasPosicao(pedirGps);
-  await new Promise(r => setTimeout(r, 500));            // deixa ver o "Buscando GPS..." (no relógio leva segundos)
-  GAS.busca = 2; const c = GAS.c; gasAnimar();
+  await new Promise(r => setTimeout(r, 900));            // deixa ver o anel enchendo (no relógio o GPS leva segundos)
+  GAS.busca = 2; GAS.ini = Date.now(); const c = GAS.c; gasAnimar();
   let st = 0, j = null;
   try { const r = await fetch(`/gasolina/api/perto?lat=${GAS.lat.toFixed(5)}&lon=${GAS.lon.toFixed(5)}&c=${c}&n=5`); st = r.status; if (r.ok) j = await r.json(); } catch (e) { st = 0; }
-  await new Promise(r => setTimeout(r, 350));
+  await new Promise(r => setTimeout(r, 500));
   GAS.busca = 0;
   if (c !== GAS.c) return gasBuscar();                    // trocou de combustível no meio
   if (j && Array.isArray(j.p)) {
     GAS.p = j.p; GAS.r = Math.round(j.r || 5); GAS.t = Math.floor(Date.now() / 1000); GAS.sel = 0;
-    if (!j.p.length) GAS.err = ['Sem postos', `Nenhum preço num raio\nde ${GAS.r} km`]; else gasVibrar();
+    if (!j.p.length) GAS.err = ['Sem postos', `Nenhum preço num raio\nde ${GAS.r} km`, 0]; else { gasVibrar(); gasTrans(1); }
   } else GAS.err = gasErroRede(st);
   gasPintarTudo();
 }
+/* um só ritmo, como o Motor.pulso() do relógio: 40 ms enquanto anima (busca, slide, confirmação); parado não redesenha */
 function gasAnimar() {
   gasPintarTudo();
   if (GAS.timer) return;
@@ -3752,135 +3758,156 @@ function gasAnimar() {
     const vivo = $('#gasCv') || (SIM.canvas && SIM.app === 'gasolina' && $('#simCanvas'));
     if (!vivo) { clearInterval(GAS.timer); GAS.timer = null; return; }
     gasPintarTudo();
-    if (!GAS.busca && !GAS.aviso) { clearInterval(GAS.timer); GAS.timer = null; }
-  }, 90);
+    if (!GAS.busca && !GAS.aviso && Date.now() > GAS.trAte) { clearInterval(GAS.timer); GAS.timer = null; }
+  }, 40);
 }
 function gasPintarTudo() { if ($('#gasCv')) gasPintar(); if (SIM.canvas && SIM.app === 'gasolina' && $('#simCanvas')) simDesenhar(); }
 /* teclas: as mesmas do TelaDelegate / DetalheDelegate */
 function gasBotao(t) {
-  const G = GAS, n = G.p ? G.p.length : 0;
+  const G = GAS, n = G.p ? G.p.length : 0, d = t === 'next' ? 1 : -1;
   if (G.tela === 'detalhe') {
-    if (t === 'next' && n) G.sel = (G.sel + 1) % n; else if (t === 'prev' && n) G.sel = (G.sel - 1 + n) % n; else if (t === 'back') G.tela = 'lista';
+    if ((t === 'next' || t === 'prev') && n) { G.sel = (G.sel + d + n) % n; gasTrans(d); } else if (t === 'back') G.tela = 'lista';
     return gasPintarTudo();
   }
   if (G.menu >= 0) {
-    if (t === 'next') G.menu = (G.menu + 1) % 7; else if (t === 'prev') G.menu = (G.menu + 6) % 7; else if (t === 'back') G.menu = -1; else if (t === 'start') gasEscolher();
+    if (t === 'next' || t === 'prev') { G.menu = (G.menu + d + 7) % 7; gasTrans(d); } else if (t === 'back') { G.menu = -1; gasTrans(-1); } else if (t === 'start') gasEscolher();
     return gasPintarTudo();
   }
-  if (t === 'menu') G.menu = G.c;
-  else if ((t === 'next' || t === 'prev') && n) G.sel = (G.sel + (t === 'next' ? 1 : n - 1)) % n;
+  if (t === 'menu') { G.menu = G.c; gasTrans(1); }
+  else if ((t === 'next' || t === 'prev') && n) { G.sel = (G.sel + d + n) % n; gasTrans(d); }
   else if (t === 'start') { if (n) G.tela = 'detalhe'; else if (!G.busca) gasBuscar(); }
   gasPintarTudo();
 }
 function gasToque(y, H) {   // onTap do relógio (FR165)
   const G = GAS;
   if (G.tela === 'detalhe') return;
-  if (G.menu >= 0) { const hR = Math.floor(H * 15 / 100), dy = y - (H / 2 + H * 3 / 100); const j = G.menu + (dy >= 0 ? Math.floor((dy + hR / 2) / hR) : -Math.floor((hR / 2 - dy) / hR));
+  if (G.menu >= 0) { const hR = Math.floor(H * 14 / 100), dy = y - (H / 2 + H * 3 / 100); const j = G.menu + (dy >= 0 ? Math.floor((dy + hR / 2) / hR) : -Math.floor((hR / 2 - dy) / hR));
     if (j >= 0 && j <= 6) { G.menu = j; gasEscolher(); } return gasPintarTudo(); }
-  if (G.p?.length) { if (y < H * 0.30) return gasBotao('prev'); if (y > H * 0.70) return gasBotao('next'); }
+  if (G.p?.length) { if (y < H * 0.30) return gasBotao('prev'); if (y > H * 0.75) return gasBotao('next'); }
   gasBotao('start');
 }
 function gasEscolher() {
-  const G = GAS, m = G.menu; G.menu = -1;
-  if (m === 0) { gasAviso('Atualizando'); gasVibrar(); return gasBuscar(); }
+  const G = GAS, m = G.menu; G.menu = -1; gasVibrar();
+  if (m === 0) { gasAviso('Atualizando'); return gasBuscar(); }
   if (m !== G.c) { G.c = m; G.sel = 0; G.p = null; G.err = null; try { localStorage.setItem('gas_c', m); } catch (e) { } }
-  gasAviso(GAS_COMB[m - 1]); gasVibrar(); gasBuscar();
+  gasAviso(GAS_COMB[m - 1]); gasBuscar();
 }
-/* ---- desenho (réplica do onUpdate de Tela.mc e Detalhe.mc) ---- */
+/* ---- desenho (réplica fiel do onUpdate de Tela.mc e Detalhe.mc e das funções de desenho de GasolinaApp.mc) ---- */
 function gasDesenhar(c, W, H, mip, fonte) {
-  const K = GAS_COR[mip ? 'mip' : 'amoled'], G = GAS, g = W > 260;
-  const txt = (t, x, y, f, cor, al = 'center') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = 'middle';
-    const ls = String(t).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
+  const K = GAS_COR[mip ? 'mip' : 'amoled'], G = GAS, g = W > 260, agora = Date.now(), xt = fonte('xtiny'), P = Math.floor;
   const larg = (t, f) => { c.font = f.css; return c.measureText(t).width; };
-  const rr = (x, y, w, h, r, cor, borda, pen) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
-    if (cor) { c.fillStyle = cor; c.fill(); } if (borda) { c.strokeStyle = borda; c.lineWidth = pen; c.stroke(); } };
-  const bomba = (x, y, s, cor, visor) => { const w = Math.floor(s * 6 / 10), t = Math.floor(s / 8) + 1;
+  const tx = (t, x, y, f, cor, al = 'center', base = 'middle') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = base;
+    const ls = String(t).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
+  const corda = y => { const r = W / 2, d = r * r - (y - r) ** 2; return d > 0 ? 2 * Math.sqrt(d) : 0; };
+  const txt = (y, t, f, f2, cor) => { const h = f.h / 2; if (larg(t, f) > corda(y > W / 2 ? y + h : y - h) * 0.88) f = f2; tx(t, W / 2, y, f, cor); };
+  const rr = (x, y, w, h, r, cor) => { r = Math.min(r, w / 2, h / 2); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath(); c.fillStyle = cor; c.fill(); };
+  const circ = (x, y, r, cor, pen) => { c.beginPath(); c.arc(x, y, r, 0, 7); if (pen) { c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); } else { c.fillStyle = cor; c.fill(); } };
+  const arcoH = (cx, cy, r, gi, gf, cor, pen) => { c.beginPath(); c.arc(cx, cy, r, -gi * Math.PI / 180, -gf * Math.PI / 180, false); c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); };   // ARC_CLOCKWISE
+  const linha = (x1, y1, x2, y2, cor, pen) => { c.beginPath(); c.moveTo(x1, y1); c.lineTo(x2, y2); c.strokeStyle = cor; c.lineWidth = pen; c.lineCap = 'round'; c.stroke(); };
+  const poli = (pts, cor) => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fillStyle = cor; c.fill(); };
+  const check = (x, y, s, cor, pen) => { c.beginPath(); c.moveTo(x - s, y); c.lineTo(x - s / 3, y + s * 2 / 3); c.lineTo(x + s, y - s * 2 / 3); c.strokeStyle = cor; c.lineWidth = pen; c.lineCap = 'round'; c.stroke(); };
+  const bomba = (x, y, s, cor, visor) => { const w = P(s * 6 / 10), t = P(s / 8) + 1;
     rr(x, y, w, s, t, cor); c.fillStyle = cor; c.fillRect(x + w, y + s * 6 / 10, s / 4, t); c.fillRect(x + w + s / 4 - t, y + s / 4, t, s * 4 / 10); c.fillRect(x + w + s / 10, y + s / 10, s / 4, s / 5);
     c.fillStyle = visor; c.fillRect(x + s / 10, y + s / 7, w - s / 5, s / 4); };
-  const arco = (cx, cy, r, gi, gf, cor, pen) => { c.beginPath(); c.arc(cx, cy, r, -gi * Math.PI / 180, -gf * Math.PI / 180, true); c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); };
-  const cab = (titulo, ocupado) => {
-    const R = W / 2 - (g ? 4 : 2); arco(W / 2, H / 2, R, 58, 122, K.ac, g ? 6 : 4);
-    if (ocupado) { const a = 58 + Math.floor(Date.now() / 25) % 52; arco(W / 2, H / 2, R, a, a + 12, K.am, g ? 6 : 4); }
-    const f = fonte(g ? 'tiny' : 'xtiny'), s = g ? 26 : 13, tw = larg(titulo, f), x = (W - tw - s - 6) / 2, y = g ? H * 0.15 : H * 0.12;
-    bomba(x, y - s / 2, s, K.ac, '#000'); txt(titulo, x + s + 6, y, f, K.ac, 'left');
-  };
-  const preco = (v, y) => { const fp = fonte('large'), fr = fonte(g ? 'tiny' : 'xtiny'), sp = gasPreco(v), wr = larg('R$ ', fr), wp = larg(sp, fp), xp = W / 2 - (wr + wp) / 2;
-    txt('R$ ', xp, y, fr, K.am, 'left'); txt(sp, xp + wr, y, fp, K.am, 'left'); };
+  const desl = amp => { const k = G.trAte - agora; return k <= 0 ? 0 : G.trDir * amp * k * k / 48400; };
+  const cab = t => { const s = g ? 20 : 11, e = g ? 9 : 4, x = P((W - larg(t, xt) - s - e) / 2), y = P(W * 15 / 100);
+    bomba(x, y - s / 2, s, K.ac, '#000'); tx(t, x + s + e, y, xt, K.t2, 'left'); };
+  const anel = (i, n) => { const cc = W / 2, r = cc - (g ? 5 : 3), pen = g ? 4 : 3; if (!mip) circ(cc, cc, r, K.ln, pen);   // trilho só no AMOLED
+    if (G.busca) { const e = agora - G.ini, f = G.busca === 1 ? 2 + 43 * e / (e + 6000) : 50 + 45 * e / (e + 2500); arcoH(cc, cc, r, 90, Math.trunc(450 - f * 3.6) % 360, K.ac, pen); }
+    else if (n > 1) { const s = P(64 / n), a = 32 - i * s; arcoH(cc, cc, r, (a + 360) % 360, (a - s + 360) % 360, K.ac, pen); } };
+  // preço: "R$" cinza + número grande (fonte numérica) na cor semântica, vírgula desenhada, tudo na mesma linha de base
+  const preco = (cx, y, v, f, fr, cor) => { const [a, b] = (+v).toFixed(3).split('.'), yb = y - f.h / 2 + f.h * 0.79;
+    const cw = P(f.h / 7) + 2, wr = larg('R$ ', fr), wa = larg(a, f), x = cx - (wr + wa + cw + larg(b, f)) / 2, d = P(f.h / 16) + 1, xc = x + wr + wa + cw / 2;
+    tx('R$ ', x, yb, fr, K.t3, 'left', 'alphabetic'); tx(a, x + wr, yb, f, cor, 'left', 'alphabetic');
+    circ(xc, yb - d, d, cor); poli([[xc + d, yb - d], [xc - d / 2, yb + d * 2], [xc - d, yb + d * 2], [xc, yb - d]], cor);
+    tx(b, x + wr + wa + cw, yb, f, cor, 'left', 'alphabetic'); };
   c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
+  const n = G.p ? G.p.length : 0;
 
-  if (G.tela === 'detalhe' && G.p?.length) {
-    const p = G.p[Math.min(G.sel, G.p.length - 1)];
-    cab(GAS_COMB[G.c - 1], false);
-    txt(p[0], W / 2, H * 0.26, fonte(g ? 'small' : 'tiny'), K.tx);
-    const cx = W / 2, cy = H * 0.49, r = Math.floor(H * 13 / 100);
-    c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.trilha; c.lineWidth = g ? 3 : 2; c.stroke();
-    let km = gasDist(G.lat, G.lon, p[3], p[4]), t;
-    const b = gasRumo(G.lat, G.lon, p[3], p[4]);
-    if (km < 0.04) { c.beginPath(); c.arc(cx, cy, r * 0.45, 0, 7); c.fillStyle = K.ac; c.fill(); t = 'você chegou'; }
-    else {   // navegador não tem bússola aqui: igual ao relógio parado, norte para cima + direção cardeal
-      txt('N', cx, cy - r + (g ? 18 : 9), fonte('xtiny'), K.cz);
-      const R = Math.floor(r * 72 / 100), a = b * Math.PI / 180, s = Math.sin(a), co = Math.cos(a);
-      const pts = [[0, -R], [R * 0.6, R * 0.7], [0, R * 0.3], [-R * 0.6, R * 0.7]].map(([x, y]) => [cx + x * co - y * s, cy + x * s + y * co]);
-      c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fillStyle = K.ac; c.fill();
-      t = 'fica a ' + gasCardeal(b);
-    }
-    preco(p[1], H * 0.71);
-    txt(gasKm(km) + ' · ' + t, W / 2, H * 0.81, fonte('xtiny'), K.tx);
-    txt('preço ' + gasHa(p[5]), W / 2, H * 0.88, fonte('xtiny'), K.cz);
+  if (G.tela === 'detalhe' && n) {
+    if (G.sel >= n) G.sel = 0;
+    const p = G.p[G.sel], o = desl(g ? 30 : 14);
+    anel(G.sel, n); cab(GAS_COMB[G.c - 1]);
+    txt(P(H * 26 / 100) + o, p[0], fonte(g ? 'small' : 'tiny'), g ? fonte('tiny') : xt, K.tx);
+    // rosa-dos-ventos (o navegador não tem bússola: igual ao relógio parado, norte para cima)
+    const cx = W / 2, cy = P(H * 47 / 100), r = P(H * 15 / 100), n0 = 0;
+    let km = +p[2], t = 'sem GPS';
+    circ(cx, cy, r, K.ln, g ? 2 : 1);
+    for (let k = 1; k < 12; k++) { const a = (k * 30 - n0) * Math.PI / 180, s = Math.sin(a), co = Math.cos(a), l = r - 3 - (k % 3 === 0 ? P(r / 6) : P(r / 12));
+      linha(cx + s * l, cy - co * l, cx + s * (r - 3), cy - co * (r - 3), K.t3, g ? 2 : 1); }
+    const q = P(r / 7) + 1; poli([[cx, cy - (r - 2)], [cx - q, cy - (r - 3 * q)], [cx + q, cy - (r - 3 * q)]], K.tx);   // norte
+    if (G.lat != null) {
+      km = gasDist(G.lat, G.lon, p[3], p[4]);
+      let f = +p[2]; f = f > 0.05 ? 1 - km / f : 0;
+      if (f > 0.02) arcoH(cx, cy, r, 90, Math.trunc(450 - f * 360) % 360, K.ac, g ? 4 : 3);
+      if (km < 0.05) { circ(cx, cy, r * 0.45, K.ac); check(cx, cy, P(r / 5), '#000', g ? 5 : 3); t = 'Você chegou'; if (G.cheg !== G.sel) { G.cheg = G.sel; gasVibrar(); } }
+      else { if (km > 0.1 && G.cheg === G.sel) G.cheg = -1;
+        const b = gasRumo(G.lat, G.lon, p[3], p[4]); t = 'fica a ' + gasCardeal(b);
+        const R = P(r * 58 / 100), a = (b - n0) * Math.PI / 180, s = Math.sin(a), co = Math.cos(a);
+        poli([[0, -R], [R * 0.45, R * 0.65], [0, R * 0.35], [-R * 0.45, R * 0.65]].map(([x, y]) => [cx + x * co - y * s, cy + x * s + y * co]), K.ac); }
+    } else tx('?', cx, cy, fonte('medium'), K.t3);
+    preco(cx, P(H * 685 / 1000) + o, p[1], fonte(g ? 'large' : 'numberMild'), g ? fonte('tiny') : xt, gasCorPreco(p[1], K));
+    txt(P(H * 805 / 1000), gasKm(km) + ' · ' + t, xt, xt, km < 0.05 && G.lat != null ? K.ac : K.tx);
+    txt(P(H * 885 / 1000), 'preço ' + gasHa(p[5]), xt, xt, K.t3);
   } else if (G.menu >= 0) {
-    cab('Combustível', false);
-    const hR = Math.floor(H * 15 / 100);
+    const hR = P(H * 14 / 100), o = desl(hR / 2);
+    anel(G.menu, 7); cab('Combustível');
     for (let j = G.menu - 2; j <= G.menu + 2; j++) {
       if (j < 0 || j > 6) continue;
-      const y = H / 2 + (j - G.menu) * hR + H * 0.03, t = j === 0 ? 'Atualizar agora' : GAS_COMB[j - 1];
-      if (j === G.menu) { const x0 = W * 0.10; rr(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7, K.card, K.ac, 2); txt(t, W / 2, y, fonte(g ? 'small' : 'tiny'), K.tx); }
-      else txt(t, W / 2, y, fonte('xtiny'), K.cz);
-      if (j === G.c) { const xk = W * 0.80, s = g ? 8 : 4; c.beginPath(); c.moveTo(xk - s, y); c.lineTo(xk - s / 3, y + s * 2 / 3); c.lineTo(xk + s, y - s * 2 / 3); c.strokeStyle = K.ac; c.lineWidth = g ? 3 : 2; c.stroke(); }
+      const y = H / 2 + (j - G.menu) * hR + P(H * 3 / 100) + o, t = j === 0 ? 'Atualizar agora' : GAS_COMB[j - 1];
+      let f = xt, cor = j === G.c ? K.ac : Math.abs(j - G.menu) > 1 ? K.t3 : K.t2;
+      if (j === G.menu) { const x0 = P(W * 12 / 100); rr(x0, y - hR / 2 + 3, W - 2 * x0, hR - 6, (hR - 6) / 2, K.card); rr(x0 + (g ? 14 : 7), y - hR / 5, g ? 5 : 3, hR * 2 / 5, 2, K.ac); f = fonte('tiny'); cor = K.tx; }
+      tx(t, W / 2, y, f, cor);
+      if (j === G.c) { const s = g ? 7 : 4; check((W + larg(t, f)) / 2 + s + (g ? 8 : 4), y, s, K.ac, g ? 3 : 2); }   // ✓ à direita do atual
     }
   } else {
-    cab(GAS_COMB[G.c - 1], G.busca > 0 && !!G.p);
-    if (G.p?.length) {
-      const n = G.p.length; if (G.sel >= n) G.sel = 0;
-      const viz = (y, p) => { const nome = p[0].length > 12 ? p[0].slice(0, 11) + '.' : p[0]; txt(nome + '  ' + gasPreco(p[1]), W / 2, y, fonte('xtiny'), K.cz); };
-      if (G.sel > 0) viz(H * 0.23, G.p[G.sel - 1]);
-      if (G.sel < n - 1) viz(H * 0.76, G.p[G.sel + 1]);
-      const x0 = W * 0.08, yC = H * 0.31, wC = W - 2 * x0, hC = H * 0.38, p = G.p[G.sel];
-      rr(x0, yC, wC, hC, g ? 18 : 9, K.card, K.ac, g ? 3 : 2);
-      txt(G.sel === 0 ? 'MAIS BARATO' : `${G.sel + 1}º mais barato`, W / 2, yC + hC * 0.13, fonte('xtiny'), K.ac);
-      txt(p[0], W / 2, yC + hC * 0.33, fonte(g ? 'small' : 'tiny'), K.tx);
-      preco(p[1], yC + hC * 0.60);
-      txt(gasKm(p[2]) + ' · ' + p[6], W / 2, yC + hC * 0.86, fonte('xtiny'), K.cz);
-      const r = g ? 5 : 3, passo = g ? 16 : 9, xd = W - (g ? 16 : 9);
-      for (let k = 0; k < n; k++) { const yd = H / 2 + (k * 2 - (n - 1)) * passo / 2; c.beginPath(); c.arc(xd, yd, k === G.sel ? r : r - 1, 0, 7);
-        if (k === G.sel) { c.fillStyle = K.ac; c.fill(); } else { c.strokeStyle = K.cz; c.lineWidth = 1; c.stroke(); } }
-      let rod = `${gasHa(G.t)} · até ${G.r} km`, cr = K.cz;
-      if (G.busca === 1) { rod = 'Buscando GPS...'; cr = K.am; } else if (G.busca === 2) { rod = 'Atualizando...'; cr = K.am; } else if (G.err) { rod = G.err[0] + ' · ' + gasHa(G.t); cr = K.err; }
-      txt(rod, W / 2, H * 0.89, fonte('xtiny'), cr);
-    } else if (G.err && !G.busca) {
-      const cx = W / 2, cy = H * 0.35, r = g ? 34 : 17;
-      c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.err; c.lineWidth = g ? 5 : 3; c.stroke();
-      c.fillStyle = K.err; c.fillRect(cx - (g ? 3 : 1), cy - r * 0.55, g ? 7 : 4, r * 0.7); c.beginPath(); c.arc(cx, cy + r * 0.45, g ? 4 : 2, 0, 7); c.fill();
-      txt(G.err[0], cx, H * 0.55, fonte(g ? 'medium' : 'small'), K.err);
-      txt(G.err[1], cx, H * 0.69, fonte('xtiny'), K.tx);
-      txt('START: tentar de novo', cx, H * 0.86, fonte('xtiny'), K.ac);
-    } else {
-      const cx = W / 2, cy = H * 0.45, r = Math.floor(W * 17 / 100), a = (Date.now() / 3) % 360;
-      c.beginPath(); c.arc(cx, cy, r, 0, 7); c.strokeStyle = K.trilha; c.lineWidth = g ? 8 : 4; c.stroke();
-      c.beginPath(); c.arc(cx, cy, r, -(90 - a) * Math.PI / 180, -(90 - a - 100) * Math.PI / 180, false); c.strokeStyle = G.busca === 2 ? K.am : K.ac; c.stroke();
-      const s = r * 0.9; bomba(cx - s * 0.45, cy - s / 2, s, K.ac, K.am);
-      txt(G.busca === 2 ? 'Consultando preços...' : 'Buscando GPS...', cx, H * 0.71, fonte(g ? 'small' : 'tiny'), K.tx);
-      txt(G.busca === 2 ? 'pelo celular' : `${Math.floor((Date.now() - G.ini) / 1000)} s · céu aberto ajuda`, cx, H * 0.81, fonte('xtiny'), K.cz);
+    anel(G.sel, n); cab(GAS_COMB[G.c - 1]);
+    if (n) {
+      if (G.sel >= n) G.sel = 0;
+      const p = G.p[G.sel];
+      const viz = (y, q) => { let nome = q[0].length > 11 ? q[0].slice(0, 10).replace(/ $/, '') + '.' : q[0]; nome += '  '; const d = gasDif(q[1], p[1]), w = larg(nome, xt), x = (W - w - larg(d, xt)) / 2;
+        tx(nome, x, y, xt, K.t3, 'left'); tx(d, x + w, y, xt, K.t2, 'left'); };
+      if (G.sel === 0) txt(P(H * 27 / 100), 'MAIS BARATO', xt, xt, K.ac); else viz(P(H * 27 / 100), G.p[G.sel - 1]);
+      if (G.sel < n - 1) viz(P(H * 785 / 1000), G.p[G.sel + 1]);
+      // cartão: fundo sutil (sem borda) + barra verde de destaque
+      const x0 = P(W * 9 / 100), yC = P(H * 33 / 100), wC = W - 2 * x0, hC = P(H * 40 / 100);
+      rr(x0, yC, wC, hC, g ? 22 : 11, K.card); rr(x0 + (g ? 12 : 6), yC + P(hC * 28 / 100), g ? 5 : 3, P(hC * 44 / 100), 2, K.ac);
+      const y = yC + desl(g ? 34 : 16);
+      let f = fonte(g ? 'small' : 'tiny'); if (larg(p[0], f) > wC - (g ? 56 : 28)) f = g ? fonte('tiny') : xt;
+      tx(p[0], W / 2, y + P(hC * 19 / 100), f, K.tx);
+      preco(W / 2, y + P(hC * 50 / 100), p[1], fonte('numberMild'), g ? fonte('tiny') : xt, gasCorPreco(p[1], K));
+      tx(gasKm(p[2]) + ' · ' + p[6], W / 2, y + P(hC * 87 / 100), xt, K.t2);
+      let rod = gasHa(G.t), cr = K.t3;
+      if (G.r > 5) rod += ` · raio ${G.r} km`;
+      if (G.busca === 1) { rod = 'Buscando GPS'; cr = K.t2; } else if (G.busca === 2) { rod = 'Atualizando'; cr = K.t2; } else if (G.err) { rod = G.err[0]; cr = K.rd; }
+      txt(P(H * 885 / 1000), rod, xt, xt, cr);
+    } else if (G.err && !G.busca) {   // erro (ícone vermelho) ou vazio (ícone cinza) + tentar de novo
+      const cx = W / 2, cy = P(H * 34 / 100), r = g ? 30 : 15, vazio = G.err.length > 2, cor = vazio ? K.t2 : K.rd;
+      circ(cx, cy, r, cor, g ? 4 : 2);
+      if (vazio) bomba(cx - P(r * 4 / 10), cy - P(r / 2), r, cor, '#000');
+      else { rr(cx - P(r / 10), cy - P(r * 55 / 100), P(r / 5) + 1, P(r * 65 / 100), 2, cor); circ(cx, cy + P(r * 45 / 100), P(r / 10) + 1, cor); }
+      txt(P(H * 535 / 1000), G.err[0], fonte(g ? 'medium' : 'small'), fonte(g ? 'small' : 'tiny'), K.tx);
+      tx(G.err[1], cx, P(H * 675 / 1000), xt, K.t2);
+      const t = 'Tentar de novo', e = g ? 18 : 10, x = P((W - larg(t, xt) - e) / 2), y = P(H * 845 / 1000);
+      circ(x + P(e / 3), y, P(e / 3), K.ac); tx(t, x + e, y, xt, K.ac, 'left');
+    } else {   // carregando: bomba no centro; o anel da borda mostra o progresso
+      const s = g ? 54 : 28;
+      bomba(W / 2 - P(s * 45 / 100), P(H * 40 / 100) - s / 2, s, K.ac, G.busca === 2 ? K.am : '#000');
+      txt(P(H * 60 / 100), G.busca === 2 ? 'Consultando preços' : 'Buscando GPS', fonte(g ? 'small' : 'tiny'), g ? fonte('tiny') : xt, K.tx);
+      txt(P(H * 69 / 100), G.busca === 1 ? `${Math.floor((agora - G.ini) / 1000)} s · céu aberto ajuda` : 'pelo celular', xt, xt, K.t3);
     }
   }
-  if (G.aviso) {   // pílula verde com ✓
-    if (Date.now() > G.avisoAte) G.aviso = null;
-    else { const f = fonte(g ? 'small' : 'tiny'), h = f.h + 8, w = larg(G.aviso, f) + h + 16, x = (W - w) / 2, y = H * 0.80 - h / 2;
-      c.fillStyle = '#000'; c.fillRect(0, y - 4, W, h + 8); rr(x, y, w, h, h / 2, K.ac); const cx = x + h / 2 + 4, cy = y + h / 2; c.beginPath(); c.moveTo(cx - h / 5, cy); c.lineTo(cx - h / 14, cy + h / 6); c.lineTo(cx + h / 4, cy - h / 5); c.strokeStyle = '#000'; c.lineWidth = h > 30 ? 4 : 2; c.stroke();
-      txt(G.aviso, x + h + 8, cy, f, '#000', 'left'); }
+  if (G.aviso) {   // confirmação: pílula verde com ✓ que cresce (150 ms), fica e some encolhendo (200 ms)
+    if (agora > G.avisoAte) G.aviso = null;
+    else { const q = G.avisoAte - agora; let k = 1600 - q; k = k < 150 ? k * 100 / 150 : 100; if (q < 200) k = q / 2;
+      const f = g ? fonte('tiny') : xt, h = f.h + 6, w = larg(G.aviso, f) + h + 14, y = P(H * 80 / 100 - h / 2), wk = h + (w - h) * k / 100, x = (W - wk) / 2;
+      rr(x - 6, y - 3, wk + 12, h + 6, h / 2 + 3, '#000'); rr(x, y, wk, h, h / 2, K.ac);
+      if (k >= 90) { const cx = x + h / 2 + 3, cy = y + h / 2; c.beginPath(); c.moveTo(cx - h / 5, cy); c.lineTo(cx - h / 14, cy + h / 6); c.lineTo(cx + h / 4, cy - h / 5); c.strokeStyle = '#000'; c.lineWidth = h > 30 ? 4 : 2; c.lineCap = 'butt'; c.stroke();
+        tx(G.aviso, x + h + 4, cy, f, '#000', 'left'); } }
   }
 }
 /* prévia da aba (fora do simulador): tela do FR165 (390 px, AMOLED) ou do FR55 (208 px, MIP) em tamanho real de pixels */
-const GAS_FONTES = { fr165: { xtiny: 26, tiny: 30, small: 38, medium: 45, large: 52, peso: 400 }, fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, peso: 700 } };
+const GAS_FONTES = { fr165: { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMild: 75.3, peso: 400 }, fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, numberMild: 20, peso: 700 } };
 function gasPintar() {
   const cv = $('#gasCv'); if (!cv) return;
   const m = GAS.prev, lado = m === 'fr55' ? 208 : 390, F = GAS_FONTES[m], dpr = window.devicePixelRatio || 1, esc2 = (m === 'fr55' ? 360 / 208 : 360 / 390) * dpr;
@@ -3895,7 +3922,7 @@ async function renderGasolina() {
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('gasolina')}
   <section class="w gas-w"><header class="w-top"><span class="w-ico gas-ico">${ICO.gasolina}</span><span class="w-tit">Gasolina Perto — o posto mais barato perto de você</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
    <div class="chips"><button class="chip ${GAS.prev === 'fr165' ? 'ativo' : ''}" data-gasprev="fr165">Forerunner 165 (AMOLED)</button><button class="chip ${GAS.prev === 'fr55' ? 'ativo' : ''}" data-gasprev="fr55">Forerunner 55 (MIP)</button></div>
-   <canvas id="gasCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #00e67633;touch-action:pan-y;cursor:pointer"></canvas>
+   <canvas id="gasCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 44px #2ed18a26;touch-action:pan-y;cursor:pointer"></canvas>
    <div class="chips"><button class="chip" data-gasbt="prev">▲ Cima</button><button class="chip" data-gasbt="start">● START</button><button class="chip" data-gasbt="next">▼ Baixo</button><button class="chip" data-gasbt="menu">☰ MENU</button><button class="chip" data-gasbt="back">↩ VOLTAR</button><button class="chip" id="gasGps">📍 Usar minha localização</button></div>
    <div class="mini" id="gasOrigem" style="text-align:center"></div>
    <div class="mini" style="text-align:center;max-width:560px">Mostra os <b>5 postos mais baratos perto de você</b> em Maceió e região, com <b>preço, distância e há quanto tempo o preço foi informado</b>. Ao abrir um posto, uma <b>seta aponta para ele</b> (pela bússola ou pelo rumo do GPS andando; parado, mostra a direção: N, NE, L…). Troque entre <b>gasolina comum, aditivada, álcool, diesel e GNV</b> no MENU — o relógio lembra a última escolha.<br>
@@ -3906,7 +3933,7 @@ async function renderGasolina() {
    <div class="chips"><button class="btn" id="gasGera">⬇ Baixar o Gasolina Perto</button></div>
    <div class="mini" id="gasProg"></div></form>
    <div class="mini" style="margin-top:8px">Já compilados: <a href="app/GasolinaPerto-fr165.prg" download>Forerunner 165</a> · <a href="app/GasolinaPerto-fr165m.prg" download>Forerunner 165 Music</a> · <a href="app/GasolinaPerto-fr55.prg" download>Forerunner 55</a></div></div>
-  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir, ele <b>busca o GPS</b> (anel verde girando) e depois <b>consulta os preços pelo celular</b> (anel âmbar). Chegou a lista, o relógio vibra.<br><b>▲ ▼</b> (ou deslizar) andam entre os postos — o selecionado fica no cartão verde, com o preço grande. <b>START</b> (ou tocar no cartão) abre o posto com a <b>seta</b>; lá, ▲ ▼ passam para o próximo posto sem voltar.<br><b>MENU</b> (segurar UP) troca o combustível ou atualiza agora. No rodapé aparece <b>há quanto tempo</b> a lista foi consultada e o raio usado (começa em 5 km e amplia até 40 km se houver poucos postos).<br>Sem GPS, sem celular ou sem postos, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): mostra o menor preço da última consulta e há quanto tempo. O FR55 não aceita glance em apps.</div></div>
+  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir, o <b>anel da borda vai enchendo</b>: primeiro o GPS, depois a consulta dos preços pelo celular. Chegou a lista, o relógio vibra e o anel vira o <b>indicador de posição</b> (à direita).<br><b>▲ ▼</b> (ou deslizar) andam entre os postos — o selecionado fica no cartão, com o <b>preço grande colorido</b> (verde = mais barato, âmbar = no meio, vermelho = mais caro do grupo); os vizinhos mostram só a <b>diferença</b> (ex.: +R$ 0,02). <b>START</b> (ou tocar no cartão) abre o posto com a <b>rosa-dos-ventos e a seta</b>; o anel verde em volta mostra quanto do caminho já foi feito e, a menos de 50 m, aparece <b>Você chegou</b> com vibração. Lá, ▲ ▼ passam para o próximo posto sem voltar.<br><b>MENU</b> (segurar UP) troca o combustível ou atualiza agora. No rodapé aparece <b>há quanto tempo</b> a lista foi consultada (e o raio, se precisou ampliar além de 5 km — vai até 40 km quando há poucos postos).<br>Sem GPS, sem celular ou sem postos, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): mostra o menor preço da última consulta e há quanto tempo. O FR55 não aceita glance em apps.</div></div>
   <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> do seu modelo acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> (ou ▲▼ na lista de apps) → <b>Gasolina Perto</b>.<br><b>Permissões:</b> GPS (sua posição, usada só para calcular a distância — não é gravada), comunicação (consulta pelo celular pareado, que precisa estar com o Garmin Connect aberto em segundo plano) e sensores (bússola, se o relógio tiver).</div></div>
   ${tabbar('app')}</div>`;
   const pinta = () => gasPintar();
@@ -3944,13 +3971,14 @@ async function renderGasolina() {
 const ONI_API = '/agendamentos/relogio_onibus.php';
 const ONI_PADRAO = { lat: -9.6670, lon: -35.7160, nome: 'Maceió (Pajuçara)' };
 const ONI = { f: [], d: null, t: 0, sel: 0, modo: 0, menu: 0, busca: 0, err: null, p: null, psel: 0, al: false, alOk: 0, faixa: 0,
-  aviso: null, avisoAte: 0, lat: null, lon: null, origem: '', ini: 0, timer: null, prev: 'fr165', min: -1, pedido: '', carregado: false, painel: [] };
+  aviso: null, avisoAte: 0, lat: null, lon: null, origem: '', ini: 0, timer: null, timerP: 0, seg: 0, rit: 0, sl: -9999, sd: 1, prev: 'fr165', min: -1, pedido: '', carregado: false, painel: [] };
 try { ONI.al = localStorage.getItem('oni_al') === '1'; } catch (e) { }
+/* tokens da paleta premium (iguais ao cores() do OnibusApp.mc): um amarelo de destaque, azul frio, cinzas em níveis */
 const ONI_COR = {
-  amoled: { am: '#ffc400', az: '#448aff', tx: '#ffffff', cz: '#90a4ae', card: '#0d1b3a', ok: '#00e676', err: '#ff5252', tri: '#1a2a4f' },
-  mip: { am: '#ffff00', az: '#00aaff', tx: '#ffffff', cz: '#aaaaaa', card: '#000055', ok: '#00ff00', err: '#ff0000', tri: '#0000aa' } };
-const ONI_FONTES = { fr165: { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMedium: 93.1, peso: 400 },
-  fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, numberMedium: 44, peso: 700 } };
+  amoled: { am: '#f2c14e', amE: '#4a3b17', az: '#8db3e2', tx: '#ffffff', c2: '#a3a9b2', c3: '#5f666f', c4: '#1b1e23', tri: '#2a2e35', ok: '#5bd68a', err: '#ff6b5e', lin: ['#f2c14e', '#6ccfa8', '#9aa8f5', '#f09a7a'] },
+  mip: { am: '#ffff00', amE: '#555500', az: '#55aaff', tx: '#ffffff', c2: '#aaaaaa', c3: '#aaaaaa', c4: '#000055', tri: '#555555', ok: '#55ff55', err: '#ff5555', lin: ['#ffff00', '#55ffaa', '#55aaff', '#ffaa55'] } };
+const ONI_FONTES = { fr165: { xtiny: 26, tiny: 30.1, small: 38.3, medium: 45.2, large: 52, numberMedium: 93.1, numberHot: 112.3, peso: 400 },
+  fr55: { xtiny: 13, tiny: 15, small: 17, medium: 20, large: 20, numberMedium: 44, numberHot: 50, peso: 700 } };
 const oniAgora = () => Math.floor(Date.now() / 1000);
 const oniHa = t => { const d = oniAgora() - t; return d < 60 ? 'agora' : d < 3600 ? `há ${Math.floor(d / 60)} min` : d < 86400 ? `há ${Math.floor(d / 3600)} h` : `há ${Math.floor(d / 86400)} d`; };
 const oniMin = e => { const d = e - oniAgora(); return d <= 0 ? 0 : Math.floor(d / 60); };
@@ -3958,13 +3986,15 @@ const oniHora = e => new Date(e * 1000).toLocaleTimeString('pt-BR', { hour: '2-d
 const oniFuturas = ch => ch.filter(e => e > oniAgora() - 60);
 const oniM = m => m < 1000 ? `${m} m` : `${(Math.floor(m / 100) / 10).toFixed(1).replace('.', ',')} km`;
 const oniIdx = (l, id, stop) => l.findIndex(x => x[0] === id && x[1] === stop);
-function oniItensMenu() {
-  const m = [[0, 'Atualizar agora'], [1, 'Perto de mim'], [2, ONI.al ? 'Alerta 2 min: SIM' : 'Alerta 2 min: NÃO']];
+function oniItensMenu() {   // [ícone, texto] — igual ao itensMenu() do Tela.mc
+  const m = [[0, 'Atualizar'], [1, 'Perto de mim'], [2, 'Alerta 2 min']];
   if (ONI.f.length && ONI.sel > 0) m.push([3, 'Tornar principal']);
-  if (ONI.f.length) m.push([4, 'Remover favorito']);
-  m.push([5, 'Sincronizar painel']);
+  if (ONI.f.length) m.push([4, 'Remover']);
+  m.push([5, 'Sincronizar']);
   return m;
 }
+const oniCorLinha = cod => { cod = String(cod); const d = cod.length >= 3 ? cod.charCodeAt(cod.length - 3) - 48 : 0; return ONI_COR.amoled.lin[d >= 0 && d <= 9 ? d % 4 : 0]; };   // selo por grupo (centena % 4), igual a corLinha() do .mc
+function oniJanela(n) { const k = Math.min(n, 4); let tp = ONI.menu - 1; if (tp > n - k) tp = n - k; if (tp < 0) tp = 0; return [k, tp]; }   // até 5 itens, bloco centrado
 function oniErroRede(st) { return !st ? ['Sem internet', 'O celular não\nrespondeu a tempo'] : st === 400 ? ['Sem linha/ponto', 'Favorito inválido:\nremova no MENU'] : st >= 500 ? ['Fonte fora', `Horários indisponíveis\nagora (${st})`] : [`Falhou (${st})`, 'Tente de novo']; }
 function oniAviso(t) { ONI.aviso = t; ONI.avisoAte = Date.now() + 1600; oniPintarTudo(); }
 function oniVibrar(forte) { try { navigator.vibrate?.(forte ? [500, 250, 500, 250, 700] : 60); } catch (e) { }
@@ -4028,22 +4058,17 @@ async function oniPerto(pedirGps) {
   } else ONI.err = oniErroRede(st);
   oniPintarTudo();
 }
-/* laço de 250 ms: anima quando precisa; parado, redesenha quando o minuto vira; alerta 2 min; atualiza sozinho */
-function oniAnimar() {
-  oniPintarTudo();
-  if (ONI.timer) return;
-  let n = 0;
-  ONI.timer = setInterval(() => {
-    const vivo = $('#oniCv') || (SIM.canvas && SIM.app === 'onibus' && $('#simCanvas'));
-    if (!vivo) { clearInterval(ONI.timer); ONI.timer = null; return; }
-    let anima = ONI.busca > 0 || !!ONI.aviso || Date.now() < ONI.faixa;
-    if (++n % 4 === 0) {
-      oniAlerta(); oniAuto();
-      const m = Math.floor(Date.now() / 60000); if (m !== ONI.min) { ONI.min = m; anima = true; }
-    }
-    if (anima) oniPintarTudo();
-  }, 250);
+/* ritmo de redesenho igual ao Tela.mc: a tela pede (ONI.rit) 0 = 1 por minuto · 1 = 1 por segundo · 2 = 250 ms · 3 = 50 ms (animação);
+ * a cada ~1 s: alerta 2 min, atualização automática e virada do minuto */
+function oniRitmo() { const p = ONI.rit >= 3 ? 50 : ONI.rit === 2 ? 250 : 1000; if (ONI.timer && ONI.timerP === p) return; clearInterval(ONI.timer); ONI.timerP = p; ONI.timer = setInterval(oniTique, p); }
+function oniTique() {
+  const vivo = $('#oniCv') || (SIM.canvas && SIM.app === 'onibus' && $('#simCanvas'));
+  if (!vivo) { clearInterval(ONI.timer); ONI.timer = null; return; }
+  const t = Date.now(); let pede = ONI.rit >= 2;
+  if (t - ONI.seg >= 900) { ONI.seg = t; oniAlerta(); oniAuto(); const m = Math.floor(t / 60000); if (m !== ONI.min || ONI.rit === 1) { ONI.min = m; pede = true; } }
+  if (pede) oniPintarTudo();
 }
+function oniAnimar() { oniPintarTudo(); if (!ONI.timer) oniRitmo(); }
 function oniAlerta() {
   if (!ONI.al || !ONI.d || ONI.sel >= ONI.d.length) return;
   const ch = oniFuturas(ONI.d[ONI.sel][4]); if (!ch.length) return;
@@ -4064,7 +4089,7 @@ function oniBotao(t) {
     const d = t === 'next' ? 1 : -1;
     if (O.modo === 1) { const n = oniItensMenu().length; O.menu = (O.menu + d + n) % n; }
     else if (O.modo === 2) { if (O.p?.length) O.psel = (O.psel + d + O.p.length) % O.p.length; }
-    else if (O.f.length > 1) { O.sel = (O.sel + d + O.f.length) % O.f.length; O.alOk = 0; }
+    else if (O.f.length > 1) { O.sel = (O.sel + d + O.f.length) % O.f.length; O.alOk = 0; O.sl = Date.now(); O.sd = d; }
     return oniPintarTudo();
   }
   if (t === 'menu') { if (O.modo === 0) { O.modo = 1; O.menu = 0; } return oniPintarTudo(); }
@@ -4077,9 +4102,8 @@ function oniBotao(t) {
 }
 function oniToque(y, H) {   // onTap do relógio (FR165)
   const O = ONI;
-  if (O.modo === 1) { const n = oniItensMenu().length, hR = Math.floor(H * 15 / 100), dy = y - (H / 2 + H * 3 / 100);
-    const j = O.menu + (dy >= 0 ? Math.floor((dy + hR / 2) / hR) : -Math.floor((hR / 2 - dy) / hR));
-    if (j >= 0 && j < n) { O.menu = j; oniEscolher(); } return; }
+  if (O.modo === 1) { const [k, tp] = oniJanela(oniItensMenu().length), hR = Math.trunc(H * 14 / 100), yT = Math.trunc(H / 2 - Math.trunc(k * hR / 2));
+    if (y < yT) return; const i = Math.floor((y - yT) / hR); if (i < k) { O.menu = tp + i; oniEscolher(); } return; }
   if ((O.modo === 2 && O.p?.length > 1) || (O.modo === 0 && O.f.length > 1 && O.d)) { if (y < H * 0.30) return oniBotao('prev'); if (y > H * 0.70) return oniBotao('next'); }
   oniBotao('start');
 }
@@ -4089,7 +4113,7 @@ function oniEscolher() {
   const mover = (l, i) => [l[i], ...l.slice(0, i), ...l.slice(i + 1)];
   if (c === 0) { oniAviso('Atualizando'); oniVibrar(false); O.err = null; oniAtualizar(); }
   else if (c === 1) { O.modo = 2; oniPerto(); }
-  else if (c === 2) { O.al = !O.al; O.alOk = 0; try { localStorage.setItem('oni_al', O.al ? '1' : '0'); } catch (e) { } oniAviso(O.al ? 'Alerta ligado' : 'Alerta desligado'); oniVibrar(false); }
+  else if (c === 2) { O.al = !O.al; O.alOk = 0; O.modo = 1; try { localStorage.setItem('oni_al', O.al ? '1' : '0'); } catch (e) { } oniVibrar(false); }   // a própria chave confirma
   else if (c === 3) { O.f = mover(O.f, O.sel); if (O.d && O.sel < O.d.length) O.d = mover(O.d, O.sel); O.sel = 0; oniGuardarLocais(); oniAviso('Principal'); oniVibrar(false); }
   else if (c === 4) {
     const rem = O.f[O.sel];
@@ -4107,132 +4131,170 @@ function oniSalvar() {
   O.sel = O.f.length - 1; oniGuardarLocais(); O.modo = 0; O.p = null;
   oniAviso('Favorito salvo'); oniVibrar(false); oniAtualizar();
 }
-/* ---- desenho (réplica do onUpdate de Tela.mc) ---- */
+/* ---- desenho (réplica do onUpdate de Tela.mc + desenho comum do OnibusApp.mc; contas inteiras como no relógio) ---- */
 function oniDesenhar(c, W, H, mip, fonte) {
-  const K = ONI_COR[mip ? 'mip' : 'amoled'], O = ONI, g = W > 260, agora = Date.now();
-  const txt = (t, x, y, f, cor, al = 'center') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = 'middle';
-    const ls = String(t).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
-  const larg = (t, f) => { c.font = f.css; return c.measureText(t).width; };
-  const rr = (x, y, w, h, r, cor, borda, pen) => { c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  const K = ONI_COR[mip ? 'mip' : 'amoled'], O = ONI, g = W > 260, t = Date.now(), I = Math.trunc, P = g ? 8 : 5, fx = fonte('xtiny');
+  const rit = v => { if (v > O.rit) O.rit = v; };
+  O.rit = 0;
+  const fh = f => f.h - 4;   // ≈ dc.getFontHeight do relógio
+  const txt = (tx, x, y, f, cor, al = 'center') => { c.font = f.css; c.fillStyle = cor; c.textAlign = al; c.textBaseline = 'middle';
+    const ls = String(tx).split('\n'), lh = f.h; ls.forEach((l, i) => c.fillText(l, x, y + (i - (ls.length - 1) / 2) * lh)); };
+  const larg = (tx, f) => { c.font = f.css; return c.measureText(tx).width; };
+  const rr = (x, y, w, h, r, cor, borda, pen) => { r = Math.max(0, Math.min(r, w / 2, h / 2)); c.beginPath(); c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r); c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
     if (cor) { c.fillStyle = cor; c.fill(); } if (borda) { c.strokeStyle = borda; c.lineWidth = pen; c.stroke(); } };
-  const circ = (x, y, r, cor, pen) => { c.beginPath(); c.arc(x, y, r, 0, 7); if (pen) { c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); } else { c.fillStyle = cor; c.fill(); } };
-  const onibus = (x, y, s, cor, vidro) => { const w = s * 0.8, r = s / 6 + 1;
-    rr(x, y, w, s * 0.9, r, cor); c.fillStyle = cor; c.fillRect(x - s / 12, y + s / 5, s / 12 + 1, s / 6); c.fillRect(x + w, y + s / 5, s / 12 + 1, s / 6);
-    rr(x + s / 10, y + s / 5, w - s / 5, s * 0.3, r / 2 + 1, vidro); c.fillStyle = vidro; c.fillRect(x + s / 6, y + s / 14, w - s / 3, s / 12 + 1);
-    circ(x + s / 5, y + s * 0.65, s / 14 + 1, vidro); circ(x + w - s / 5, y + s * 0.65, s / 14 + 1, vidro);
-    c.fillStyle = vidro; c.fillRect(x + s / 10, y + s * 0.9 - 1, s / 6, s / 10 + 1); c.fillRect(x + w - s / 10 - s / 6, y + s * 0.9 - 1, s / 6, s / 10 + 1); };
+  const circ = (x, y, r, cor, pen) => { c.beginPath(); c.arc(x, y, Math.max(r, 0.5), 0, 7); if (pen) { c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); } else { c.fillStyle = cor; c.fill(); } };
   const arco = (cx, cy, r, gi, gf, cor, pen) => { c.beginPath(); c.arc(cx, cy, r, -gi * Math.PI / 180, -gf * Math.PI / 180, true); c.strokeStyle = cor; c.lineWidth = pen; c.stroke(); };
-  const cab = (titulo, ocupado) => {
-    const R = W / 2 - (g ? 4 : 2); arco(W / 2, H / 2, R, 58, 122, K.am, g ? 6 : 4);
-    if (ocupado) { const a = 58 + Math.floor(agora / 25) % 52; arco(W / 2, H / 2, R, a, a + 12, K.az, g ? 6 : 4); }
-    const f = fonte(g ? 'tiny' : 'xtiny'), s = g ? 24 : 13, tw = larg(titulo, f), x = (W - tw - s - 6) / 2, y = g ? H * 0.13 : H * 0.12;
-    onibus(x + s / 10, y - s / 2, s, K.am, '#000'); txt(titulo, x + s + 6, y, f, K.am, 'left');
+  const poli = (pts, cor) => { c.beginPath(); pts.forEach(([x, y], i) => i ? c.lineTo(x, y) : c.moveTo(x, y)); c.closePath(); c.fillStyle = cor; c.fill(); };
+  const ret = (x, y, w, h, cor) => { c.fillStyle = cor; c.fillRect(x, y, w, h); };
+  const cabe = (s, f, max) => { s = String(s); while (larg(s, f) > max && s.length > 4) s = s.slice(0, -2).replace(/[ .-]+$/, '') + '.'; return s; };
+  const corLinha = cod => { const n = cod.length, d = n >= 3 ? cod.charCodeAt(n - 3) - 48 : 0; return K.lin[d >= 0 && d <= 9 ? d % 4 : 0]; };
+  const onibus = (x, y, s, cor, vidro) => { const w = I(s * 8 / 10), r = I(s / 6) + 1;
+    rr(x, y, w, I(s * 9 / 10), r, cor); ret(x - I(s / 12), y + I(s / 5), I(s / 12) + 1, I(s / 6), cor); ret(x + w, y + I(s / 5), I(s / 12) + 1, I(s / 6), cor);
+    rr(x + I(s / 10), y + I(s / 5), w - I(s / 5), I(s * 3 / 10), I(r / 2) + 1, vidro); ret(x + I(s / 6), y + I(s / 14), w - I(s / 3), I(s / 12) + 1, vidro);
+    circ(x + I(s / 5), y + I(s * 65 / 100), I(s / 14) + 1, vidro); circ(x + w - I(s / 5), y + I(s * 65 / 100), I(s / 14) + 1, vidro);
+    ret(x + I(s / 10), y + I(s * 9 / 10) - 1, I(s / 6), I(s / 10) + 1, vidro); ret(x + w - I(s / 10) - I(s / 6), y + I(s * 9 / 10) - 1, I(s / 6), I(s / 10) + 1, vidro); };
+  // anel do bezel: trilha + arco do topo (f = 0..1000) com pontas redondas
+  const anel = (f, cor, pen) => { const cc = W / 2, r = cc - I(pen / 2) - 1; circ(cc, cc, r, K.tri, pen);
+    if (f <= 0) return; if (f >= 1000) return circ(cc, cc, r, cor, pen);
+    const a = 90 - I(f * 360 / 1000), ra = a * Math.PI / 180; arco(cc, cc, r, a, 90, cor, pen);
+    circ(cc, cc - r, I(pen / 2), cor); circ(cc + I(r * Math.cos(ra)), cc - I(r * Math.sin(ra)), I(pen / 2), cor); };
+  const giro = () => { const cc = W / 2, a = 90 - I(t / 3) % 360; rit(3); arco(cc, cc, cc - I(P / 2) - 1, a - 60, a, K.az, P); };
+  // ícones vetoriais: 0 atualizar · 1 local · 2 sino · 3 estrela · 4 lixeira · 5 sincronizar
+  const icone = (k, x, y, s, cor) => {
+    const p = s > 8 ? 3 : 2, tt = I(s * 4 / 10) + 1, r = I(s * 7 / 10);
+    if (k === 0) { arco(x, y, r, 90, 360, cor, p); poli([[x, y - r - tt], [x + tt + I(tt / 2), y - r], [x, y - r + tt]], cor); }
+    else if (k === 1) { circ(x, y - I(s / 4), I(s * 6 / 10), cor); poli([[x - I(s / 2), y - I(s / 8)], [x + I(s / 2), y - I(s / 8)], [x, y + s]], cor); circ(x, y - I(s / 4), I(s / 4), '#000'); }
+    else if (k === 2) { circ(x, y - I(s / 5), I(s * 6 / 10), cor); ret(x - I(s * 6 / 10), y - I(s / 5), I(s * 12 / 10) + 1, I(s * 6 / 10), cor); ret(x - I(s * 9 / 10), y + I(s * 4 / 10), I(s * 18 / 10) + 1, p, cor); circ(x, y + I(s * 8 / 10), p, cor); }
+    else if (k === 3) { const v = [0, -10, 2, -3, 10, -3, 4, 1, 6, 8, 0, 4, -6, 8, -4, 1, -10, -3, -2, -3], q = []; for (let i = 0; i < 20; i += 2) q.push([x + I(v[i] * s / 10), y + I(v[i + 1] * s / 10)]); poli(q, cor); }
+    else if (k === 4) { ret(x - I(s * 8 / 10), y - I(s * 6 / 10), I(s * 16 / 10) + 1, p, cor); ret(x - I(s / 4), y - I(s * 6 / 10) - p, I(s / 2) + 1, p, cor); ret(x - I(s * 6 / 10), y - I(s * 3 / 10), I(s * 12 / 10) + 1, I(s * 12 / 10), cor);
+      ret(x - I(s / 4), y - I(s / 10), p - 1, I(s * 7 / 10), '#000'); ret(x + I(s / 4) - 1, y - I(s / 10), p - 1, I(s * 7 / 10), '#000'); }
+    else { arco(x, y, r, 20, 160, cor, p); arco(x, y, r, 200, 340, cor, p); const xl = x - I(r * 94 / 100), yl = y - I(r * 34 / 100), xr = x + I(r * 94 / 100), yr = y + I(r * 34 / 100);
+      poli([[xl - tt, yl], [xl + tt, yl], [xl, yl + tt + I(tt / 2)]], cor); poli([[xr - tt, yr], [xr + tt, yr], [xr, yr - tt - I(tt / 2)]], cor); }
   };
-  const selo = (y, cod, dest, fs, fd) => {
-    const pad = g ? 10 : 5, hS = fs.h + (g ? 2 : 0) - 4, wc = larg(cod, fs) + 2 * pad, ws = g ? 14 : 8, max = W * 0.84 - wc - ws - (g ? 12 : 6);
-    let wd = larg(dest, fd);
-    if (wd > max && fd !== fonte('xtiny')) { fd = fonte('xtiny'); wd = larg(dest, fd); }   // cabe na curva: fonte menor, depois corta com "."
-    while (wd > max && dest.length > 4) { dest = dest.slice(0, -2).replace(/[ .-]+$/, '') + '.'; wd = larg(dest, fd); }
-    let x = (W - wc - ws - wd - (g ? 12 : 6)) / 2; if (x < W / 12) x = W / 12;
-    rr(x, y - hS / 2, wc, hS, g ? 8 : 4, K.am); txt(cod, x + wc / 2, y, fs, '#000');
-    const xs = x + wc + (g ? 6 : 3), t = ws / 2; c.beginPath(); c.moveTo(xs, y - t); c.lineTo(xs + ws - 2, y); c.lineTo(xs, y + t); c.closePath(); c.fillStyle = K.az; c.fill();
-    txt(dest, xs + ws + (g ? 6 : 3), y, fd, K.tx, 'left');
-  };
+  const chave = (x, y, s, on) => { const w = s * 4, r = s + 1;
+    if (on) { rr(x - w, y - r, w, 2 * r, r, K.am); circ(x - r, y, r - 3, '#000'); } else { rr(x - w, y - r, w, 2 * r, r, null, K.c3, 2); circ(x - w + r, y, r - 4, K.c3); } };
+  const pilula = (cx, y, s, f, cor, cheio) => { const h = fh(f) + 4, w = I(larg(s, f)) + h;
+    if (cheio) { rr(cx - I(w / 2), y - I(h / 2), w, h, I(h / 2), cor); txt(s, cx, y, f, '#000'); } else { rr(cx - I(w / 2), y - I(h / 2), w, h, I(h / 2), null, cor, 2); txt(s, cx, y, f, cor); } };
+  const titulo = (s, ic) => { const f = fx, sz = g ? 11 : 6, y = I(H * 13 / 100), e = g ? 8 : 4, x = I((W - larg(s, f) - 2 * sz - e) / 2);
+    if (ic < 0) onibus(x + I(sz / 5), y - sz, 2 * sz, K.am, '#000'); else icone(ic, x + sz, y, sz, K.az);
+    txt(s, x + 2 * sz + e, y, f, K.c2, 'left'); };
+  const selo = (cx, y, cod, dest, f, max) => { const pad = g ? 9 : 4, hS = fh(f) + (g ? 0 : 1), e = g ? 10 : 5, wc = I(larg(cod, f)) + 2 * pad;
+    dest = cabe(dest, f, max - wc - e); const x = cx - I((wc + e + larg(dest, f)) / 2);
+    rr(x, y - I(hS / 2), wc, hS, g ? 8 : 4, corLinha(cod)); txt(cod, x + I(wc / 2), y, f, '#000'); txt(dest, x + wc + e, y, f, K.tx, 'left'); };
   const carregando = (t1, t2) => {
-    const cx = W / 2, cy = H * 0.45, s = Math.floor(W * 22 / 100), yE = cy + s * 0.62, x0 = Math.floor(W * 18 / 100), x1 = W - x0, pas = g ? 30 : 16;
-    c.fillStyle = K.tri; c.fillRect(x0, yE, x1 - x0, g ? 8 : 4);
-    c.fillStyle = O.busca === 1 ? K.az : K.am; const off = Math.floor(agora / 20) % pas;
-    for (let x = x0 - off; x < x1; x += pas) { const a = Math.max(x, x0), b = Math.min(x + pas / 2, x1); if (b > a) c.fillRect(a, yE + (g ? 2 : 1), b - a, g ? 4 : 2); }
-    const pulo = Math.floor(agora / 150) % 2 ? (g ? 2 : 1) : 0;
-    onibus(cx - s * 0.4, cy - s / 2 - pulo, s, K.am, '#000');
-    txt(t1, cx, H * 0.71, fonte(g ? 'tiny' : 'xtiny'), K.tx);
-    txt(O.busca === 1 ? `${Math.floor((agora - O.ini) / 1000)} s · céu aberto ajuda` : t2, cx, H * 0.81, fonte('xtiny'), K.cz);
+    const cx = W / 2, s = I(W * 20 / 100), yE = I(H * 50 / 100), x0 = I(W * 22 / 100), x1 = W - x0, pas = g ? 28 : 14;
+    giro(); ret(x0, yE, x1 - x0, g ? 3 : 2, K.tri);
+    const off = I(t / 20) % pas;
+    for (let x = x0 - off; x < x1; x += pas) { const a = Math.max(x, x0), b = Math.min(x + I(pas / 2), x1); if (b > a) ret(a, yE + (g ? 8 : 5), b - a, g ? 2 : 1, K.c3); }
+    const pulo = I(t / 150) % 2 ? (g ? 2 : 1) : 0;
+    onibus(cx - I(s * 4 / 10), yE - s - pulo, s, K.am, '#000');
+    txt(t1, cx, I(H * 66 / 100), fonte(g ? 'tiny' : 'xtiny'), K.tx);
+    txt(O.busca === 1 ? `${I((t - O.ini) / 1000)} s · céu aberto ajuda` : t2, cx, I(H * 76 / 100), fx, K.c2);
   };
   const erro = () => {
-    const cx = W / 2, cy = H * 0.35, r = g ? 34 : 17;
-    circ(cx, cy, r, K.err, g ? 5 : 3); c.fillStyle = K.err; c.fillRect(cx - (g ? 3 : 1), cy - r * 0.55, g ? 7 : 4, r * 0.7); circ(cx, cy + r * 0.45, g ? 4 : 2, K.err);
-    txt(O.err[0], cx, H * 0.55, fonte(g ? 'medium' : 'small'), K.err);
-    txt(O.err[1], cx, H * 0.69, fonte('xtiny'), K.tx);
-    txt('START: tentar de novo', cx, H * 0.86, fonte('xtiny'), K.am);
+    const cx = W / 2, cy = I(H * 34 / 100), r = g ? 28 : 14;
+    circ(cx, cy, r, K.err, g ? 4 : 2); rr(cx - (g ? 3 : 1), cy - I(r / 2), g ? 6 : 3, I(r * 6 / 10), g ? 3 : 1, K.err); circ(cx, cy + I(r * 45 / 100), g ? 4 : 2, K.err);
+    txt(O.err[0], cx, I(H * 52 / 100), fonte(g ? 'small' : 'tiny'), K.tx);
+    txt(O.err[1], cx, I(H * 65 / 100), fx, K.c2);
+    pilula(cx, I(H * 80 / 100), 'Tentar de novo', fx, K.am, false);
   };
   c.fillStyle = '#000'; c.fillRect(0, 0, W, H);
 
-  if (O.modo === 1) {
+  if (O.modo === 1) {   // menu: lista centrada, ícones, chave do alerta
+    anel(0, 0, P);
     const m = oniItensMenu(), n = m.length; if (O.menu >= n) O.menu = 0;
-    cab('Opções', false);
-    const hR = Math.floor(H * 15 / 100);
-    for (let j = O.menu - 2; j <= O.menu + 2; j++) {
-      if (j < 0 || j >= n) continue;
-      const y = H / 2 + (j - O.menu) * hR + H * 0.03, t = m[j][1];
-      if (j === O.menu) { const x0 = W * 0.10; rr(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7, K.card, K.am, 2); txt(t, W / 2, y, fonte(g ? 'small' : 'tiny'), K.tx); }
-      else txt(t, W / 2, y, fonte('xtiny'), K.cz);
+    const [k, tp] = oniJanela(n), hR = I(H * 14 / 100), yT = I(H / 2 - I(k * hR / 2)), f = fonte(g ? 'tiny' : 'xtiny'), s = g ? 11 : 6;
+    if (yT >= I(H * 20 / 100)) txt('Opções', W / 2, yT - I(hR / 2), fx, K.c3);
+    for (let i = 0; i < k; i++) {
+      const q = tp + i, y = yT + i * hR + I(hR / 2), sel = q === O.menu, cd = m[q][0], x0 = I(W * 12 / 100), xi = x0 + (g ? 30 : 15), xt = xi + s + (g ? 14 : 7);
+      if (sel) rr(x0, y - I(hR / 2) + 3, W - 2 * x0, hR - 6, I((hR - 6) / 2), K.c4);
+      icone(cd, xi, y, s, sel ? K.am : K.c3);
+      txt(m[q][1], xt, y, f, sel ? K.tx : K.c2, 'left');
+      if (cd === 2) chave(W - x0 - (g ? 12 : 6), y, s, O.al);
     }
-  } else if (O.modo === 2) {
-    cab('Perto de mim', O.busca > 0 && !!O.p);
-    if (!O.p?.length) { if (O.err && !O.busca) erro(); else carregando(O.busca === 1 ? 'Buscando GPS...' : 'Procurando pontos...', 'pelo celular'); }
+    if (tp > 0) rr(W / 2 - 8, yT - 4, 16, 3, 1, K.c3);
+    if (tp + k < n) rr(W / 2 - 8, yT + k * hR + 2, 16, 3, 1, K.c3);
+  } else if (O.modo === 2) {   // perto de mim
+    anel(0, 0, P); if (O.busca) giro();
+    titulo('Perto de mim', 1);
+    if (!O.p?.length) { if (O.err && !O.busca) erro(); else carregando(O.busca === 1 ? 'Buscando GPS' : 'Procurando pontos', 'pelo celular'); }
     else {
       const n = O.p.length; if (O.psel >= n) O.psel = 0;
-      const viz = (y, p) => { let d = p[3]; if (d.length > 11) { d = d.slice(0, 10).replace(/[ -]+$/, ''); if (!d.endsWith('.')) d += '.'; } txt(`${p[2]}  ${d}`, W / 2, y, fonte('xtiny'), K.cz); };
-      if (O.psel > 0) viz(H * 0.22, O.p[O.psel - 1]);
-      if (O.psel < n - 1) viz(H * 0.80, O.p[O.psel + 1]);
-      const x0 = W * 0.07, yC = H * 0.29, wC = W - 2 * x0, hC = H * 0.43, p = O.p[O.psel], ja = oniIdx(O.f, p[0], p[1]) >= 0;
-      rr(x0, yC, wC, hC, g ? 18 : 9, K.card, K.am, g ? 3 : 2);
-      selo(yC + hC * 0.20, String(p[2]), p[3], fonte(g ? 'tiny' : 'xtiny'), fonte(g ? 'tiny' : 'xtiny'));
-      txt(p[4], W / 2, yC + hC * 0.44, fonte('xtiny'), K.az);
-      txt(oniM(p[5]) + ' de você', W / 2, yC + hC * 0.63, fonte('xtiny'), K.cz);
-      txt(ja ? 'já é favorito' : 'START: salvar', W / 2, yC + hC * 0.85, fonte('xtiny'), ja ? K.ok : K.am);
-      txt(`${O.psel + 1} de ${n}`, W / 2, H * 0.90, fonte('xtiny'), K.cz);
+      if (O.psel > 0) { const v = O.p[O.psel - 1]; txt(cabe(`${v[2]}  ${v[3]}`, fx, I(W * 60 / 100)), W / 2, I(H * 23 / 100), fx, K.c3); }
+      if (O.psel < n - 1) { const v = O.p[O.psel + 1]; txt(cabe(`${v[2]}  ${v[3]}`, fx, I(W * 66 / 100)), W / 2, I(H * 79 / 100), fx, K.c3); }
+      const x0 = I(W * 8 / 100), yC = I(H * 30 / 100), wC = W - 2 * x0, hC = I(H * 41 / 100), p = O.p[O.psel], ja = oniIdx(O.f, p[0], p[1]) >= 0;
+      rr(x0, yC, wC, hC, g ? 22 : 11, K.c4);
+      selo(W / 2, yC + I(hC * 20 / 100), String(p[2]), p[3], fonte(g ? 'tiny' : 'xtiny'), I(W * 74 / 100));
+      txt(cabe(p[4], fx, I(W * 76 / 100)), W / 2, yC + I(hC * 42 / 100), fx, K.c2);
+      txt(oniM(p[5]) + ' de você', W / 2, yC + I(hC * 61 / 100), fx, K.az);
+      pilula(W / 2, yC + I(hC * 82 / 100), ja ? 'já é favorito' : 'START · salvar', fx, ja ? K.ok : K.am, !ja);
+      txt(`${O.psel + 1} de ${n}`, W / 2, I(H * 89 / 100), fx, K.c3);
     }
-  } else {
-    cab(g ? 'Próximo Ônibus' : 'Próx. Ônibus', O.busca > 0 && !!O.d);
+  } else if (O.f.length && O.d && O.sel < O.d.length) {   // principal
+    const n = O.d.length, it = O.d[O.sel], ch = oniFuturas(it[4]), fonteDado = it[3], pu = I(t / 500) % 2 === 0;
+    let cheg = t < O.faixa, rem = -1, f = 0, cor = K.am, pen = P;
+    if (fonteDado > 0 && ch.length) { rem = ch[0] - oniAgora(); if (rem < 60) cheg = true; if (rem > 900) { f = 1000; cor = K.amE; } else { f = I(rem * 1000 / 900); rit(1); } }
+    if (cheg || (rem >= 0 && rem <= 120)) { rit(2); if (pu) pen = P + (g ? 4 : 2); }
+    if (cheg) { f = 1000; cor = K.am; }
+    anel(f, cor, pen); if (O.busca) giro();
+    const e = t - O.sl; let cx = W / 2;
+    if (e < 240) { const k = 240 - e; cx += I(I(I(O.sd * I(W / 3) * k / 240) * k) / 240); rit(3); }
+    selo(cx, I(H * 19 / 100), String(it[0]), it[1], fonte(g ? 'tiny' : 'xtiny'), I(W * 72 / 100));
+    txt(cabe(it[2], fx, I(W * 74 / 100)), cx, I(H * 28 / 100), fx, K.c2);
+    if (cheg) { txt('CHEGANDO', cx, I(H * 49 / 100), fonte(g ? 'medium' : 'small'), K.am); txt('vá para o ponto', cx, I(H * 59 / 100), fx, K.c2); }
+    else if (fonteDado <= 0 || !ch.length) {
+      txt(fonteDado < 0 ? 'Sem linha/ponto' : 'Sem previsão', cx, I(H * 49 / 100), fonte(g ? 'small' : 'tiny'), fonteDado < 0 ? K.err : K.tx);
+      txt(fonteDado > 0 ? 'os previstos já passaram' : it[5], cx, I(H * 59 / 100), fx, K.c3);
+    } else {   // até 59 min: "12 min" enorme; mais longe: "14:32"
+      const m = I(rem / 60), y = I(H * 55 / 100);
+      txt(m < 60 ? 'chega em' : 'chega às', cx, I(H * 35 / 100), fx, K.c3);
+      const fn = fonte(m < 60 ? 'numberHot' : 'numberMedium'), fm = fonte(g ? 'small' : 'tiny'), sn = m < 60 ? String(m) : oniHora(ch[0]), wn = I(larg(sn, fn)), wm = m < 60 ? I(larg(' min', fm)) : 0, x = cx - I((wn + wm) / 2);
+      txt(sn, x, y, fn, K.am, 'left'); if (m < 60) txt(' min', x + wn, y + I(fn.h / 5), fm, K.c2, 'left');
+    }
+    if (fonteDado > 0 && ch.length) {   // próximos horários em chips
+      const sc = ch.slice(0, 3).map(oniHora), hc = fh(fx) + (g ? 4 : 2), pc = g ? 12 : 5, ec = g ? 8 : 4;
+      let wt = -ec; sc.forEach(s => wt += I(larg(s, fx)) + 2 * pc + ec);
+      let xc = cx - I(wt / 2); const yc = I(H * 73 / 100);
+      sc.forEach((s, k) => { const wc = I(larg(s, fx)) + 2 * pc; rr(xc, yc - I(hc / 2), wc, hc, I(hc / 2), K.c4); txt(s, xc + I(wc / 2), yc, fx, k === 0 ? K.tx : K.c2); xc += wc + ec; });
+    }
+    let rod = 'atualizado ' + oniHa(O.t), cp = null; const rp = g ? 5 : 3;
+    if (fonteDado === 1) { rod = 'ao vivo · ' + oniHa(O.t); cp = K.ok; } else if (fonteDado === 2) { rod = 'programado · ' + oniHa(O.t); cp = K.az; }
+    if (O.busca === 2) { rod = 'atualizando'; cp = K.az; } else if (O.err) { rod = O.err[0] + ' · ' + oniHa(O.t); cp = K.err; }
+    const yr = I(H * 83 / 100), wr = I(larg(rod, fx)); let xr = W / 2 - I((wr + 2 * rp + (g ? 8 : 4)) / 2);
+    if (!cp) xr = W / 2 - I(wr / 2);
+    else {
+      if (fonteDado === 2 && !O.busca && !O.err) circ(xr + rp, yr, rp - 1, cp, 2); else circ(xr + rp, yr, rp, cp);
+      if (fonteDado === 1 && !O.busca && !O.err) { rit(1); if (I(t / 1000) % 2 === 0) circ(xr + rp, yr, rp + (g ? 4 : 2), cp, 1); }
+      xr += 2 * rp + (g ? 8 : 4);
+    }
+    txt(rod, xr, yr, fx, K.c2, 'left');
+    const yb = I(H * 91 / 100);
+    if (O.al) { const b = g ? 9 : 5, xb = W / 2 - I((larg('2 min', fx) + 2 * b + 4) / 2) + b; icone(2, xb, yb, b, K.am); txt('2 min', xb + b + 4, yb, fx, K.c2, 'left'); }
+    else if (n === 1) txt('START · opções', W / 2, yb, fx, K.c3);
+    if (n > 1) { const r = g ? 4 : 2, ps = g ? 16 : 9, xd = W - P - (g ? 18 : 10);
+      for (let k = 0; k < n; k++) { const yd = H / 2 + I((k * 2 - (n - 1)) * ps / 2); if (k === O.sel) rr(xd - r, yd - 2 * r, 2 * r, 4 * r, r, K.am); else circ(xd, yd, r - 1, K.c3); } }
+  } else {   // sem dados: vazio, erro ou consultando
+    anel(0, 0, P);
+    titulo(g ? 'Próximo Ônibus' : 'Próx. Ônibus', -1);
     if (!O.f.length) {
-      const s = Math.floor(W * 20 / 100); onibus(W / 2 - s * 0.4, H * 0.34 - s / 2, s, K.az, '#000');
-      txt('Nenhum favorito', W / 2, H * 0.56, fonte(g ? 'small' : 'tiny'), K.tx);
-      txt('START: pontos perto\nde mim', W / 2, H * 0.69, fonte('xtiny'), K.am);
-      txt('ou escolha no painel', W / 2, H * 0.84, fonte('xtiny'), K.cz);
-    } else if (O.d && O.sel < O.d.length) {
-      const n = O.d.length, it = O.d[O.sel], ch = oniFuturas(it[4]), fonteDado = it[3], fx = fonte('xtiny');
-      selo(H * 0.27, String(it[0]), it[1], fonte(g ? 'tiny' : 'xtiny'), fonte(g ? 'tiny' : 'xtiny'));
-      txt(it[2], W / 2, H * 0.36, fx, K.az);
-      if (agora < O.faixa) {
-        c.fillStyle = K.am; c.fillRect(0, H * 0.43, W, H * 0.22);
-        txt('CHEGANDO!', W / 2, H * 0.50, fonte(g ? 'medium' : 'small'), '#000'); txt('vá para o ponto', W / 2, H * 0.59, fx, '#000');
-      } else if (fonteDado <= 0 || !ch.length) {
-        txt(fonteDado < 0 ? 'Sem linha/ponto' : 'Sem previsão', W / 2, H * 0.50, fonte(g ? 'medium' : 'small'), fonteDado < 0 ? K.err : K.cz);
-        txt(fonteDado > 0 ? 'os previstos já passaram' : it[5], W / 2, H * 0.61, fx, K.tx);
-      } else {
-        const m = oniMin(ch[0]);
-        if (m === 0) txt('chegando', W / 2, H * 0.55, fonte('large'), K.am);
-        else {   // até 59 min: "chega em 12 min"; mais longe: "chega às 14:32"
-          txt(m < 60 ? 'chega em' : 'chega às', W / 2, H * 0.42, fx, K.cz);
-          const fn = fonte('numberMedium'), fm = fonte(g ? 'small' : 'tiny'), sn = m < 60 ? String(m) : oniHora(ch[0]), wn = larg(sn, fn), wm = m < 60 ? larg(' min', fm) : 0, x = (W - wn - wm) / 2, y = H * 0.57;
-          txt(sn, x, y, fn, K.am, 'left'); if (m < 60) txt(' min', x + wn, y + fn.h / 5, fm, K.am, 'left');
-        }
-        txt(ch.slice(0, 3).map(oniHora).join('  '), W / 2, H * 0.70, fonte(g ? 'tiny' : 'xtiny'), K.tx);
-      }
-      let rod = (fonteDado === 1 ? 'ao vivo' : fonteDado === 2 ? 'programado' : '') + ' · ' + oniHa(O.t), cr = fonteDado === 1 ? K.ok : K.am;
-      if (fonteDado <= 0) { rod = 'atualizado ' + oniHa(O.t); cr = K.cz; }
-      if (O.busca === 2) { rod = 'Atualizando...'; cr = K.az; } else if (O.err) { rod = O.err[0] + ' · ' + oniHa(O.t); cr = K.err; }
-      const yr = H * 0.80, wr = larg(rod, fx), rp = g ? 5 : 3;
-      if (fonteDado > 0 && !O.busca && !O.err) { circ((W - wr) / 2 - rp - 4, yr, rp, cr); txt(rod, (W - wr) / 2 + rp, yr, fx, cr, 'left'); }
-      else txt(rod, W / 2, yr, fx, cr);
-      const yb = H * 0.89;
-      if (O.al) {
-        const b = g ? 10 : 5, xb = W / 2 - larg('2 min', fx) / 2 - b - 2;
-        circ(xb, yb - b / 3, b * 0.6, K.am); c.fillStyle = K.am; c.fillRect(xb - b * 0.6, yb - b / 3, b * 1.2 + 1, b * 0.6); c.fillRect(xb - b * 0.9, yb + b / 4, b * 1.8 + 1, g ? 3 : 2); circ(xb, yb + b / 2 + 1, g ? 3 : 1, K.am);
-        txt('2 min', xb + b + 2, yb, fx, K.am, 'left');
-      } else if (n === 1) txt('START: opções', W / 2, yb, fx, K.cz);
-      if (n > 1 && agora >= O.faixa) { const r = g ? 5 : 3, passo = g ? 16 : 9, xd = W - (g ? 16 : 9);
-        for (let k = 0; k < n; k++) { const yd = H / 2 + (k * 2 - (n - 1)) * passo / 2; if (k === O.sel) circ(xd, yd, r, K.am); else circ(xd, yd, r - 1, K.cz, 1); } }
+      const s = I(W * 13 / 100), cy = I(H * 34 / 100);
+      circ(W / 2, cy, s, K.tri, 2); onibus(W / 2 - I(s * 4 / 10), cy - I(s / 2), s, K.az, '#000');
+      txt('Nenhum favorito', W / 2, I(H * 55 / 100), fonte(g ? 'small' : 'tiny'), K.tx);
+      pilula(W / 2, I(H * 68 / 100), 'START · perto de mim', fx, K.am, true);
+      txt('ou escolha no painel', W / 2, I(H * 80 / 100), fx, K.c3);
     } else if (O.err && !O.busca) erro();
-    else carregando('Consultando horários...', 'pelo celular');
+    else carregando('Consultando horários', 'pelo celular');
   }
-  if (O.aviso) {   // pílula amarela com ✓
-    if (agora > O.avisoAte) O.aviso = null;
-    else { const f = fonte(g ? 'small' : 'tiny'), h = f.h + 8, w = larg(O.aviso, f) + h + 16, x = (W - w) / 2, y = H * 0.80 - h / 2;
-      c.fillStyle = '#000'; c.fillRect(0, y - 4, W, h + 8); rr(x, y, w, h, h / 2, K.am); const cx = x + h / 2 + 4, cy = y + h / 2; c.beginPath(); c.moveTo(cx - h / 5, cy); c.lineTo(cx - h / 14, cy + h / 6); c.lineTo(cx + h / 4, cy - h / 5); c.strokeStyle = '#000'; c.lineWidth = h > 30 ? 4 : 2; c.stroke();
-      txt(O.aviso, x + h + 8, cy, f, '#000', 'left'); }
+  if (O.aviso) {   // confirmação: pílula com ✓ que cresce, fica e encolhe
+    const r = O.avisoAte - t, e = 1600 - r;
+    if (r <= 0) O.aviso = null;
+    else { rit(3); let k = 100; if (e < 160) k = 60 + I(e / 4); else if (r < 160) k = 60 + I(r / 4);
+      const f = fonte(g ? 'tiny' : 'xtiny'), b = g ? 8 : 4, h = fh(f) + (g ? 14 : 8), w = I(larg(O.aviso, f)) + h + (g ? 14 : 6), hk = I(h * k / 100), wk = I(w * k / 100), x = I((W - wk) / 2), y = I(H / 2 - I(hk / 2));
+      ret(b + 8, I(H * 39 / 100), W - 2 * b - 16, I(H * 28 / 100), '#000'); rr(x, y, wk, hk, I(hk / 2), K.c4, K.am, 2);   // faixa preta dentro do anel + pílula
+      if (k >= 100) { const cx = x + I(h / 2) + (g ? 4 : 2), cy = y + I(h / 2); c.beginPath(); c.moveTo(cx - I(h / 5), cy); c.lineTo(cx - I(h / 14), cy + I(h / 6)); c.lineTo(cx + I(h / 4), cy - I(h / 5)); c.strokeStyle = K.am; c.lineWidth = g ? 4 : 2; c.stroke();
+        txt(O.aviso, x + h + (g ? 4 : 2), cy, f, K.tx, 'left'); } }
   }
+  oniRitmo();
 }
 /* prévia da aba (fora do simulador): FR165 (390 px, AMOLED) ou FR55 (208 px, MIP) em tamanho real de pixels */
 function oniPintar() {
@@ -4241,14 +4303,14 @@ function oniPintar() {
   cv.width = 360 * dpr; cv.height = 360 * dpr;
   const c = cv.getContext('2d'); c.setTransform(esc2, 0, 0, esc2, 0, 0); c.imageSmoothingEnabled = m !== 'fr55';
   c.save(); c.beginPath(); c.arc(lado / 2, lado / 2, lado / 2, 0, 7); c.clip();
-  oniDesenhar(c, lado, lado, m === 'fr55', n => { const px = F[n] || F.xtiny, peso = n === 'numberMedium' && m === 'fr55' ? 900 : F.peso; return { css: `${peso} ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; });
+  oniDesenhar(c, lado, lado, m === 'fr55', n => { const px = F[n] || F.xtiny, peso = n.startsWith('number') && m === 'fr55' ? 900 : F.peso; return { css: `${peso} ${px}px Roboto, Arial, sans-serif`, h: Math.round(px * 1.17) }; });
   c.restore();
 }
 /* favoritos do painel: lista + busca de linha → ponto */
 function oniListaPainel() {
   const el = $('#oniFavs'); if (!el) return;
   const l = ONI.painel;
-  el.innerHTML = l.length ? l.map((f, i) => `<div class="oni-fav"><span class="oni-cod">${esc(f.cod)}</span><div class="oni-fav-t"><b>${esc(f.destino)}</b><span>${esc(f.ponto)}${i === 0 ? ' · <em>principal (glance)</em>' : ''}</span></div>
+  el.innerHTML = l.length ? l.map((f, i) => `<div class="oni-fav"><span class="oni-cod" style="--oni-lin:${oniCorLinha(f.cod)}">${esc(f.cod)}</span><div class="oni-fav-t"><b>${esc(f.destino)}</b><span>${esc(f.ponto)}${i === 0 ? ' · <em>principal (glance)</em>' : ''}</span></div>
     ${i > 0 ? `<button class="btn peq sec" data-onisobe="${i}" title="Tornar principal">▲</button>` : ''}<button class="btn peq sec" data-onirem="${i}" title="Remover">✕</button></div>`).join('')
     : '<div class="mini">Nenhum favorito ainda. Busque a linha abaixo e escolha o ponto onde você pega o ônibus.</div>';
   const salvar = async nova => { try { localStorage.removeItem('oni_x'); } catch (e) { } try { const j = await api('onibus_favs_salvar', { favs: nova }); ONI.painel = j.favs; oniListaPainel(); toast('Favoritos salvos ✓'); ONI.carregado = false; oniAtualizar(); } catch (x) { toast(x.message); } };
@@ -4261,11 +4323,11 @@ async function renderOnibus() {
   app.innerHTML = `<div class="tela"><div class="topo"><h1>Apps</h1></div>${segApps('onibus')}
   <section class="w oni-w"><header class="w-top"><span class="w-ico oni-ico">${ICO.onibus}</span><span class="w-tit">Próximo Ônibus — quando ele chega no seu ponto</span></header><div class="w-corpo" style="display:flex;flex-direction:column;align-items:center;gap:12px">
    <div class="chips"><button class="chip ${ONI.prev === 'fr165' ? 'ativo' : ''}" data-oniprev="fr165">Forerunner 165 (AMOLED)</button><button class="chip ${ONI.prev === 'fr55' ? 'ativo' : ''}" data-oniprev="fr55">Forerunner 55 (MIP)</button></div>
-   <canvas id="oniCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #ffc40033;touch-action:pan-y;cursor:pointer"></canvas>
+   <canvas id="oniCv" style="width:min(300px,80vw);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 40px #f2c14e26;touch-action:pan-y;cursor:pointer"></canvas>
    <div class="chips"><button class="chip" data-onibt="prev">▲ Cima</button><button class="chip" data-onibt="start">● START</button><button class="chip" data-onibt="next">▼ Baixo</button><button class="chip" data-onibt="menu">☰ MENU</button><button class="chip" data-onibt="back">↩ VOLTAR</button><button class="chip" id="oniGps">📍 Usar minha localização</button></div>
    <div class="mini" id="oniOrigem" style="text-align:center"></div>
    <div class="mini" style="text-align:center;max-width:560px">Mostra <b>em quantos minutos chega o próximo ônibus</b> no seu ponto favorito (Maceió e Rio Largo), com os <b>próximos horários</b>. A contagem anda sozinha a cada minuto, sem gastar internet. Com o <b>alerta de 2 min</b> ligado o relógio vibra quando o ônibus estiver chegando — e, se você fechar o app, ainda pede para abri-lo 2 min antes.<br>
-   <b>Ao vivo</b> (bolinha verde) é o GPS dos ônibus; <b>programado</b> (bolinha amarela) é a tabela de hoje daquela parada, quando nenhum ônibus está sendo rastreado. Fonte: CittaMobi (não é a SMTT). Sem dado, o app diz que não tem — nada inventado.</div>
+   O <b>anel da borda</b> esvazia nos últimos 15 min até a chegada e pulsa nos 2 finais. <b>Ao vivo</b> (bolinha verde) é o GPS dos ônibus; <b>programado</b> (bolinha azul vazada) é a tabela de hoje daquela parada, quando nenhum ônibus está sendo rastreado. Fonte: CittaMobi (não é a SMTT). Sem dado, o app diz que não tem — nada inventado.</div>
   </div></section>
   <div class="card"><h3>Seus pontos favoritos</h3><div class="mini" style="margin-bottom:8px">Até 4. O primeiro é o <b>principal</b> (aparece na glance do FR165). O app gerado abaixo traz esta lista sozinho; no relógio você também pode salvar pontos pelo <b>Perto de mim</b>.</div>
    <div id="oniFavs"></div>
@@ -4277,7 +4339,7 @@ async function renderOnibus() {
    <div class="chips"><button class="btn" id="oniGera">⬇ Baixar o Próximo Ônibus</button></div>
    <div class="mini" id="oniProg"></div></form>
    <div class="mini" style="margin-top:8px">Já compilados (sem os favoritos do painel — salve pelo "Perto de mim"): <a href="app/ProximoOnibus-fr165.prg" download>Forerunner 165</a> · <a href="app/ProximoOnibus-fr165m.prg" download>Forerunner 165 Music</a> · <a href="app/ProximoOnibus-fr55.prg" download>Forerunner 55</a></div></div>
-  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir aparece na hora a <b>última consulta</b> e ele atualiza pelo celular (ônibus andando na estrada = consultando). Chegou, o relógio vibra.<br><b>▲ ▼</b> (ou deslizar) trocam de favorito. No centro, <b>"chega em X min"</b> em amarelo e, embaixo, os próximos horários. O rodapé diz se é <b>ao vivo</b> ou <b>programado</b> e <b>há quanto tempo</b> foi atualizado; ele se atualiza sozinho a cada 5 min ou quando o ônibus da tela passa.<br><b>START</b> (ou MENU) abre as opções: <b>Atualizar agora</b>, <b>Perto de mim</b> (GPS → pontos a até 1,5 km → linhas; START salva o favorito), <b>Alerta 2 min</b> (sininho no rodapé; vibra forte e mostra a faixa "CHEGANDO!"), <b>Tornar principal</b>, <b>Remover favorito</b> e <b>Sincronizar painel</b>.<br>Sem celular, sem internet, sem linha/ponto ou com a fonte fora do ar, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): linha, "chega em X min" e os próximos horários do favorito principal. O FR55 não aceita glance em apps.</div></div>
+  <div class="card"><h3>Como usar no relógio</h3><div class="mini">Ao abrir aparece na hora a <b>última consulta</b> e ele atualiza pelo celular (ônibus andando na estrada = consultando). Chegou, o relógio vibra.<br><b>▲ ▼</b> (ou deslizar) trocam de favorito. No centro, <b>"chega em X min"</b> com números grandes; o <b>anel da borda</b> esvazia nos últimos 15 min e, embaixo, os próximos horários aparecem em chips. A cor do selo da linha segue o grupo (centena do número). O rodapé diz se é <b>ao vivo</b> ou <b>programado</b> e <b>há quanto tempo</b> foi atualizado; ele se atualiza sozinho a cada 5 min ou quando o ônibus da tela passa.<br><b>START</b> (ou MENU) abre as opções: <b>Atualizar agora</b>, <b>Perto de mim</b> (GPS → pontos a até 1,5 km → linhas; START salva o favorito), <b>Alerta 2 min</b> (chave liga/desliga; sininho no rodapé; vibra forte e o anel cheio pulsa com "CHEGANDO"), <b>Tornar principal</b>, <b>Remover favorito</b> e <b>Sincronizar painel</b>.<br>Sem celular, sem internet, sem linha/ponto ou com a fonte fora do ar, a tela diz o motivo e <b>START tenta de novo</b>.<br><b>Glance</b> (FR165): linha, "chega em X min" e os próximos horários do favorito principal. O FR55 não aceita glance em apps.</div></div>
   <div class="card"><h3>Como instalar pelo cabo USB</h3><div class="mini">1) Baixe o <b>.prg</b> do seu modelo acima.<br>2) Ligue o relógio no computador com o <b>cabo USB</b> e espere aparecer a unidade <b>GARMIN</b>.<br>3) Copie o arquivo para a pasta <b>GARMIN/APPS</b>.<br>4) Ejete e desconecte o cabo.<br>5) No relógio: <b>START</b> → <b>Aplicativos</b> (ou ▲▼ na lista de apps) → <b>Próximo Ônibus</b>.<br><b>Permissões:</b> GPS (só no "Perto de mim"; a posição não é gravada), comunicação (consulta pelo celular pareado, com o Garmin Connect aberto em segundo plano) e segundo plano (só para o aviso de 2 min com o app fechado — um evento agendado, sem internet).</div></div>
   ${tabbar('app')}</div>`;
   const pinta = () => oniPintar();
@@ -4297,7 +4359,7 @@ async function renderOnibus() {
     const q = $('#oniBusca').value.trim(); if (q.length < 2) { $('#oniLinhas').innerHTML = ''; return; }
     ctl?.abort(); ctl = new AbortController();
     try { const j = await fetch(`${ONI_API}?a=linhas&q=${encodeURIComponent(q)}`, { signal: ctl.signal }).then(r => r.json());
-      $('#oniLinhas').innerHTML = (j.l || []).length ? j.l.map(l => `<button class="oni-linha" data-oniid="${l.id}"><span class="oni-cod">${esc(l.cod)}</span><span><b>${esc(l.nome)}</b><small>${esc(l.empresa)} · sentido ${esc(l.destino)}</small></span></button>`).join('') : '<div class="mini">Nenhuma linha encontrada.</div>';
+      $('#oniLinhas').innerHTML = (j.l || []).length ? j.l.map(l => `<button class="oni-linha" data-oniid="${l.id}"><span class="oni-cod" style="--oni-lin:${oniCorLinha(l.cod)}">${esc(l.cod)}</span><span><b>${esc(l.nome)}</b><small>${esc(l.empresa)} · sentido ${esc(l.destino)}</small></span></button>`).join('') : '<div class="mini">Nenhuma linha encontrada.</div>';
       $('#oniLinhas').querySelectorAll('[data-oniid]').forEach(b => b.onclick = async () => {
         $('#oniLinhas').querySelectorAll('.oni-linha').forEach(x => x.classList.toggle('ativo', x === b));
         const p = await fetch(`${ONI_API}?a=paradas&l=${b.dataset.oniid}`).then(r => r.json()).catch(() => null);

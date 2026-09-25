@@ -1,12 +1,54 @@
-# ⌚ Garmin Connect PWA — painel de saúde, rastreamento ao vivo e Walkie-Talkie para relógios Garmin
+# ⌚ Garmin Connect IQ Apps + Garmin Connect PWA — apps grátis para relógios Garmin (Forerunner 165, Forerunner 55)
 
-**Aplicativo web progressivo (PWA) em PHP + MySQL que sincroniza sua conta Garmin Connect, cria relatórios que o relógio não mostra, envia a posição e a bateria do relógio para o Traccar e ainda transforma relógios Garmin em um walkie-talkie de mensagens.**
+**Free & open-source Garmin watch apps (Connect IQ / Monkey C) and a Garmin Connect web dashboard.**
+Apps gratuitos e de código aberto para relógios Garmin — preço de gasolina perto de você, horário de ônibus ao vivo, contador de musculação, sono, mostrador completo, walkie-talkie, bichinho virtual e Omnitrix — mais um painel web (PWA) em PHP + MySQL que sincroniza sua conta Garmin Connect e cria relatórios que o relógio não mostra.
 
-Visual inspirado no app oficial (tela "Meu dia"), com layout de celular e de computador, tempo real por AJAX e apps Connect IQ gerados automaticamente para 159 modelos de relógio.
+[![Connect IQ](https://img.shields.io/badge/Garmin-Connect%20IQ-000?logo=garmin&logoColor=white)](https://developer.garmin.com/connect-iq/)
+[![Monkey C](https://img.shields.io/badge/linguagem-Monkey%20C-2ED18A)](#-apps-para-relógios-garmin--garmin-watch-apps)
+[![Forerunner 165](https://img.shields.io/badge/Forerunner-165%20%7C%20165%20Music%20%7C%2055-F2C14E)](#-download--instalação-dos-apps)
+[![Licença MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-blue)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/alequizao/garmin-connect-pwa?label=download)](https://github.com/alequizao/garmin-connect-pwa/releases/latest)
 
 - **Demonstração em produção:** https://alequizao.com/garmin/
-- **Stack:** PHP 8.3 · MySQL/MariaDB · JavaScript puro (sem framework) · Leaflet · Python 3 (sincronização) · Node.js + Puppeteer (LiveTrack) · Monkey C / Connect IQ SDK
+- **Download dos apps (.prg):** [Releases](https://github.com/alequizao/garmin-connect-pwa/releases/latest)
+- **Stack:** Monkey C / Connect IQ SDK · PHP 8.3 · MySQL/MariaDB · JavaScript puro · Leaflet · Python 3 · Node.js
 - **Licença:** MIT — use, adapte e contribua
+
+## ⌚ Apps para relógios Garmin · Garmin watch apps
+
+| App | O que faz | What it does | Relógios |
+|---|---|---|---|
+| ⛽ **Gasolina Perto** | Postos mais baratos perto de você, com seta até o posto | Cheapest gas stations nearby with a compass arrow | FR165 · FR165M · FR55 |
+| 🚌 **Próximo Ônibus** | "Chega em X min" ao vivo, favoritos e alerta 2 min antes | Live bus arrival countdown, favorites, 2-min alert | FR165 · FR165M · FR55 |
+| 🏋️ **Força** | Contador automático de repetições na musculação | Strength training rep counter | FR165 · FR165M · FR55 |
+| 😴 **Sono** | Análise da noite 100% offline no relógio | Offline sleep analysis | FR165 · FR165M · FR55 |
+| 🧭 **Painel Total** | Mostrador com hora, FC, passos, clima e mais | All-in-one watch face | FR165 · FR165M |
+| 📍 **Rastreador** | GPS, bateria e FC ao vivo no Traccar | Live GPS tracker for Traccar | 159 modelos |
+| 📻 **Walkie-Talkie** | Canais, mensagens rápidas e SOS | Message walkie-talkie with SOS | 159 modelos |
+| 🍺 **ME MIMEI** | Quantos lanches cabem nas calorias do dia | Snacks vs. active calories | 159 modelos |
+| 🥚 **Bichinho Virtual** | Bichinho virtual estilo 1996 | Virtual pet (Tamagotchi-style) | 159 modelos |
+| 🟢 **Omnitrix** | Omnitrix interativo + mostrador | Ben 10 Omnitrix app + watch face | 159 modelos |
+
+Todos são **leves em memória** (vetoriais, sem fontes extras) e com visual premium para AMOLED e MIP.
+
+<p align="center">
+  <img src="docs/telas/gasolina-perto.png" width="860" alt="Gasolina Perto — app Garmin de preço de combustível perto de você">
+</p>
+<p align="center">
+  <img src="docs/telas/proximo-onibus.png" width="860" alt="Próximo Ônibus — app Garmin de horário de ônibus ao vivo">
+</p>
+
+## 📥 Download / instalação dos apps
+
+1. Baixe o `.prg` do seu relógio em **[Releases](https://github.com/alequizao/garmin-connect-pwa/releases/latest)** (ex.: `GasolinaPerto-fr165.prg`).
+2. Ligue o relógio no computador pelo cabo USB e copie o arquivo para a pasta **`GARMIN/APPS`**.
+3. Desconecte: o app aparece em **Aplicativos**. Apps que usam internet precisam do celular pareado com o Garmin Connect.
+
+*English:* download the `.prg` for your watch from Releases, copy it to `GARMIN/APPS` over USB, and open it from the Apps list. Or build from source with the Connect IQ SDK (`monkeyc -f <app>/monkey.jungle -d fr165 -y your_key.der`).
+
+## 🖥️ Painel web (PWA)
+
+Visual inspirado no app oficial (tela "Meu dia"), com layout de celular e de computador, tempo real por AJAX e apps Connect IQ gerados automaticamente para 159 modelos de relógio.
 
 <p align="center">
   <img src="docs/telas/desktop-inicio.png" width="860" alt="Meu dia no computador">
@@ -83,10 +125,10 @@ Bichinho virtual no estilo dos aparelhinhos de 1996, feito em pixel art desenhad
 App interativo: START abre o mostrador, cima e baixo giram entre **59 silhuetas**, e START transforma — com clarão, raios girando, vibração e sons. A transformação dura 10 minutos, com bipe e piscar vermelho nos últimos 10 segundos, e depois o aparelho recarrega por 1 minuto. Acompanha um mostrador de relógio no mesmo tema.
 
 ### ⛽ Gasolina Perto
-Os postos mais baratos perto de você (preços da SEFAZ-AL), com distância, seta apontando para o posto, troca de combustível e glance com o menor preço. Leve: ~21 KB no Forerunner 55.
+Os postos mais baratos perto de você (preços da SEFAZ-AL), com distância, **cor do preço** (verde = mais barato), diferença para o mais barato, **rosa-dos-ventos** apontando para o posto, aviso "Você chegou", troca de combustível e glance com o menor preço. Anel de progresso na borda e transições suaves. Leve: ~24 KB no Forerunner 55.
 
 ### 🚌 Próximo Ônibus
-Até 4 favoritos de linha + ponto, "chega em X min" ao vivo (GPS dos ônibus) ou pela tabela programada, próximos horários, "Perto de mim" e alerta 2 min antes. Favoritos configuráveis no painel.
+Até 4 favoritos de linha + ponto, **"chega em X min" ao vivo** (GPS dos ônibus) ou pela tabela programada, com **anel de contagem regressiva na borda** que pulsa nos 2 últimos minutos, próximos horários em chips, selo colorido por linha, "Perto de mim" e alerta com vibração 2 min antes. Favoritos configuráveis no painel. Leve: ~33 KB no Forerunner 55.
 
 ### 🏋️ Força · 😴 Sono · 🧭 Painel Total
 Contador de repetições para musculação, análise da noite 100% offline no relógio e um mostrador com hora, FC, passos, clima e mais na mesma tela.
@@ -166,4 +208,4 @@ Quer um sistema como este para o seu negócio? Entre em contato.
 
 Distribuído sob a licença **MIT** — veja [LICENSE](LICENSE). Garmin, Garmin Connect, Forerunner e Connect IQ são marcas da Garmin Ltd.; este projeto não é afiliado à Garmin.
 
-**Palavras-chave:** Garmin Connect, relógio Garmin, Forerunner 165, Forerunner 55, Connect IQ, Monkey C, PWA, PHP, MySQL, Traccar, rastreamento GPS, LiveTrack, walkie-talkie, Body Battery, HRV, VO2 max, ACWR, Strava, Web Push, dashboard de saúde, relatórios de corrida.
+**Palavras-chave / keywords:** Garmin apps, Garmin watch apps, Connect IQ apps, Connect IQ app open source, Monkey C examples, Garmin Forerunner 165 apps, Garmin Forerunner 55 apps, Garmin gas prices app, Garmin bus app, Garmin transit app, Garmin strength rep counter, Garmin sleep app, Garmin watch face, Garmin tamagotchi, Garmin walkie talkie, apps para relógio Garmin, aplicativos Garmin grátis, app de gasolina Garmin, horário de ônibus Maceió, Garmin Connect, relógio Garmin, Forerunner 165, Forerunner 55, Connect IQ, Monkey C, PWA, PHP, MySQL, Traccar, rastreamento GPS, LiveTrack, walkie-talkie, Body Battery, HRV, VO2 max, ACWR, Strava, Web Push, dashboard de saúde, relatórios de corrida.

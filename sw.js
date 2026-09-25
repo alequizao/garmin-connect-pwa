@@ -1,4 +1,4 @@
-const VERSAO = 'garmin-v57'; // 3.5.0 — app Próximo Ônibus (aba Apps + Simulador)
+const VERSAO = 'garmin-v58'; // 3.6.0 — visual premium do Gasolina Perto e do Próximo Ônibus
 const TILES = 'garmin-tiles';
 const SHELL = ['/garmin/', '/garmin/index.php', '/garmin/manifest.json', '/garmin/icons/icon-192.png', '/garmin/icons/icon-512.png',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js', 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'];

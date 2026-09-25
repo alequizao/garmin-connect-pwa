@@ -683,7 +683,7 @@ a:focus-visible,.item[data-tela]:focus-visible,.chip:focus-visible,.seg button:f
 .enviar-bt svg{stroke:#fff}
 
 /* 3.4.0 — Gasolina Perto: mesma identidade do app do relógio (verde-combustível + âmbar) */
-.gas-w .gas-ico{color:#00c853}
+.gas-w .gas-ico{color:#2ed18a}
 .gas-w .w-tit{color:inherit}
 
 /* ---- Aba Depressão 2.0: filtros, Alex × Jeovana, gráficos com dica ---- */
@@ -745,19 +745,19 @@ a:focus-visible,.item[data-tela]:focus-visible,.chip:focus-visible,.seg button:f
 @media (max-width:400px){.dep-seg button{font-size:11.5px!important}.dep-div-r>span{width:86px}.dep-div-eixo{margin-left:96px}.dep-cal-n{width:64px}}
 
 /* 3.5.0 — Próximo Ônibus: identidade do app do relógio (amarelo-ônibus + azul) · Desenvolvido por Alequizao */
-.oni-w .oni-ico{color:#ffc400}
+.oni-w .oni-ico{color:#f2c14e}   /* Próximo Ônibus: tokens premium iguais ao app do relógio */
 .oni-w .w-tit{color:inherit}
-.oni-cod{display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:28px;padding:0 8px;border-radius:8px;background:#ffc400;color:#111;font-weight:700;font-size:14px;flex-shrink:0;font-variant-numeric:tabular-nums}
+.oni-cod{display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:28px;padding:0 8px;border-radius:8px;background:var(--oni-lin,#f2c14e);color:#111;font-weight:700;font-size:14px;flex-shrink:0;font-variant-numeric:tabular-nums}
 .oni-fav{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--linha)}
 .oni-fav:last-child{border-bottom:0}
 .oni-fav-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
 .oni-fav-t b{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.oni-fav-t span{font-size:12.5px;color:#448aff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.oni-fav-t span{font-size:12.5px;color:#4a76b0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .oni-fav-t em{font-style:normal;color:var(--txt2)}
 .oni-res{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;margin:4px 0 8px}
 .oni-linha{display:flex;align-items:center;gap:10px;text-align:left;padding:8px 10px;border-radius:12px;background:var(--card2);border:1.5px solid transparent;width:100%}
 .oni-linha span:last-child{display:flex;flex-direction:column;min-width:0}
 .oni-linha b{font-weight:500;font-size:14px}
 .oni-linha small{color:var(--txt2);font-size:12px}
-.oni-linha.ativo{border-color:#ffc400;background:rgba(255,196,0,.16)}
+.oni-linha.ativo{border-color:#f2c14e;background:rgba(242,193,78,.14)}
 #oniParada{width:100%}

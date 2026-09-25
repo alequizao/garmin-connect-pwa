@@ -2,100 +2,97 @@
 // Gasolina Perto · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
 // https://github.com/alequizao · © 2026 Alequizao. Todos os direitos reservados.
 //
-// Um posto: nome, preço, distância ao vivo, idade do preço e a seta até o posto.
-// A seta usa a bússola (se o relógio tiver) ou o rumo do GPS andando. Parado e sem
-// bússola ela fica "norte para cima" e a tela mostra a direção cardeal (N, NE, L...).
+// Um posto: nome, rosa-dos-ventos com a seta até o posto, anel de aproximação (quanto
+// da distância inicial já foi percorrida), preço, distância ao vivo e idade do preço.
+// A seta usa a bússola (se o relógio tiver) ou o rumo do GPS andando; parado e sem
+// bússola ela fica "norte para cima" (triângulo branco = norte) e mostra "fica a NE".
+// A menos de 50 m: "Você chegou" + vibração (uma vez por posto).
 //
 using Toybox.WatchUi;
 using Toybox.Graphics;
-using Toybox.Timer;
 using Toybox.Math;
 
 class Detalhe extends WatchUi.View {
-    hidden var mTimer = null;
-
     function initialize() { View.initialize(); }
 
-    function onShow() {
-        mTimer = new Timer.Timer();
-        mTimer.start(method(:tique), 500, true);
-    }
-
-    function onHide() {
-        if (mTimer != null) { mTimer.stop(); mTimer = null; }
-    }
-
-    function tique() { WatchUi.requestUpdate(); }
+    function onShow() { gDet = true; }
+    function onHide() { gDet = false; }
 
     function onUpdate(dc) {
-        var W = dc.getWidth(), H = dc.getHeight(), g = W > 260;
+        var W = dc.getWidth(), H = dc.getHeight(), g = W > 260, xt = Graphics.FONT_XTINY;
         dc.setColor(cTx, Graphics.COLOR_BLACK);
         dc.clear();
         if (gP == null || gP.size() == 0) { WatchUi.popView(WatchUi.SLIDE_RIGHT); return; }
         if (gSel >= gP.size()) { gSel = 0; }
-        var p = gP[gSel];
-        var cj = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
-        cabecalho(dc, W, H, COMB[gC - 1], false);
-        dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(W / 2, H * 26 / 100, g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, p[0], cj);
+        var p = gP[gSel], o = desl(g ? 30 : 14);
+        anel(dc, W, gSel, gP.size());
+        cab(dc, W, COMB[gC - 1]);
+        txt(dc, W, H * 26 / 100 + o, p[0], g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, g ? Graphics.FONT_TINY : xt, cTx);
 
-        // seta
-        var cx = W / 2, cy = H * 49 / 100, r = H * 13 / 100;
-        var km = p[2].toFloat(), txt = null;
-        dc.setPenWidth(g ? 3 : 2);
-        dc.setColor(g ? 0x1E3A2A : Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+        // rosa-dos-ventos: trilho fino + 12 marcas giradas para o norte de verdade
+        var cx = W / 2, cy = H * 47 / 100, r = H * 15 / 100;
+        var km = p[2].toFloat(), t = "sem GPS", h = rumoAtual(), n0 = (h == null) ? 0 : h;
+        dc.setPenWidth(g ? 2 : 1);
+        dc.setColor(cLn, TR);
         dc.drawCircle(cx, cy, r);
+        dc.setColor(cT3, TR);
+        for (var k = 1; k < 12; k++) {
+            var a = Math.toRadians(k * 30 - n0), s = Math.sin(a), c = Math.cos(a), l = r - 3 - ((k % 3 == 0) ? r / 6 : r / 12);
+            dc.drawLine(cx + s * l, cy - c * l, cx + s * (r - 3), cy - c * (r - 3));
+        }
         dc.setPenWidth(1);
-        if (gLat == null) {
-            dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(cx, cy, Graphics.FONT_MEDIUM, "?", cj);
-            txt = "sem GPS";
-        } else {
+        var an = Math.toRadians(-n0), sn = Math.sin(an), cn = Math.cos(an), q = r / 7 + 1;   // norte: triângulo branco
+        dc.setColor(cTx, TR);
+        dc.fillPolygon([[cx + sn * (r - 2), cy - cn * (r - 2)],
+                        [cx + sn * (r - 3 * q) - cn * q, cy - cn * (r - 3 * q) - sn * q],
+                        [cx + sn * (r - 3 * q) + cn * q, cy - cn * (r - 3 * q) + sn * q]]);
+
+        if (gLat != null) {
             km = distKm(gLat, gLon, p[3], p[4]);
-            var b = rumo(gLat, gLon, p[3], p[4]);
-            var h = rumoAtual();
-            if (km < 0.04) {
-                dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
-                dc.fillCircle(cx, cy, r * 45 / 100);
-                txt = "você chegou";
-            } else {
-                if (h == null) {   // norte para cima: marca o N dentro do aro e mostra a direção cardeal
-                    dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-                    dc.drawText(cx, cy - r + (g ? 18 : 9), Graphics.FONT_XTINY, "N", cj);
-                    txt = "fica a " + cardeal(b);
-                } else {
-                    txt = "siga a seta";
-                }
-                seta(dc, cx, cy, r * 72 / 100, (h != null) ? b - h : b);
+            // anel de aproximação: fração da distância (da consulta) já percorrida
+            var f = p[2].toFloat();
+            f = (f > 0.05) ? 1 - km / f : 0;
+            if (f > 0.02) {
+                dc.setPenWidth(g ? 4 : 3);
+                dc.setColor(cAc, TR);
+                dc.drawArc(cx, cy, r, Graphics.ARC_CLOCKWISE, 90, (450 - f * 360).toNumber() % 360);
+                dc.setPenWidth(1);
             }
+            if (km < 0.05) {
+                dc.setColor(cAc, TR);
+                dc.fillCircle(cx, cy, r * 45 / 100);
+                dc.setColor(Graphics.COLOR_BLACK, TR);
+                dc.setPenWidth(g ? 5 : 3);
+                dc.drawLine(cx - r / 5, cy, cx - r / 16, cy + r / 7);
+                dc.drawLine(cx - r / 16, cy + r / 7, cx + r / 5, cy - r / 7);
+                dc.setPenWidth(1);
+                t = "Você chegou";
+                if (gCheg != gSel) { gCheg = gSel; vibrar(100); }
+            } else {
+                if (km > 0.1 && gCheg == gSel) { gCheg = -1; }
+                t = (h == null) ? "fica a " + cardeal(rumo(gLat, gLon, p[3], p[4])) : "siga a seta";
+                seta(dc, cx, cy, r * 58 / 100, rumo(gLat, gLon, p[3], p[4]) - n0);
+            }
+        } else {
+            dc.setColor(cT3, TR);
+            dc.drawText(cx, cy, Graphics.FONT_MEDIUM, "?", CJ);
         }
 
-        // preço
-        var fp = Graphics.FONT_LARGE, fr = g ? Graphics.FONT_TINY : Graphics.FONT_XTINY;
-        var sp = fmtPreco(p[1]);
-        var wr = dc.getTextWidthInPixels("R$ ", fr), wp = dc.getTextWidthInPixels(sp, fp);
-        var xp = W / 2 - (wr + wp) / 2, yp = H * 71 / 100;
-        dc.setColor(cAm, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(xp, yp, fr, "R$ ", Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(xp + wr, yp, fp, sp, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-
-        dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(W / 2, H * 81 / 100, Graphics.FONT_XTINY, fmtKm(km) + " · " + txt, cj);
-        dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(W / 2, H * 88 / 100, Graphics.FONT_XTINY, "preço " + fmtHa(p[5]), cj);
+        preco(dc, cx, H * 685 / 1000 + o, p[1], g ? Graphics.FONT_LARGE : Graphics.FONT_NUMBER_MILD, g ? Graphics.FONT_TINY : xt, corPreco(p[1]));
+        txt(dc, W, H * 805 / 1000, fmtKm(km) + " · " + t, xt, xt, (km < 0.05 && gLat != null) ? cAc : cTx);
+        txt(dc, W, H * 885 / 1000, "preço " + fmtHa(p[5]), xt, xt, cT3);
     }
 
-    // seta cheia apontando para "ang" graus (0 = para cima), girada em volta de (cx, cy)
+    // agulha fina apontando para "ang" graus (0 = para cima), girada em volta de (cx, cy)
     hidden function seta(dc, cx, cy, r, ang) {
         var a = Math.toRadians(ang), s = Math.sin(a), c = Math.cos(a);
-        var pts = [[0, -r], [r * 6 / 10, r * 7 / 10], [0, r * 3 / 10], [-r * 6 / 10, r * 7 / 10]];
-        var out = new [4];
+        var pts = [[0, -r], [r * 45 / 100, r * 65 / 100], [0, r * 35 / 100], [-r * 45 / 100, r * 65 / 100]];
         for (var i = 0; i < 4; i++) {
             var x = pts[i][0], y = pts[i][1];
-            out[i] = [(cx + x * c - y * s).toNumber(), (cy + x * s + y * c).toNumber()];
+            pts[i] = [cx + x * c - y * s, cy + x * s + y * c];
         }
-        dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
-        dc.fillPolygon(out);
+        dc.setColor(cAc, TR);
+        dc.fillPolygon(pts);
     }
 }
 
@@ -103,8 +100,12 @@ class DetalheDelegate extends WatchUi.BehaviorDelegate {
     function initialize() { BehaviorDelegate.initialize(); }
 
     // ▲▼ (ou deslizar) trocam de posto sem voltar à lista
-    function onNextPage() { if (gP != null && gP.size() > 0) { gSel = (gSel + 1) % gP.size(); } WatchUi.requestUpdate(); return true; }
-    function onPreviousPage() { if (gP != null && gP.size() > 0) { gSel = (gSel - 1 + gP.size()) % gP.size(); } WatchUi.requestUpdate(); return true; }
+    function onNextPage() { andar(1); return true; }
+    function onPreviousPage() { andar(-1); return true; }
+    hidden function andar(d) {
+        if (gP != null && gP.size() > 0) { gSel = (gSel + d + gP.size()) % gP.size(); trans(d); }
+        WatchUi.requestUpdate();
+    }
     function onSelect() { return true; }
     function onBack() { WatchUi.popView(WatchUi.SLIDE_RIGHT); return true; }
 }

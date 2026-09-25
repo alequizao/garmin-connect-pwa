@@ -2,37 +2,22 @@
 // Gasolina Perto · Desenvolvido por Alequizao <alequizao.dev@gmail.com>
 // https://github.com/alequizao · © 2026 Alequizao. Todos os direitos reservados.
 //
-// Tela principal: carregando (GPS → preços), lista dos mais baratos em carrossel,
-// erro com "tentar de novo" e o menu de combustível.
+// Tela principal: carregando (anel da borda enchendo: GPS → preços), lista dos mais
+// baratos em carrossel (cartão sem borda + barra verde, preço grande com cor semântica,
+// vizinhos com a diferença de preço), erro/vazio com "tentar de novo" e o menu de
+// combustível. Sem timer próprio: o Motor bate o ritmo (GasolinaApp.mc).
 //
 using Toybox.WatchUi;
 using Toybox.Graphics;
 using Toybox.System;
-using Toybox.Timer;
 using Toybox.Application;
 using Toybox.Lang;
 
 class Tela extends WatchUi.View {
-    hidden var mTimer = null;
-    hidden var mTiques = 0;
-
     function initialize() { View.initialize(); }
 
     function onShow() {
-        mTimer = new Timer.Timer();
-        mTimer.start(method(:tique), 200, true);
         if (gPrimeira) { gPrimeira = false; gM.buscar(); }
-    }
-
-    function onHide() {
-        if (mTimer != null) { mTimer.stop(); mTimer = null; }
-    }
-
-    // anima só enquanto há o que animar; parado, redesenha a cada 10 s ("há X min")
-    function tique() {
-        gM.tique();
-        mTiques++;
-        if (gBusca > 0 || gAviso != null || mTiques % 50 == 0) { WatchUi.requestUpdate(); }
     }
 
     function onUpdate(dc) {
@@ -42,135 +27,124 @@ class Tela extends WatchUi.View {
         if (gMenu >= 0) {
             desenharMenu(dc, W, H);
         } else {
-            cabecalho(dc, W, H, COMB[gC - 1], gBusca > 0 && gP != null);
-            if (gP != null && gP.size() > 0) { desenharLista(dc, W, H); }
+            var n = (gP != null) ? gP.size() : 0;
+            anel(dc, W, gSel, n);
+            cab(dc, W, COMB[gC - 1]);
+            if (n > 0) { desenharLista(dc, W, H, n); }
             else if (gErr != null && gBusca == 0) { desenharErro(dc, W, H); }
             else { desenharCarregando(dc, W, H); }
         }
         desenharAviso(dc, W, H);
     }
 
-    // ---- carregando: anel girando com a bomba no meio ----
+    // ---- carregando: bomba no centro, o anel da borda mostra o progresso ----
     hidden function desenharCarregando(dc, W, H) {
-        var g = W > 260, cx = W / 2, cy = H * 45 / 100, r = W * 17 / 100;
-        dc.setPenWidth(g ? 8 : 4);
-        dc.setColor(g ? 0x1E3A2A : Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
-        dc.drawCircle(cx, cy, r);
-        var a = (System.getTimer() / 3) % 360;          // ângulos sempre em 0..359
-        dc.setColor(gBusca == 2 ? cAm : cAc, Graphics.COLOR_TRANSPARENT);
-        dc.drawArc(cx, cy, r, Graphics.ARC_CLOCKWISE, (450 - a) % 360, (350 - a + 360) % 360);
-        dc.setPenWidth(1);
-        var s = r * 9 / 10;
-        bomba(dc, cx - s * 45 / 100, cy - s / 2, s, cAc, cAm);
-        var f1 = g ? Graphics.FONT_SMALL : Graphics.FONT_TINY;
-        dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, H * 71 / 100, f1, gBusca == 2 ? "Consultando preços..." : "Buscando GPS...",
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        var g = W > 260, s = g ? 54 : 28;
+        bomba(dc, W / 2 - s * 45 / 100, H * 40 / 100 - s / 2, s, cAc, (gBusca == 2) ? cAm : Graphics.COLOR_BLACK);
+        txt(dc, W, H * 60 / 100, (gBusca == 2) ? "Consultando preços" : "Buscando GPS",
+            g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, g ? Graphics.FONT_TINY : Graphics.FONT_XTINY, cTx);
         var sub = "pelo celular";
-        if (gBusca != 2) { sub = ((System.getTimer() - gIni) / 1000) + " s · céu aberto ajuda"; }
-        dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, H * 81 / 100, Graphics.FONT_XTINY, sub, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        if (gBusca == 1) { sub = ((System.getTimer() - gIni) / 1000) + " s · céu aberto ajuda"; }
+        txt(dc, W, H * 69 / 100, sub, Graphics.FONT_XTINY, Graphics.FONT_XTINY, cT3);
     }
 
-    // ---- erro claro + como tentar de novo ----
+    // ---- erro (ícone vermelho) ou vazio (ícone cinza) + como tentar de novo ----
     hidden function desenharErro(dc, W, H) {
-        var g = W > 260, cx = W / 2, cy = H * 35 / 100, r = g ? 34 : 17;
-        dc.setPenWidth(g ? 5 : 3);
-        dc.setColor(cErr, Graphics.COLOR_TRANSPARENT);
+        var g = W > 260, cx = W / 2, cy = H * 34 / 100, r = g ? 30 : 15, c = (gErr.size() > 2) ? cT2 : cRd;
+        dc.setPenWidth(g ? 4 : 2);
+        dc.setColor(c, TR);
         dc.drawCircle(cx, cy, r);
         dc.setPenWidth(1);
-        dc.fillRectangle(cx - (g ? 3 : 1), cy - r * 55 / 100, g ? 7 : 4, r * 7 / 10);
-        dc.fillCircle(cx, cy + r * 45 / 100, g ? 4 : 2);
-        dc.drawText(cx, H * 55 / 100, g ? Graphics.FONT_MEDIUM : Graphics.FONT_SMALL, gErr[0],
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, H * 69 / 100, Graphics.FONT_XTINY, gErr[1], Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, H * 86 / 100, Graphics.FONT_XTINY, "START: tentar de novo", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-    }
-
-    // ---- lista em carrossel: o selecionado grande no cartão, vizinhos acima/abaixo ----
-    hidden function desenharLista(dc, W, H) {
-        var g = W > 260, n = gP.size();
-        if (gSel >= n) { gSel = 0; }
-        var cx = W / 2;
-        if (gSel > 0) { vizinho(dc, cx, H * 23 / 100, gP[gSel - 1]); }
-        if (gSel < n - 1) { vizinho(dc, cx, H * 76 / 100, gP[gSel + 1]); }
-
-        var x0 = W * 8 / 100, yC = H * 31 / 100, wC = W - 2 * x0, hC = H * 38 / 100, rr = g ? 18 : 9;
-        dc.setColor(cCard, Graphics.COLOR_TRANSPARENT);
-        dc.fillRoundedRectangle(x0, yC, wC, hC, rr);
-        dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(g ? 3 : 2);
-        dc.drawRoundedRectangle(x0, yC, wC, hC, rr);
-        dc.setPenWidth(1);
-
-        var p = gP[gSel];
-        var cj = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
-        dc.drawText(cx, yC + hC * 13 / 100, Graphics.FONT_XTINY, (gSel == 0) ? "MAIS BARATO" : (gSel + 1) + "º mais barato", cj);
-        dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yC + hC * 33 / 100, g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, p[0], cj);
-        // preço em destaque: "R$" pequeno + número grande em âmbar
-        var fp = Graphics.FONT_LARGE, fr = g ? Graphics.FONT_TINY : Graphics.FONT_XTINY;
-        var sp = fmtPreco(p[1]);
-        var wr = dc.getTextWidthInPixels("R$ ", fr), wp = dc.getTextWidthInPixels(sp, fp);
-        var xp = cx - (wr + wp) / 2, yp = yC + hC * 60 / 100;
-        dc.setColor(cAm, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(xp, yp, fr, "R$ ", Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(xp + wr, yp, fp, sp, Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, yC + hC * 86 / 100, Graphics.FONT_XTINY, fmtKm(p[2]) + " · " + p[6], cj);
-
-        // bolinhas de posição (direita)
-        var r = g ? 5 : 3, passo = g ? 16 : 9, xd = W - (g ? 16 : 9);
-        for (var k = 0; k < n; k++) {
-            var yd = H / 2 + (k * 2 - (n - 1)) * passo / 2;
-            if (k == gSel) { dc.setColor(cAc, Graphics.COLOR_TRANSPARENT); dc.fillCircle(xd, yd, r); }
-            else { dc.setColor(cCz, Graphics.COLOR_TRANSPARENT); dc.drawCircle(xd, yd, r - 1); }
+        if (gErr.size() > 2) {
+            bomba(dc, cx - r * 4 / 10, cy - r / 2, r, c, Graphics.COLOR_BLACK);
+        } else {
+            dc.fillRoundedRectangle(cx - r / 10, cy - r * 55 / 100, r / 5 + 1, r * 65 / 100, 2);
+            dc.fillCircle(cx, cy + r * 45 / 100, r / 10 + 1);
         }
-
-        // rodapé: idade dos dados e raio (ou o que está acontecendo agora)
-        var rod = fmtHa(gT) + " · até " + gR + " km", cr = cCz;
-        if (gBusca == 1) { rod = "Buscando GPS..."; cr = cAm; }
-        else if (gBusca == 2) { rod = "Atualizando..."; cr = cAm; }
-        else if (gErr != null) { rod = gErr[0] + " · " + fmtHa(gT); cr = cErr; }
-        dc.setColor(cr, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, H * 89 / 100, Graphics.FONT_XTINY, rod, cj);
+        txt(dc, W, H * 535 / 1000, gErr[0], g ? Graphics.FONT_MEDIUM : Graphics.FONT_SMALL, g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, cTx);
+        dc.setColor(cT2, TR);
+        dc.drawText(cx, H * 675 / 1000, Graphics.FONT_XTINY, gErr[1], CJ);
+        // ação: bolinha verde (o botão START) + "Tentar de novo"
+        var t = "Tentar de novo", e = g ? 18 : 10, x = (W - dc.getTextWidthInPixels(t, Graphics.FONT_XTINY) - e) / 2, y = H * 845 / 1000;
+        dc.setColor(cAc, TR);
+        dc.fillCircle(x + e / 3, y, e / 3);
+        dc.drawText(x + e, y, Graphics.FONT_XTINY, t, LJ);
     }
 
-    hidden function vizinho(dc, cx, y, p) {
-        var nome = p[0];
-        if (nome.length() > 12) { nome = nome.substring(0, 11) + "."; }
-        dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(cx, y, Graphics.FONT_XTINY, nome + "  " + fmtPreco(p[1]), Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    // ---- lista em carrossel: cartão do selecionado + vizinhos com a diferença ----
+    hidden function desenharLista(dc, W, H, n) {
+        var g = W > 260, cx = W / 2, xt = Graphics.FONT_XTINY;
+        if (gSel >= n) { gSel = 0; }
+        var p = gP[gSel];
+        if (gSel == 0) { txt(dc, W, H * 27 / 100, "MAIS BARATO", xt, xt, cAc); }
+        else { vizinho(dc, W, H * 27 / 100, gP[gSel - 1], p); }
+        if (gSel < n - 1) { vizinho(dc, W, H * 785 / 1000, gP[gSel + 1], p); }
+
+        // cartão: fundo sutil (sem borda) + barra verde de destaque
+        var x0 = W * 9 / 100, yC = H * 33 / 100, wC = W - 2 * x0, hC = H * 40 / 100;
+        dc.setColor(cCard, TR);
+        dc.fillRoundedRectangle(x0, yC, wC, hC, g ? 22 : 11);
+        dc.setColor(cAc, TR);
+        dc.fillRoundedRectangle(x0 + (g ? 12 : 6), yC + hC * 28 / 100, g ? 5 : 3, hC * 44 / 100, 2);
+
+        var y = yC + desl(g ? 34 : 16);     // o conteúdo desliza ao trocar de posto
+        var f = g ? Graphics.FONT_SMALL : Graphics.FONT_TINY;
+        if (dc.getTextWidthInPixels(p[0], f) > wC - (g ? 56 : 28)) { f = g ? Graphics.FONT_TINY : xt; }
+        dc.setColor(cTx, TR);
+        dc.drawText(cx, y + hC * 19 / 100, f, p[0], CJ);
+        preco(dc, cx, y + hC * 50 / 100, p[1], Graphics.FONT_NUMBER_MILD, g ? Graphics.FONT_TINY : xt, corPreco(p[1]));
+        dc.setColor(cT2, TR);    // bairro: o servidor já manda com no máximo 16 letras
+        dc.drawText(cx, y + hC * 87 / 100, xt, fmtKm(p[2]) + " · " + p[6], CJ);
+
+        // rodapé: idade dos dados (e o raio, se ampliou) ou o que está acontecendo agora
+        var rod = fmtHa(gT), cr = cT3;
+        if (gR > 5) { rod = rod + " · raio " + gR + " km"; }
+        if (gBusca == 1) { rod = "Buscando GPS"; cr = cT2; }
+        else if (gBusca == 2) { rod = "Atualizando"; cr = cT2; }
+        else if (gErr != null) { rod = gErr[0]; cr = cRd; }
+        txt(dc, W, H * 885 / 1000, rod, xt, xt, cr);
+    }
+
+    // vizinho: nome apagado + diferença para o selecionado ("+R$ 0,02")
+    hidden function vizinho(dc, W, y, q, p) {
+        var nome = q[0], f = Graphics.FONT_XTINY;
+        if (nome.length() > 11) {
+            nome = nome.substring(0, 10);
+            if (nome.substring(9, 10).equals(" ")) { nome = nome.substring(0, 9); }
+            nome = nome + ".";
+        }
+        nome = nome + "  ";
+        var d = dif(q[1], p[1]), w = dc.getTextWidthInPixels(nome, f);
+        var x = (W - w - dc.getTextWidthInPixels(d, f)) / 2;
+        dc.setColor(cT3, TR);
+        dc.drawText(x, y, f, nome, LJ);
+        dc.setColor(cT2, TR);
+        dc.drawText(x + w, y, f, d, LJ);
     }
 
     // ---- menu de combustível (0 = atualizar agora) ----
     hidden function desenharMenu(dc, W, H) {
-        var g = W > 260;
-        cabecalho(dc, W, H, "Combustível", false);
-        var hR = H * 15 / 100, cj = Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER;
+        var g = W > 260, hR = H * 14 / 100, o = desl(hR / 2);
+        anel(dc, W, gMenu, 7);
+        cab(dc, W, "Combustível");
         for (var j = gMenu - 2; j <= gMenu + 2; j++) {
             if (j < 0 || j > 6) { continue; }
-            var y = H / 2 + (j - gMenu) * hR + H * 3 / 100;
+            var y = H / 2 + (j - gMenu) * hR + H * 3 / 100 + o;
             var t = (j == 0) ? "Atualizar agora" : COMB[j - 1];
+            var f = Graphics.FONT_XTINY, cor = (j == gC) ? cAc : ((j - gMenu) * (j - gMenu) > 1 ? cT3 : cT2);
             if (j == gMenu) {
-                var x0 = W * 10 / 100;
-                dc.setColor(cCard, Graphics.COLOR_TRANSPARENT);
-                dc.fillRoundedRectangle(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7);
-                dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
-                dc.setPenWidth(2);
-                dc.drawRoundedRectangle(x0, y - hR / 2 + 2, W - 2 * x0, hR - 4, g ? 14 : 7);
-                dc.setPenWidth(1);
-                dc.setColor(cTx, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(W / 2, y, g ? Graphics.FONT_SMALL : Graphics.FONT_TINY, t, cj);
-            } else {
-                dc.setColor(cCz, Graphics.COLOR_TRANSPARENT);
-                dc.drawText(W / 2, y, Graphics.FONT_XTINY, t, cj);
+                var x0 = W * 12 / 100;
+                dc.setColor(cCard, TR);
+                dc.fillRoundedRectangle(x0, y - hR / 2 + 3, W - 2 * x0, hR - 6, (hR - 6) / 2);
+                dc.setColor(cAc, TR);
+                dc.fillRoundedRectangle(x0 + (g ? 14 : 7), y - hR / 5, g ? 5 : 3, hR * 2 / 5, 2);
+                f = Graphics.FONT_TINY; cor = cTx;
             }
-            if (j == gC) {   // ✓ no combustível atual
-                var xk = W * 80 / 100, s = g ? 8 : 4;
-                dc.setColor(cAc, Graphics.COLOR_TRANSPARENT);
+            dc.setColor(cor, TR);
+            dc.drawText(W / 2, y, f, t, CJ);
+            if (j == gC) {   // ✓ à direita do combustível atual
+                var s = g ? 7 : 4, xk = (W + dc.getTextWidthInPixels(t, f)) / 2 + s + (g ? 8 : 4);
+                dc.setColor(cAc, TR);
                 dc.setPenWidth(g ? 3 : 2);
                 dc.drawLine(xk - s, y, xk - s / 3, y + s * 2 / 3);
                 dc.drawLine(xk - s / 3, y + s * 2 / 3, xk + s, y - s * 2 / 3);
@@ -189,6 +163,7 @@ class TelaDelegate extends WatchUi.BehaviorDelegate {
     hidden function mover(d) {
         if (gMenu >= 0) { gMenu = (gMenu + d + 7) % 7; }
         else if (gP != null && gP.size() > 0) { gSel = (gSel + d + gP.size()) % gP.size(); }
+        trans(d);
         WatchUi.requestUpdate();
     }
 
@@ -206,33 +181,35 @@ class TelaDelegate extends WatchUi.BehaviorDelegate {
     function onTap(evt) {
         var y = evt.getCoordinates()[1], H = System.getDeviceSettings().screenHeight;
         if (gMenu >= 0) {
-            var hR = H * 15 / 100, dy = y - (H / 2 + H * 3 / 100);
+            var hR = H * 14 / 100, dy = y - (H / 2 + H * 3 / 100);
             var j = gMenu + ((dy >= 0) ? (dy + hR / 2) / hR : -((hR / 2 - dy) / hR));
             if (j < 0 || j > 6) { return true; }
             gMenu = j; escolher(); return true;
         }
         if (gP != null && gP.size() > 0) {
             if (y < H * 30 / 100) { mover(-1); return true; }
-            if (y > H * 70 / 100) { mover(1); return true; }
+            if (y > H * 75 / 100) { mover(1); return true; }
         }
         return onSelect();
     }
 
     function onMenu() {
         gMenu = gC;
+        trans(1);
         WatchUi.requestUpdate();
         return true;
     }
 
     function onBack() {
-        if (gMenu >= 0) { gMenu = -1; WatchUi.requestUpdate(); return true; }
+        if (gMenu >= 0) { gMenu = -1; trans(-1); WatchUi.requestUpdate(); return true; }
         return false;
     }
 
     hidden function escolher() {
         var m = gMenu;
         gMenu = -1;
-        if (m == 0) { aviso("Atualizando"); vibrar(); gM.buscar(); return; }
+        vibrar(40);
+        if (m == 0) { aviso("Atualizando"); gM.buscar(); return; }
         if (m != gC) {
             gC = m; gSel = 0; gP = null; gErr = null;
             Application.Storage.setValue("c", gC);
@@ -241,7 +218,6 @@ class TelaDelegate extends WatchUi.BehaviorDelegate {
             u = null;
         }
         aviso(COMB[m - 1]);
-        vibrar();
         gM.buscar();
     }
 }

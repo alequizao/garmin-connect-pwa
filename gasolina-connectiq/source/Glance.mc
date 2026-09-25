@@ -19,7 +19,7 @@ class Glance extends WatchUi.GlanceView {
     function onUpdate(dc) {
         var s = System.getDeviceSettings();
         var amoled = (s has :requiresBurnInProtection) && s.requiresBurnInProtection;
-        var ac = amoled ? 0x00E676 : 0x00FF00, am = amoled ? 0xFFB300 : 0xFFFF00;
+        var ac = amoled ? 0x2ED18A : 0x00FF00, cz = amoled ? 0xAEB4B0 : 0xFFFFFF;   // mesmos tokens do app
         var h = dc.getHeight(), j = Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER;
         var g = Application.Storage.getValue("g");
         dc.setColor(ac, Graphics.COLOR_TRANSPARENT);
@@ -29,8 +29,9 @@ class Glance extends WatchUi.GlanceView {
             dc.drawText(0, h * 65 / 100, Graphics.FONT_XTINY, "Abra para ver preços", j);
             return;
         }
+        dc.setColor(cz, Graphics.COLOR_TRANSPARENT);
         dc.drawText(0, h * 20 / 100, Graphics.FONT_XTINY, g[0] + " · " + fmtHa(g[4]), j);
-        dc.setColor(am, Graphics.COLOR_TRANSPARENT);
+        dc.setColor(ac, Graphics.COLOR_TRANSPARENT);
         dc.drawText(0, h * 50 / 100, Graphics.FONT_TINY, "R$ " + fmtPreco(g[2]) + " · " + fmtKm(g[3]), j);
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
         dc.drawText(0, h * 80 / 100, Graphics.FONT_XTINY, g[1], j);

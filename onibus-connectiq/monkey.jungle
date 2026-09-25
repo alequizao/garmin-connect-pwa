@@ -1,2 +1,4 @@
 project.manifest = manifest.xml
 project.typecheck = 0
+# FR55 não roda glance em watch-app: tira a classe Glance do .prg (menos código carregado)
+fr55.excludeAnnotations = gl
